@@ -50,9 +50,8 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
 
     try {
       const filename = `${Date.now()}_${file.name}`;
-      const storagePath = `${userProfile.id}/${filename}`; // ✅ Matches RLS
+      const storagePath = `${userProfile.id}/${filename}`; // ✅ Must match storage RLS (user_id folder)
 
-      // Upload to Supabase Storage
       const { error: fileError } = await supabase.storage
         .from('certifications')
         .upload(storagePath, file);
@@ -61,33 +60,35 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
         throw new Error(`Storage upload failed: ${fileError.message}`);
       }
 
-      // Get public URL
-      const publicURL = supabase.storage
+      const { publicUrl } = supabase
+        .storage
         .from('certifications')
-        .getPublicUrl(storagePath).data.publicUrl;
+        .getPublicUrl(storagePath).data;
 
-      // Insert into student_certificates table
       const { error: insertError } = await supabase
         .from('student_certificates')
         .insert({
           htno: userProfile.ht_no,
           title,
           description,
-          file_url: publicURL,
-          user_id: userProfile.id, // ✅ Required for RLS
+          file_url: publicUrl,
+          user_id: userProfile.id, // ✅ Must match RLS
         });
 
       if (insertError) {
         throw new Error(`Database insert failed: ${insertError.message}`);
       }
 
-      toast({ title: '✅ Certificate uploaded successfully!' });
-      onUpload(); // Refresh list
+      toast({
+        title: '✅ Certificate uploaded successfully!',
+        description: 'Admin will verify and approve your certificate.',
+      });
 
-      // Reset form
+      // Reset
       setFile(null);
       setTitle('');
       setDescription('');
+      onUpload();
     } catch (err: any) {
       console.error('[Upload Error]', err);
       toast({
