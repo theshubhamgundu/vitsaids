@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,41 +30,63 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
       return;
     }
 
-    if (!userProfile?.id) {
-      toast({ title: 'User not authenticated.' });
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const authUid = authData?.user?.id;
+
+    if (!authUid || !userProfile?.id || authUid !== userProfile.id) {
+      console.error("❌ auth.uid and userProfile.id mismatch");
+      console.log("auth.uid:", authUid);
+      console.log("userProfile.id:", userProfile?.id);
+      toast({
+        title: 'Authentication mismatch',
+        description: 'Please login again or contact admin.',
+        variant: 'destructive',
+      });
       return;
     }
 
     setUploading(true);
     const filename = `${userProfile.ht_no}_${Date.now()}_${file.name}`;
-    
-    const { data: fileData, error: fileError } = await supabase.storage
+
+    const { error: fileError } = await supabase.storage
       .from('certifications')
       .upload(filename, file);
 
     if (fileError) {
       console.error('Upload error:', fileError.message);
-      toast({ title: 'Failed to upload certificate.' });
+      toast({ title: 'Failed to upload certificate file.' });
       setUploading(false);
       return;
     }
 
-    const publicURL = supabase.storage.from('certifications').getPublicUrl(filename).data.publicUrl;
+    const publicURL = supabase.storage
+      .from('certifications')
+      .getPublicUrl(filename).data.publicUrl;
 
-    const { error: insertError } = await supabase.from('student_certificates').insert({
+    const payload = {
       htno: userProfile.ht_no,
       title,
       description,
       file_url: publicURL,
-      user_id: userProfile.id, // ✅ Required for RLS policy
-    });
+      user_id: userProfile.id,
+    };
+
+    console.log('🧾 INSERTING certificate:', payload);
+
+    const { error: insertError } = await supabase
+      .from('student_certificates')
+      .insert(payload);
 
     if (insertError) {
       console.error('Insert error:', insertError.message);
-      toast({ title: 'Failed to save certificate record.' });
+      toast({
+        title: 'Insert failed',
+        description: insertError.message,
+        variant: 'destructive',
+      });
     } else {
       toast({ title: '✅ Certificate uploaded successfully!' });
-      onUpload(); // refresh certificate list
+      onUpload(); // refresh list
     }
 
     setFile(null);
@@ -85,15 +113,27 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
         <div className="space-y-4">
           <div>
             <Label>Title</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Hackathon Winner" />
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g., Hackathon Winner"
+            />
           </div>
           <div>
             <Label>Description (optional)</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief details" />
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief details"
+            />
           </div>
           <div>
             <Label>Upload PDF</Label>
-            <Input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            <Input
+              type="file"
+              accept=".pdf"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+            />
           </div>
           <Button onClick={handleUpload} disabled={uploading}>
             {uploading ? 'Uploading...' : 'Submit'}
