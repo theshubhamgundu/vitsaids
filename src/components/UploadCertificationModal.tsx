@@ -26,7 +26,11 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
 
   const handleUpload = async () => {
     if (!file || !title) {
-      toast({ title: 'Title and certificate file are required.' });
+      toast({
+        title: 'Validation Error',
+        description: 'Both title and certificate file are required.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -34,7 +38,6 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
     const authUid = authData?.user?.id;
 
     if (!authUid || !userProfile?.id || authUid !== userProfile.id) {
-      console.error("❌ auth.uid and userProfile.id mismatch");
       toast({
         title: 'Authentication mismatch',
         description: 'Please login again or contact admin.',
@@ -45,51 +48,55 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
 
     setUploading(true);
 
-    const filename = `${Date.now()}_${file.name}`;
-    const path = `${userProfile.id}/${filename}`; // ✅ must use auth.uid() in folder path
+    try {
+      const filename = `${Date.now()}_${file.name}`;
+      const storagePath = `${userProfile.id}/${filename}`; // ✅ Matches RLS
 
-    const { error: fileError } = await supabase.storage
-      .from('certifications')
-      .upload(path, file);
+      // Upload to Supabase Storage
+      const { error: fileError } = await supabase.storage
+        .from('certifications')
+        .upload(storagePath, file);
 
-    if (fileError) {
-      console.error('Upload error:', fileError.message);
-      toast({ title: 'Failed to upload certificate file.' });
-      setUploading(false);
-      return;
-    }
+      if (fileError) {
+        throw new Error(`Storage upload failed: ${fileError.message}`);
+      }
 
-    const publicURL = supabase.storage
-      .from('certifications')
-      .getPublicUrl(path).data.publicUrl;
+      // Get public URL
+      const publicURL = supabase.storage
+        .from('certifications')
+        .getPublicUrl(storagePath).data.publicUrl;
 
-    const payload = {
-      htno: userProfile.ht_no,
-      title,
-      description,
-      file_url: publicURL,
-      user_id: userProfile.id,
-    };
+      // Insert into student_certificates table
+      const { error: insertError } = await supabase
+        .from('student_certificates')
+        .insert({
+          htno: userProfile.ht_no,
+          title,
+          description,
+          file_url: publicURL,
+          user_id: userProfile.id, // ✅ Required for RLS
+        });
 
-    const { error: insertError } = await supabase
-      .from('student_certificates')
-      .insert(payload);
+      if (insertError) {
+        throw new Error(`Database insert failed: ${insertError.message}`);
+      }
 
-    if (insertError) {
-      console.error('Insert error:', insertError.message);
+      toast({ title: '✅ Certificate uploaded successfully!' });
+      onUpload(); // Refresh list
+
+      // Reset form
+      setFile(null);
+      setTitle('');
+      setDescription('');
+    } catch (err: any) {
+      console.error('[Upload Error]', err);
       toast({
-        title: 'Insert failed',
-        description: insertError.message,
+        title: 'Upload failed',
+        description: err.message || 'Something went wrong during upload.',
         variant: 'destructive',
       });
-    } else {
-      toast({ title: '✅ Certificate uploaded successfully!' });
-      onUpload(); // refresh list
     }
 
-    setFile(null);
-    setTitle('');
-    setDescription('');
     setUploading(false);
   };
 
