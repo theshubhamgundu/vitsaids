@@ -24,8 +24,14 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
       return;
     }
 
+    if (!userProfile?.id) {
+      toast({ title: 'User not authenticated.' });
+      return;
+    }
+
     setUploading(true);
-    const filename = `${userProfile?.ht_no}_${Date.now()}_${file.name}`;
+    const filename = `${userProfile.ht_no}_${Date.now()}_${file.name}`;
+    
     const { data: fileData, error: fileError } = await supabase.storage
       .from('certifications')
       .upload(filename, file);
@@ -40,17 +46,18 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
     const publicURL = supabase.storage.from('certifications').getPublicUrl(filename).data.publicUrl;
 
     const { error: insertError } = await supabase.from('student_certificates').insert({
-      htno: userProfile?.ht_no,
+      htno: userProfile.ht_no,
       title,
       description,
       file_url: publicURL,
+      user_id: userProfile.id, // ✅ Required for RLS policy
     });
 
     if (insertError) {
       console.error('Insert error:', insertError.message);
       toast({ title: 'Failed to save certificate record.' });
     } else {
-      toast({ title: 'Certificate uploaded successfully!' });
+      toast({ title: '✅ Certificate uploaded successfully!' });
       onUpload(); // refresh certificate list
     }
 
