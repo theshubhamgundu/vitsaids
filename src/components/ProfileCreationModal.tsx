@@ -93,6 +93,7 @@ const ProfileCreationModal: React.FC<ProfileCreationModalProps> = ({
           student_name,
           year: year,
           status: 'pending',
+          email: user.email,
         })
         .eq('id', user.id);
 
