@@ -198,6 +198,7 @@ const StudentDashboard = () => {
           title: certTitle,
           description: certDesc,
           file_url: publicURL,
+          user_id: user.id,
         })
         .select();
 
