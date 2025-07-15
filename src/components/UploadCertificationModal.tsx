@@ -35,8 +35,6 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
 
     if (!authUid || !userProfile?.id || authUid !== userProfile.id) {
       console.error("❌ auth.uid and userProfile.id mismatch");
-      console.log("auth.uid:", authUid);
-      console.log("userProfile.id:", userProfile?.id);
       toast({
         title: 'Authentication mismatch',
         description: 'Please login again or contact admin.',
@@ -46,11 +44,13 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
     }
 
     setUploading(true);
-    const filename = `${userProfile.ht_no}_${Date.now()}_${file.name}`;
+
+    const filename = `${Date.now()}_${file.name}`;
+    const path = `${userProfile.id}/${filename}`; // ✅ must use auth.uid() in folder path
 
     const { error: fileError } = await supabase.storage
       .from('certifications')
-      .upload(filename, file);
+      .upload(path, file);
 
     if (fileError) {
       console.error('Upload error:', fileError.message);
@@ -61,7 +61,7 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
 
     const publicURL = supabase.storage
       .from('certifications')
-      .getPublicUrl(filename).data.publicUrl;
+      .getPublicUrl(path).data.publicUrl;
 
     const payload = {
       htno: userProfile.ht_no,
@@ -70,8 +70,6 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
       file_url: publicURL,
       user_id: userProfile.id,
     };
-
-    console.log('🧾 INSERTING certificate:', payload);
 
     const { error: insertError } = await supabase
       .from('student_certificates')
