@@ -1,4 +1,4 @@
-// ...imports remain the same
+// AuthContext.tsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
@@ -61,23 +61,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [, setLocation] = useLocation();
 
   const loadUserProfile = async (userId: string): Promise<UserProfile | null> => {
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
 
-      if (error) {
-        console.error('[Auth] loadUserProfile error:', error);
-        return null;
-      }
-
-      return data || null;
-    } catch (error) {
-      console.error('[Auth] loadUserProfile exception:', error);
+    if (error) {
+      console.error('[Auth] loadUserProfile error:', error);
       return null;
     }
+
+    return data || null;
   };
 
   useEffect(() => {
@@ -86,95 +81,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initAuth = async () => {
       setLoading(true);
 
-      try {
-        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) {
-          console.error('[Auth] Failed to get session:', sessionError);
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+
+      if (currentSession?.user) {
+        let profile = await loadUserProfile(currentSession.user.id);
+
+        // Auto-create admin profile
+        if (!profile && currentSession.user.email === 'admin@vignanits.ac.in') {
+          await supabase.from('user_profiles').insert({
+            id: currentSession.user.id,
+            email: currentSession.user.email,
+            role: 'admin',
+            status: 'approved',
+          });
+          profile = await loadUserProfile(currentSession.user.id);
         }
-        if (!isMounted) return;
 
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
+        setUserProfile(profile);
+        setNeedsProfileCreation(!profile && currentSession.user.user_metadata?.role === 'student');
 
-        if (currentSession?.user) {
-          let profile = await loadUserProfile(currentSession.user.id);
-
-          if (!profile && currentSession.user.email === 'admin@vignanits.ac.in') {
-            const { error } = await supabase.from('user_profiles').insert({
-              id: currentSession.user.id,
-              email: currentSession.user.email,
-              role: 'admin',
-              status: 'approved',
-            });
-            if (!error) {
-              profile = await loadUserProfile(currentSession.user.id);
-            }
-          }
-
-          setUserProfile(profile);
-          setNeedsProfileCreation(!profile && currentSession.user.user_metadata?.role === 'student');
-
-          if (profile) {
-            if (profile.role === 'student' && profile.status === 'approved') {
-              setLocation('/student-dashboard');
-            } else if (profile.role === 'admin' && profile.status === 'approved') {
-              setLocation('/admin-dashboard');
-            }
-          }
-        } else {
-          setUserProfile(null);
-          setNeedsProfileCreation(false);
+        if (profile?.role === 'student' && profile.status === 'approved') {
+          setLocation('/student-dashboard');
+        } else if (profile?.role === 'admin' && profile.status === 'approved') {
+          setLocation('/admin-dashboard');
         }
-      } catch (err) {
-        console.error('[Auth] initAuth failed:', err);
-        setUser(null);
+      } else {
         setUserProfile(null);
         setNeedsProfileCreation(false);
-      } finally {
-        if (isMounted) setLoading(false);
       }
+
+      if (isMounted) setLoading(false);
     };
 
     initAuth();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!isMounted) return;
       setSession(session);
       setUser(session?.user ?? null);
 
       setTimeout(async () => {
-        if (!isMounted) return;
-        if (session?.user) {
-          let profile = await loadUserProfile(session.user.id);
-
-          if (!profile && session.user.email === 'admin@vignanits.ac.in') {
-            const { error } = await supabase.from('user_profiles').insert({
-              id: session.user.id,
-              email: session.user.email,
-              role: 'admin',
-              status: 'approved',
-            });
-            if (!error) {
-              profile = await loadUserProfile(session.user.id);
-            }
-          }
-
-          setUserProfile(profile);
-          setNeedsProfileCreation(!profile && session.user.user_metadata?.role === 'student');
-
-          if (profile) {
-            if (profile.role === 'student' && profile.status === 'approved') {
-              setLocation('/student-dashboard');
-            } else if (profile.role === 'admin' && profile.status === 'approved') {
-              setLocation('/admin-dashboard');
-            }
-          }
-        } else {
+        if (!session?.user) {
           setUserProfile(null);
           setNeedsProfileCreation(false);
+          return;
         }
 
-        setLoading(false);
+        let profile = await loadUserProfile(session.user.id);
+
+        if (!profile && session.user.email === 'admin@vignanits.ac.in') {
+          await supabase.from('user_profiles').insert({
+            id: session.user.id,
+            email: session.user.email,
+            role: 'admin',
+            status: 'approved',
+          });
+          profile = await loadUserProfile(session.user.id);
+        }
+
+        setUserProfile(profile);
+        setNeedsProfileCreation(!profile && session.user.user_metadata?.role === 'student');
+
+        if (profile?.role === 'student' && profile.status === 'approved') {
+          setLocation('/student-dashboard');
+        } else if (profile?.role === 'admin' && profile.status === 'approved') {
+          setLocation('/admin-dashboard');
+        }
       }, 0);
     });
 
@@ -191,7 +165,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (data.user) {
         let profile = await loadUserProfile(data.user.id);
-
         if (!profile) {
           await new Promise((res) => setTimeout(res, 1000));
           profile = await loadUserProfile(data.user.id);
@@ -202,7 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (!profile && userType === 'student') {
           setNeedsProfileCreation(true);
-          toast({ title: 'Create your profile', description: 'Complete your student profile.' });
+          toast({ title: 'Complete Profile', description: 'Please complete your student profile.' });
           return;
         }
 
@@ -212,10 +185,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setLocation('/student-dashboard');
         }
 
-        toast({ title: 'Login successful', description: 'Welcome back!' });
+        toast({ title: 'Login Successful' });
       }
     } catch (err: any) {
-      toast({ title: 'Login failed', description: err.message || 'Unknown error' });
+      toast({ title: 'Login failed', description: err.message });
       throw err;
     }
   };
@@ -229,27 +202,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     year?: string
   ): Promise<{ error: any }> => {
     try {
-      let verified: any = null;
-
       if (userType === 'student') {
         const { data, error: verifyError } = await supabase
           .from('verified_students')
           .select('*')
-          .ilike('ht_no', htNo?.trim() || '')
-          .ilike('student_name', studentName?.trim() || '')
-          .ilike('year', year?.trim() || '')
+          .ilike('ht_no', htNo || '')
+          .ilike('student_name', studentName || '')
+          .ilike('year', year || '')
           .maybeSingle();
 
         if (verifyError || !data) {
           return {
             error: {
-              message:
-                'Student details not found in verified students list. Please check your information or contact admin.',
+              message: 'Student not found in verified list. Contact admin.',
             },
           };
         }
-
-        verified = data;
       }
 
       const { data, error } = await supabase.auth.signUp({
@@ -263,7 +231,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.user) {
         const insertData: any = {
           id: data.user.id,
-          email: data.user.email,
+          email: data.user.email, // ✅ REQUIRED FIELD
           role: userType,
           status: 'approved',
         };
@@ -279,25 +247,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         await supabase.auth.refreshSession();
 
-        const updatedProfile = await loadUserProfile(data.user.id);
-        setUserProfile(updatedProfile);
+        const profile = await loadUserProfile(data.user.id);
+        setUserProfile(profile);
         setUser(data.user);
 
-        toast({
-          title: 'Account created',
-          description:
-            userType === 'admin'
-              ? 'Admin account created successfully. Redirecting...'
-              : 'Student account created successfully. Redirecting...',
-        });
-
-        if (updatedProfile) {
-          if (updatedProfile.role === 'student' && updatedProfile.status === 'approved') {
-            setLocation('/student-dashboard');
-          } else if (updatedProfile.role === 'admin' && updatedProfile.status === 'approved') {
-            setLocation('/admin-dashboard');
-          }
+        if (profile?.role === 'student') {
+          setLocation('/student-dashboard');
+        } else if (profile?.role === 'admin') {
+          setLocation('/admin-dashboard');
         }
+
+        toast({ title: 'Account created', description: 'Welcome!' });
       }
 
       return { error: null };
@@ -306,12 +266,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const createProfile = async (profileData: {
-    ht_no: string;
-    student_name: string;
-    year: string;
-  }) => {
-    if (!user) throw new Error('User not authenticated for profile creation');
+  const createProfile = async (profileData: { ht_no: string; student_name: string; year: string }) => {
+    if (!user) throw new Error('User not authenticated');
 
     const { error } = await supabase
       .from('user_profiles')
@@ -331,19 +287,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserProfile(updatedProfile);
     setNeedsProfileCreation(false);
 
-    if (updatedProfile && updatedProfile.role === 'student' && updatedProfile.status === 'approved') {
+    if (updatedProfile?.role === 'student') {
       setLocation('/student-dashboard');
     }
 
-    toast({
-      title: 'Profile created',
-      description: 'Your profile has been created successfully.',
-    });
+    toast({ title: 'Profile created successfully' });
   };
 
-  const closeProfileCreationModal = () => {
-    setNeedsProfileCreation(false);
-  };
+  const closeProfileCreationModal = () => setNeedsProfileCreation(false);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -352,7 +303,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserProfile(null);
     setNeedsProfileCreation(false);
     setLocation('/');
-    toast({ title: 'Logged out', description: 'You have been signed out.' });
+    toast({ title: 'Logged out' });
   };
 
   return (
