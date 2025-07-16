@@ -61,6 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [, setLocation] = useLocation();
 
   const loadUserProfile = async (userId: string): Promise<UserProfile | null> => {
+    console.log(`[Auth] loadUserProfile: querying for userId: ${userId}`);
     const { data, error } = await supabase
       .from('user_profiles')
       .select('*')
@@ -71,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('[Auth] loadUserProfile error:', error);
       return null;
     }
-
+    console.log('[Auth] loadUserProfile result:', data);
     return data || null;
   };
 
@@ -80,6 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const initAuth = async () => {
       setLoading(true);
+      console.log('[Auth] Initializing auth...');
 
       const { data: { session: currentSession } } = await supabase.auth.getSession();
 
@@ -87,18 +89,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(currentSession?.user ?? null);
 
       if (currentSession?.user) {
+        console.log('[Auth] Auth state changed: SIGNED_IN', currentSession.user.email);
         let profile = await loadUserProfile(currentSession.user.id);
 
+        // Auto-create admin profiles if they don't exist
         if (!profile && currentSession.user.email === 'admin@vignanits.ac.in') {
-          // This block is for auto-creating admin profiles if they don't exist
-          // It explicitly sets 'email'
-          await supabase.from('user_profiles').insert({
+          console.log('[Auth] Auto-creating admin profile...');
+          const { error: adminInsertError } = await supabase.from('user_profiles').insert({
             id: currentSession.user.id,
-            email: currentSession.user.email, // Email is provided here
+            email: currentSession.user.email,
             role: 'admin',
             status: 'approved',
           });
-          profile = await loadUserProfile(currentSession.user.id);
+          if (adminInsertError) {
+            console.error('[Auth] Admin auto-creation error:', adminInsertError);
+          } else {
+            profile = await loadUserProfile(currentSession.user.id); // Reload profile after auto-creation
+          }
         }
 
         setUserProfile(profile);
@@ -110,16 +117,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setLocation('/admin-dashboard');
         }
       } else {
+        console.log('[Auth] Auth state changed: SIGNED_OUT or INITIAL_SESSION (no user)');
         setUserProfile(null);
         setNeedsProfileCreation(false);
       }
 
-      if (isMounted) setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+        console.log('[Auth] Auth initialization complete.');
+      }
     };
 
     initAuth();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('[Auth] Auth state changed:', _event, session?.user?.email);
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -127,20 +139,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!session?.user) {
           setUserProfile(null);
           setNeedsProfileCreation(false);
+          console.log('[Auth] Auth state processing complete (no user in session).');
           return;
         }
 
         let profile = await loadUserProfile(session.user.id);
 
+        // Same admin auto-creation logic for state changes
         if (!profile && session.user.email === 'admin@vignanits.ac.in') {
-          // Same admin auto-creation logic
-          await supabase.from('user_profiles').insert({
+          console.log('[Auth] Auto-creating admin profile on state change...');
+          const { error: adminInsertError } = await supabase.from('user_profiles').insert({
             id: session.user.id,
-            email: session.user.email, // Email is provided here
+            email: session.user.email,
             role: 'admin',
             status: 'approved',
           });
-          profile = await loadUserProfile(session.user.id);
+          if (adminInsertError) {
+            console.error('[Auth] Admin auto-creation error on state change:', adminInsertError);
+          } else {
+            profile = await loadUserProfile(session.user.id); // Reload profile after auto-creation
+          }
         }
 
         setUserProfile(profile);
@@ -151,7 +169,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else if (profile?.role === 'admin' && profile.status === 'approved') {
           setLocation('/admin-dashboard');
         }
-      }, 0);
+        console.log('[Auth] Auth state processing complete.');
+      }, 0); // Using setTimeout to ensure state updates are batched/processed
     });
 
     return () => {
@@ -162,13 +181,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string, userType: 'student' | 'admin') => {
     try {
+      console.log(`[Auth] Attempting login for ${userType} with email: ${email}`);
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      if (error) {
+        console.error('[Auth] Login failed:', error.message);
+        throw error;
+      }
 
       if (data.user) {
+        console.log('[Auth] Login successful for user ID:', data.user.id);
         let profile = await loadUserProfile(data.user.id);
+        // Sometimes profile might not be immediately available, retry after a short delay
         if (!profile) {
-          await new Promise((res) => setTimeout(res, 1000));
+          console.log('[Auth] Profile not found immediately after login, retrying...');
+          await new Promise((res) => setTimeout(res, 1000)); // Wait 1 second
           profile = await loadUserProfile(data.user.id);
         }
 
@@ -178,13 +204,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!profile && userType === 'student') {
           setNeedsProfileCreation(true);
           toast({ title: 'Complete Profile', description: 'Please complete your student profile.' });
-          return;
+          console.log('[Auth] Student needs profile creation.');
+          return; // Stop further redirection if profile is incomplete
         }
 
         if (profile?.role === 'admin') {
           setLocation('/admin-dashboard');
+          console.log('[Auth] Redirecting to admin dashboard.');
         } else if (profile?.role === 'student') {
           setLocation('/student-dashboard');
+          console.log('[Auth] Redirecting to student dashboard.');
         }
 
         toast({ title: 'Login Successful' });
@@ -204,7 +233,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     year?: string
   ): Promise<{ error: any }> => {
     try {
+      console.log(`[Auth] Attempting sign up for ${userType} with email: ${email}`);
+
       if (userType === 'student') {
+        console.log(`[Auth] Verifying student: HT No: ${htNo}, Name: ${studentName}, Year: ${year}`);
         const { data, error: verifyError } = await supabase
           .from('verified_students')
           .select('*')
@@ -231,14 +263,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
-        console.error('[Auth] Supabase signUp error:', error);
+        console.error('[Auth] Supabase signUp error:', error.message);
         return { error };
       }
 
       const userId = data.user?.id;
       // const userEmail = data.user?.email; // This line is no longer strictly needed for the insert
 
-      console.log('[Auth] SignUp successful. userId:', userId, 'userEmail (from data.user):', data.user?.email); // Keep for debugging if needed
+      console.log('[Auth] Supabase sign up initiated. User ID:', userId, 'User email from auth:', data.user?.email, 'Confirmation needed:', data.user?.email_confirmed_at === null);
 
       // Explicitly check for userId being present
       if (!userId) {
@@ -248,9 +280,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const insertData: any = {
         id: userId,
-        email: email, // ✅ FIXED: Use the 'email' argument passed to the function
+        email: email, // ✅ FIXED: Using the 'email' argument passed to the function
         role: userType,
-        status: 'approved',
+        status: 'approved', // Default status upon sign-up
       };
 
       if (userType === 'student') {
@@ -262,20 +294,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('[Auth] Attempting to insert user profile with data:', insertData);
 
       const { error: insertError } = await supabase.from('user_profiles').insert(insertData);
+
       if (insertError) {
         console.error('[Auth] Error inserting user profile:', insertError);
+        console.error('[Auth] Insert error details:', insertError.message); // Log the specific error message
+        console.error('[Auth] Insert error hint:', insertError.hint);     // Log error hint
         return { error: insertError };
       }
       console.log('[Auth] User profile inserted successfully.');
 
-      const profile = await loadUserProfile(userId);
-      setUserProfile(profile);
+      // VERIFY PROFILE IMMEDIATELY AFTER INSERT
+      const newlyInsertedProfile = await loadUserProfile(userId);
+      console.log('[Auth] Verifying profile immediately after insert:', newlyInsertedProfile);
+
+      // Set user and profile state (this might cause another loadUserProfile due to useEffect)
+      setUserProfile(newlyInsertedProfile); // Use the newly fetched profile directly
       setUser(data.user);
 
-      if (profile?.role === 'student') {
+      if (newlyInsertedProfile?.role === 'student') {
         setLocation('/student-dashboard');
-      } else if (profile?.role === 'admin') {
+        console.log('[Auth] Redirecting to student dashboard after sign-up.');
+      } else if (newlyInsertedProfile?.role === 'admin') {
         setLocation('/admin-dashboard');
+        console.log('[Auth] Redirecting to admin dashboard after sign-up.');
       }
 
       toast({ title: 'Account created', description: 'Welcome!' });
@@ -283,12 +324,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: null };
     } catch (error: any) {
       console.error('[Auth] General signUp catch error:', error);
-      return { error };
+      return { error: { message: error.message || 'An unexpected error occurred during sign up.' } };
     }
   };
 
   const createProfile = async (profileData: { ht_no: string; student_name: string; year: string }) => {
     if (!user) throw new Error('User not authenticated');
+    console.log('[Auth] Attempting to create/update student profile for user:', user.id);
 
     const { error } = await supabase
       .from('user_profiles')
@@ -296,29 +338,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ht_no: profileData.ht_no,
         student_name: profileData.student_name,
         year: profileData.year,
-        status: 'approved',
+        status: 'approved', // Assuming this means profile is now complete
       })
       .eq('id', user.id);
 
-    if (error) throw error;
+    if (error) {
+      console.error('[Auth] Error updating student profile:', error);
+      throw error;
+    }
 
-    await supabase.auth.refreshSession();
+    console.log('[Auth] Student profile updated. Refreshing session...');
+    await supabase.auth.refreshSession(); // Ensure session data is up-to-date
 
     const updatedProfile = await loadUserProfile(user.id);
     setUserProfile(updatedProfile);
-    setNeedsProfileCreation(false);
+    setNeedsProfileCreation(false); // No longer needs profile creation
 
     if (updatedProfile?.role === 'student') {
       setLocation('/student-dashboard');
+      console.log('[Auth] Redirecting to student dashboard after profile creation.');
     }
 
     toast({ title: 'Profile created successfully' });
   };
 
-  const closeProfileCreationModal = () => setNeedsProfileCreation(false);
+  const closeProfileCreationModal = () => {
+    setNeedsProfileCreation(false);
+    console.log('[Auth] Profile creation modal closed.');
+  }
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    console.log('[Auth] Attempting logout...');
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('[Auth] Logout error:', error);
+    } else {
+      console.log('[Auth] Logout successful.');
+    }
     setUser(null);
     setSession(null);
     setUserProfile(null);
