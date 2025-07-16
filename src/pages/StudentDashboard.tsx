@@ -47,9 +47,9 @@ const StudentDashboard = () => {
     }
   }, [loading, userProfile, setLocation]);
 
-  // ✅ All hooks MUST be called before any early returns
+  // ✅ FIXED: Wait for auth to fully load before making database calls
   useEffect(() => {
-    if (userProfile?.ht_no) {
+    if (!loading && userProfile?.ht_no) {
       fetchPhoto();
       fetchcertificates();
       fetchResults();
@@ -57,7 +57,7 @@ const StudentDashboard = () => {
       fetchTimetable();
       checkProfileCompletion();
     }
-  }, [userProfile]);
+  }, [loading, userProfile]);
 
   // Check if profile completion is needed
   const checkProfileCompletion = () => {
