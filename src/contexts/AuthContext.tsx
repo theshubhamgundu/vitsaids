@@ -67,7 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loadUserProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
         try {
             console.log(`[Auth] loadUserProfile: Attempting to load profile for userId: ${userId}`);
-            
+
             const { data, error } = await supabase
                 .from('user_profiles')
                 .select('*')
@@ -107,7 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             console.log('[Auth] Refreshing user profile. User ID:', user.id);
             const profile = await loadUserProfile(user.id);
-            
+
             if (profile) {
                 setUserProfile(profile);
                 setNeedsProfileCreation(false);
@@ -139,16 +139,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     role: 'admin',
                     status: 'approved',
                 });
-                
+
                 if (adminInsertError && adminInsertError.code !== '23505') { // Ignore duplicate key error
                     console.error('[Auth] Admin auto-creation error:', adminInsertError);
                     return null;
                 }
-                
+
                 // Wait a bit for DB consistency
                 await new Promise(resolve => setTimeout(resolve, 500));
                 const profile = await loadUserProfile(currentUser.id);
-                
+
                 if (profile) {
                     toast({ title: 'Admin profile created', description: 'Welcome, administrator!' });
                     return profile;
@@ -157,23 +157,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.error('[Auth] Error creating admin profile:', error);
             }
         }
-        
+
         return null;
     }, [loadUserProfile, toast]);
 
     // Initialize auth state
     useEffect(() => {
         let isMounted = true;
-        
+
         const initializeAuth = async () => {
             try {
                 console.log('[Auth] Initializing auth (initial load)...');
-                
+
                 // Get initial session
                 const { data: { session: initialSession } } = await supabase.auth.getSession();
                 console.log('[DEBUG] Initial session:', initialSession);
                 console.log('[DEBUG] Initial user:', initialSession?.user);
-                
+
                 if (!isMounted) return;
 
                 const currentUser = initialSession?.user ?? null;
@@ -181,10 +181,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 if (currentUser) {
                     console.log('[Auth] Found current user during init:', currentUser.email, 'ID:', currentUser.id, 'Role:', currentUser.user_metadata?.role);
-                    
+
                     // Load existing profile
                     currentProfile = await loadUserProfile(currentUser.id);
-                    
+
                     // If no profile exists, try to create one for admin
                     if (!currentProfile) {
                         currentProfile = await handleProfileCreation(currentUser);
@@ -195,11 +195,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setSession(initialSession);
                     setUser(currentUser);
                     setUserProfile(currentProfile);
-                    
+
                     const userAuthRole = currentUser?.user_metadata?.role;
                     const needs = (!currentProfile && userAuthRole === 'student');
                     setNeedsProfileCreation(needs);
-                    
+
                     console.log(`[Auth] Auth initialization complete. User: ${currentUser?.email}, Profile: ${currentProfile ? 'Found' : 'Not Found'}, NeedsProfileCreation: ${needs}`);
                 }
             } catch (error) {
@@ -240,10 +240,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 if (newUser) {
                     console.log('[Auth] Listener: User present. Loading profile for:', newUser.email, 'ID:', newUser.id, 'Role:', newUser.user_metadata?.role);
-                    
+
                     // Load existing profile
                     newProfile = await loadUserProfile(newUser.id);
-                    
+
                     // If no profile exists, try to create one for admin
                     if (!newProfile) {
                         newProfile = await handleProfileCreation(newUser);
@@ -255,7 +255,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     const newUserAuthRole = newUser?.user_metadata?.role;
                     const needs = (!newProfile && newUserAuthRole === 'student');
                     setNeedsProfileCreation(needs);
-                    
+
                     console.log(`[Auth] Listener: Auth state processing complete. Profile: ${newProfile ? 'Found' : 'Not Found'}, NeedsProfileCreation: ${needs}`);
                 }
             } catch (error) {
@@ -281,9 +281,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(true);
         try {
             console.log(`[Auth] Attempting login for ${userType} with email: ${email}`);
-            
+
             const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-            
+
             if (error) {
                 console.error('[Auth] Login failed:', error.message);
                 toast({ title: 'Login failed', description: error.message, variant: 'destructive' });
@@ -351,7 +351,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Verify student if needed
             if (userType === 'student') {
                 console.log(`[Auth] Verifying student: HT No: ${htNo}, Name: ${studentName}, Year: ${year}`);
-                
+
                 const { data: studentData, error: verifyError } = await supabase
                     .from('verified_students')
                     .select('*')
@@ -365,13 +365,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     toast({ title: 'Verification Error', description: verifyError.message, variant: 'destructive' });
                     return { error: verifyError };
                 }
-                
+
                 if (!studentData) {
                     console.error('[Auth] Student verification failed: No matching student found.');
                     toast({ title: 'Verification Failed', description: 'Student not found in verified list. Contact admin.', variant: 'destructive' });
                     return { error: { message: 'Student not found in verified list. Contact admin.' } };
                 }
-                
+
                 console.log('[Auth] Student verification successful:', studentData);
             }
 
@@ -410,28 +410,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 insertData.year = year || null;
             }
 
-            console.log('[Auth] Attempting to insert user profile with data:', insertData);
-            
-            // Insert profile
-            const { error: insertError } = await supabase
+            // Check if profile already exists before inserting
+            const { data: existingProfile, error: checkError } = await supabase
                 .from('user_profiles')
-                .insert(insertData);
+                .select('id')
+                .eq('id', data.user.id)
+                .maybeSingle();
 
-            if (insertError) {
-                console.error('[Auth] Error inserting user profile:', insertError.message);
-                toast({ title: 'Profile Creation Error', description: insertError.message, variant: 'destructive' });
-                await supabase.auth.signOut();
-                return { error: insertError };
+            if (checkError) {
+                console.error('[Auth] Error checking for existing profile:', checkError);
+                toast({
+                    title: 'Error checking profile',
+                    description: checkError.message,
+                    variant: 'destructive',
+                });
+                return { error: checkError };
             }
 
-            console.log('[Auth] User profile inserted successfully.');
+            if (existingProfile) {
+                console.log('[Auth] Profile already exists. Skipping insert.');
+            } else {
+                console.log('[Auth] No existing profile. Attempting to insert new profile with data:', insertData);
+                const { error: insertError } = await supabase
+                    .from('user_profiles')
+                    .insert(insertData);
+
+                if (insertError) {
+                    console.error('[Auth] Error inserting user profile:', insertError); // full object
+                    toast({
+                        title: 'Profile Creation Error',
+                        description: insertError.message || 'An error occurred while creating your profile.',
+                        variant: 'destructive',
+                    });
+                    await supabase.auth.signOut();
+                    return { error: insertError };
+                }
+                console.log('[Auth] User profile inserted successfully.');
+            }
 
             // Wait for profile to be available
             await new Promise(resolve => setTimeout(resolve, 1000));
 
             // Verify profile was created
             const newProfile = await loadUserProfile(data.user.id);
-            
+
             if (!newProfile) {
                 console.error('[Auth] Profile insertion succeeded but profile not found on reload.');
                 toast({ title: 'Profile Error', description: 'Profile created but not accessible. Please try logging in.', variant: 'destructive' });
@@ -506,10 +528,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             console.log('[Auth] Student profile updated successfully. Refreshing context...');
-            
+
             // Wait for DB consistency
             await new Promise(resolve => setTimeout(resolve, 500));
-            
+
             // Refresh profile data
             await refreshUserProfile();
 
@@ -532,9 +554,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const logout = async () => {
         try {
             console.log('[Auth] Attempting logout...');
-            
+
             const { error } = await supabase.auth.signOut();
-            
+
             if (error) {
                 console.error('[Auth] Logout error:', error);
                 toast({ title: 'Logout Error', description: error.message, variant: 'destructive' });
