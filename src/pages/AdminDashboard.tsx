@@ -145,7 +145,6 @@ const AdminDashboard = () => {
   };
 
   const { user, userProfile, logout, loading } = useAuth();
-  const { toast } = useToast();
   const [, setLocation] = useLocation();
 
   // ✅ ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
@@ -1309,7 +1308,7 @@ const PlacementForm = ({ onSave }: { onSave: (data: Omit<Placement, 'id'>) => vo
     ctc: '', 
     type: 'Full-Time', 
     year: '2025', 
-    branch: 'AI & DS' 
+    branch: 'AI & Data Science' 
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1322,7 +1321,7 @@ const PlacementForm = ({ onSave }: { onSave: (data: Omit<Placement, 'id'>) => vo
       year: parseInt(formData.year),
       branch: formData.branch
     });
-    setFormData({ student_name: '', company: '', ctc: '', type: 'Full-Time', year: '2025', branch: 'AI & DS' });
+    setFormData({ student_name: '', company: '', ctc: '', type: 'Full-Time', year: '2025', branch: 'AI & Data Science' });
   };
 
   return (
@@ -1414,7 +1413,6 @@ const StudentEditForm = ({ student, onSave, onCancel }: { student: PendingStuden
     email: student.email || ''
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
