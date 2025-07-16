@@ -81,7 +81,6 @@ const UploadCertificationModal = ({ onUpload }: { onUpload: () => void }) => {
 
       toast({
         title: '✅ Certificate uploaded successfully!',
-        description: 'Admin will verify and approve your certificate.',
       });
 
       // Reset
