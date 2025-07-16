@@ -76,7 +76,7 @@ const ProfileCreationModal: React.FC<ProfileCreationModalProps> = ({
         return;
       }
 
-      // 2. Update user_profiles with profile info
+      // 2. Update user_profiles with profile info - automatically approved
       const {
         data: { user },
         error: sessionError,
@@ -92,7 +92,7 @@ const ProfileCreationModal: React.FC<ProfileCreationModalProps> = ({
           ht_no,
           student_name,
           year: year,
-          status: 'pending',
+          status: 'approved',
           email: user.email,
         })
         .eq('id', user.id);
@@ -100,8 +100,8 @@ const ProfileCreationModal: React.FC<ProfileCreationModalProps> = ({
       if (updateError) throw updateError;
 
       toast({
-        title: 'Profile Submitted',
-        description: 'Your profile is pending admin approval.',
+        title: 'Profile Created',
+        description: 'Your profile has been successfully created and verified.',
       });
 
       setFormData({ ht_no: '', student_name: '', year: '' });
