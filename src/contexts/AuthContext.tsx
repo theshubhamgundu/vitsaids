@@ -12,7 +12,7 @@ interface UserProfile {
   student_name: string | null;
   ht_no: string | null;
   year: string | null;
-  email?: string | null; // This is marked optional, but your DB says it's NOT NULL
+  email: string; // Changed to non-nullable as per DB constraint
   phone?: string | null;
   section?: string | null;
   semester?: string | null;
@@ -214,14 +214,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .maybeSingle();
 
         if (verifyError || !data) {
-          console.error('[Auth] Student verification failed:', verifyError || 'No data found'); // Added log
+          console.error('[Auth] Student verification failed:', verifyError || 'No data found');
           return {
             error: {
               message: 'Student not found in verified list. Contact admin.',
             },
           };
         }
-        console.log('[Auth] Student verification successful:', data); // Added log
+        console.log('[Auth] Student verification successful:', data);
       }
 
       const { data, error } = await supabase.auth.signUp({
@@ -231,17 +231,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
-        console.error('[Auth] Supabase signUp error:', error); // Added log
+        console.error('[Auth] Supabase signUp error:', error);
         return { error };
       }
 
       const userId = data.user?.id;
       const userEmail = data.user?.email;
 
-      console.log('[Auth] SignUp successful. userId:', userId, 'userEmail:', userEmail); // Added log
+      console.log('[Auth] SignUp successful. userId:', userId, 'userEmail:', userEmail);
 
+      // Explicitly check for userId and userEmail being present
       if (!userId || !userEmail) {
-        console.error('[Auth] Sign-up succeeded but user info missing after Supabase call. userId:', userId, 'userEmail:', userEmail); // Added log
+        console.error('[Auth] Sign-up succeeded but user info missing after Supabase call. userId:', userId, 'userEmail:', userEmail);
         return { error: { message: 'Sign-up succeeded but user info missing.' } };
       }
 
@@ -249,7 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: userId,
         email: userEmail, // THIS IS WHERE THE EMAIL IS PASSED FOR INSERT
         role: userType,
-        status: 'approved', // Assuming 'approved' is the default for new sign-ups
+        status: 'approved',
       };
 
       if (userType === 'student') {
@@ -258,15 +259,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         insertData.year = year;
       }
 
-      console.log('[Auth] Attempting to insert user profile with data:', insertData); // Added log
+      console.log('[Auth] Attempting to insert user profile with data:', insertData);
 
       const { error: insertError } = await supabase.from('user_profiles').insert(insertData);
       if (insertError) {
-        console.error('[Auth] Error inserting user profile:', insertError); // Added log
-        // If the email NOT NULL constraint is violated, this error will fire.
+        console.error('[Auth] Error inserting user profile:', insertError);
+        // This error will contain the "null value in column 'email' violates not-null constraint"
+        // if userEmail was null when insertData was constructed.
         return { error: insertError };
       }
-      console.log('[Auth] User profile inserted successfully.'); // Added log
+      console.log('[Auth] User profile inserted successfully.');
 
       const profile = await loadUserProfile(userId);
       setUserProfile(profile);
@@ -282,7 +284,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return { error: null };
     } catch (error: any) {
-      console.error('[Auth] General signUp catch error:', error); // Added log for general catch
+      console.error('[Auth] General signUp catch error:', error);
       return { error };
     }
   };
