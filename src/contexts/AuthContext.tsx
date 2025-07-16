@@ -87,8 +87,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
 
       try {
-        const { data } = await supabase.auth.getSession();
-        const currentSession = data.session;
+        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.error('[Auth] Failed to get session:', sessionError);
+        }
         if (!isMounted) return;
 
         setSession(currentSession);
@@ -258,13 +260,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { error: insertError } = await supabase.from('user_profiles').insert(insertData);
         if (insertError) return { error: insertError };
 
+        // Force session refresh after profile creation
+        await supabase.auth.refreshSession();
+
+        // Load the newly created profile and update state
+        const updatedProfile = await loadUserProfile(data.user.id);
+        setUserProfile(updatedProfile);
+        setUser(data.user);
+
         toast({
           title: 'Account created',
           description:
             userType === 'admin'
-              ? 'Admin account created successfully. You can now log in.'
-              : 'Student account created successfully. You can now log in.',
+              ? 'Admin account created successfully. Redirecting...'
+              : 'Student account created successfully. Redirecting...',
         });
+
+        // Manual redirect after successful sign-up
+        if (userType === 'student') {
+          setLocation('/student-dashboard');
+        } else if (userType === 'admin') {
+          setLocation('/admin-dashboard');
+        }
       }
 
       return { error: null };
@@ -291,6 +308,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .eq('id', user.id);
 
     if (error) throw error;
+
+    // Force session refresh after profile update
+    await supabase.auth.refreshSession();
 
     const updatedProfile = await loadUserProfile(user.id);
     setUserProfile(updatedProfile);
