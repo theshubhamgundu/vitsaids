@@ -12,7 +12,7 @@ interface UserProfile {
   student_name: string | null;
   ht_no: string | null;
   year: string | null;
-  email?: string | null;
+  email?: string | null; // This is marked optional, but your DB says it's NOT NULL
   phone?: string | null;
   section?: string | null;
   semester?: string | null;
@@ -90,9 +90,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let profile = await loadUserProfile(currentSession.user.id);
 
         if (!profile && currentSession.user.email === 'admin@vignanits.ac.in') {
+          // This block is for auto-creating admin profiles if they don't exist
+          // It explicitly sets 'email'
           await supabase.from('user_profiles').insert({
             id: currentSession.user.id,
-            email: currentSession.user.email,
+            email: currentSession.user.email, // Email is provided here
             role: 'admin',
             status: 'approved',
           });
@@ -131,9 +133,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let profile = await loadUserProfile(session.user.id);
 
         if (!profile && session.user.email === 'admin@vignanits.ac.in') {
+          // Same admin auto-creation logic
           await supabase.from('user_profiles').insert({
             id: session.user.id,
-            email: session.user.email,
+            email: session.user.email, // Email is provided here
             role: 'admin',
             status: 'approved',
           });
@@ -211,12 +214,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .maybeSingle();
 
         if (verifyError || !data) {
+          console.error('[Auth] Student verification failed:', verifyError || 'No data found'); // Added log
           return {
             error: {
               message: 'Student not found in verified list. Contact admin.',
             },
           };
         }
+        console.log('[Auth] Student verification successful:', data); // Added log
       }
 
       const { data, error } = await supabase.auth.signUp({
@@ -225,20 +230,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         options: { data: { role: userType } },
       });
 
-      if (error) return { error };
+      if (error) {
+        console.error('[Auth] Supabase signUp error:', error); // Added log
+        return { error };
+      }
 
       const userId = data.user?.id;
       const userEmail = data.user?.email;
 
+      console.log('[Auth] SignUp successful. userId:', userId, 'userEmail:', userEmail); // Added log
+
       if (!userId || !userEmail) {
+        console.error('[Auth] Sign-up succeeded but user info missing after Supabase call. userId:', userId, 'userEmail:', userEmail); // Added log
         return { error: { message: 'Sign-up succeeded but user info missing.' } };
       }
 
       const insertData: any = {
         id: userId,
-        email: userEmail,
+        email: userEmail, // THIS IS WHERE THE EMAIL IS PASSED FOR INSERT
         role: userType,
-        status: 'approved',
+        status: 'approved', // Assuming 'approved' is the default for new sign-ups
       };
 
       if (userType === 'student') {
@@ -247,8 +258,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         insertData.year = year;
       }
 
+      console.log('[Auth] Attempting to insert user profile with data:', insertData); // Added log
+
       const { error: insertError } = await supabase.from('user_profiles').insert(insertData);
-      if (insertError) return { error: insertError };
+      if (insertError) {
+        console.error('[Auth] Error inserting user profile:', insertError); // Added log
+        // If the email NOT NULL constraint is violated, this error will fire.
+        return { error: insertError };
+      }
+      console.log('[Auth] User profile inserted successfully.'); // Added log
 
       const profile = await loadUserProfile(userId);
       setUserProfile(profile);
@@ -264,6 +282,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return { error: null };
     } catch (error: any) {
+      console.error('[Auth] General signUp catch error:', error); // Added log for general catch
       return { error };
     }
   };
