@@ -304,8 +304,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('[Auth] User profile inserted successfully.');
 
       // VERIFY PROFILE IMMEDIATELY AFTER INSERT
-      const newlyInsertedProfile = await loadUserProfile(userId);
-      console.log('[Auth] Verifying profile immediately after insert:', newlyInsertedProfile);
+      let newlyInsertedProfile = await loadUserProfile(userId);
+      // Added: Retry fetching profile if it's null immediately after insert
+      if (!newlyInsertedProfile) {
+        console.log('[Auth] Profile not found immediately after insert, retrying after a short delay (1s)...');
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
+        newlyInsertedProfile = await loadUserProfile(userId); // Retry fetching
+        if (!newlyInsertedProfile) {
+          console.error('[Auth] Profile still null after retry. This might lead to profile creation prompt.');
+        }
+      }
+
+      console.log('[Auth] Verifying profile immediately after insert (after retry):', newlyInsertedProfile);
 
       // Set user and profile state (this might cause another loadUserProfile due to useEffect)
       setUserProfile(newlyInsertedProfile); // Use the newly fetched profile directly
