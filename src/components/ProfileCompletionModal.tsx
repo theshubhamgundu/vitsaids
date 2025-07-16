@@ -1,5 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,12 +26,13 @@ const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
 }) => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [formData, setFormData] = useState({
     phone: userProfile?.phone || '',
     address: userProfile?.address || '',
-    emergency_no: userProfile?.emergency_no || '',
+    emergency_no: userProfile?.emergency_no || ''
   });
+
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -50,22 +57,45 @@ const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
       return;
     }
 
+    if (!/^\d{10}$/.test(formData.phone)) {
+      toast({
+        title: 'Invalid Phone',
+        description: 'Phone number must be 10 digits.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!/^\d{10}$/.test(formData.emergency_no)) {
+      toast({
+        title: 'Invalid Emergency Contact',
+        description: 'Emergency number must be 10 digits.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setLoading(true);
-    
+
     try {
-      // Upload photo if provided
       let photoUrl = userProfile?.photo_url;
+
+      // Upload profile photo
       if (photoFile) {
         const { error: uploadError } = await supabase.storage
           .from('profile_photos')
-          .upload(`profiles/${userProfile.id}/photo.jpg`, photoFile, { upsert: true });
-        
+          .upload(`profiles/${userProfile.id}/photo.jpg`, photoFile, {
+            upsert: true
+          });
+
         if (uploadError) throw uploadError;
-        
-        const { data } = supabase.storage
+
+        const { data: urlData } = supabase.storage
           .from('profile_photos')
           .getPublicUrl(`profiles/${userProfile.id}/photo.jpg`);
-        photoUrl = data.publicUrl;
+
+        photoUrl = urlData?.publicUrl;
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
 
       // Update user profile
@@ -83,14 +113,14 @@ const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
 
       toast({
         title: 'Success',
-        description: 'Profile completed successfully!',
+        description: 'Profile completed successfully!'
       });
 
       onComplete();
     } catch (error: any) {
       toast({
         title: 'Error',
-        description: error.message || 'Failed to complete profile',
+        description: error.message || 'Failed to complete profile.',
         variant: 'destructive'
       });
     } finally {
@@ -107,7 +137,7 @@ const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
             Please complete your profile information to continue using the dashboard.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-4">
           <div>
             <Label htmlFor="phone">Phone Number *</Label>
@@ -115,7 +145,7 @@ const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
               id="phone"
               type="tel"
               value={formData.phone}
-              onChange={(e) => handleInputChange('phone', e.target.value)}
+              onChange={e => handleInputChange('phone', e.target.value)}
               placeholder="Enter your phone number"
             />
           </div>
@@ -125,7 +155,7 @@ const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
             <Input
               id="address"
               value={formData.address}
-              onChange={(e) => handleInputChange('address', e.target.value)}
+              onChange={e => handleInputChange('address', e.target.value)}
               placeholder="Enter your address"
             />
           </div>
@@ -136,7 +166,7 @@ const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
               id="emergency_no"
               type="tel"
               value={formData.emergency_no}
-              onChange={(e) => handleInputChange('emergency_no', e.target.value)}
+              onChange={e => handleInputChange('emergency_no', e.target.value)}
               placeholder="Enter parent/emergency contact number"
             />
           </div>
@@ -153,7 +183,9 @@ const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
                 <Upload size={16} />
                 {photoFile ? 'Change Photo' : 'Upload Photo'}
               </Button>
-              {photoFile && <span className="text-sm text-muted-foreground">{photoFile.name}</span>}
+              {photoFile && (
+                <span className="text-sm text-muted-foreground">{photoFile.name}</span>
+              )}
             </div>
             <input
               type="file"
@@ -164,11 +196,7 @@ const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
             />
           </div>
 
-          <Button 
-            onClick={handleSubmit} 
-            disabled={loading}
-            className="w-full"
-          >
+          <Button onClick={handleSubmit} disabled={loading} className="w-full">
             {loading ? 'Saving...' : 'Complete Profile'}
           </Button>
         </div>
