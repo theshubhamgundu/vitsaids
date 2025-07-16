@@ -236,19 +236,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const userId = data.user?.id;
-      const userEmail = data.user?.email;
+      // const userEmail = data.user?.email; // This line is no longer strictly needed for the insert
 
-      console.log('[Auth] SignUp successful. userId:', userId, 'userEmail:', userEmail);
+      console.log('[Auth] SignUp successful. userId:', userId, 'userEmail (from data.user):', data.user?.email); // Keep for debugging if needed
 
-      // Explicitly check for userId and userEmail being present
-      if (!userId || !userEmail) {
-        console.error('[Auth] Sign-up succeeded but user info missing after Supabase call. userId:', userId, 'userEmail:', userEmail);
-        return { error: { message: 'Sign-up succeeded but user info missing.' } };
+      // Explicitly check for userId being present
+      if (!userId) {
+        console.error('[Auth] Sign-up succeeded but user ID missing after Supabase call.');
+        return { error: { message: 'Sign-up succeeded but user ID missing.' } };
       }
 
       const insertData: any = {
         id: userId,
-        email: userEmail, // THIS IS WHERE THE EMAIL IS PASSED FOR INSERT
+        email: email, // ✅ FIXED: Use the 'email' argument passed to the function
         role: userType,
         status: 'approved',
       };
@@ -264,8 +264,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error: insertError } = await supabase.from('user_profiles').insert(insertData);
       if (insertError) {
         console.error('[Auth] Error inserting user profile:', insertError);
-        // This error will contain the "null value in column 'email' violates not-null constraint"
-        // if userEmail was null when insertData was constructed.
         return { error: insertError };
       }
       console.log('[Auth] User profile inserted successfully.');
