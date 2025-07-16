@@ -43,40 +43,56 @@ const LoginModal = ({ isOpen, onClose, userType }: LoginModalProps) => {
           // For students, validate required fields and pass student data
           if (!htNo || !studentName || !year || !email || !password) {
             setError('All fields are required for student registration.');
-            setIsLoading(false);
+            setIsLoading(false); // Fix 3: Set isLoading to false on validation error
             return;
           }
           
           const result = await signUp(email, password, userType, htNo, studentName, year);
           if (result.error) {
             setError(result.error.message);
+            setIsLoading(false); // Fix 3: Set isLoading to false on signup error
             return;
           }
-        } else {
-          // For admin, use existing flow
+        } else { // userType === 'admin'
+          // Fix 4: Added minimal check for admin
+          if (!email || !password) {
+            setError('Email and password are required for admin registration.');
+            setIsLoading(false); // Fix 3: Set isLoading to false on validation error
+            return;
+          }
           const result = await signUp(email, password, userType);
           if (result.error) {
             setError(result.error.message);
+            setIsLoading(false); // Fix 3: Set isLoading to false on signup error
             return;
           }
         }
 
         toast({
           title: 'Account Created',
-          description: userType === 'admin' ? 'Admin account created successfully.' : 'Student account created and sent for approval.',
+          description: userType === 'admin' ? 'Admin account created successfully.' : 'Student account created successfully.', // Fix 1: Updated toast message
         });
 
-        resetForm();
-        onClose();
-      } else {
+        // Fix 2: Removed resetForm() and onClose() from here.
+        // AuthContext handles redirection after successful signup.
+        // The modal will be closed by the handleClose in onOpenChange when redirection occurs,
+        // or after the finally block if no error occurred.
+        
+      } else { // Not sign up, it's login
         await login(email, password, userType);
+        // Fix 2: Removed resetForm() and onClose() from here too.
+        // AuthContext handles redirection after successful login.
+      }
+    } catch (error: any) {
+      setError(error.message || 'Something went wrong. Please try again.'); // Fix 5: Enhanced error feedback
+    } finally {
+      setIsLoading(false); // Ensure isLoading is always reset
+      // Reset form and close modal only if no error was set during the process.
+      // This prevents closing the modal on failed attempts before the user sees the error.
+      if (!error) { 
         resetForm();
         onClose();
       }
-    } catch (error: any) {
-      setError(error.message || 'Authentication failed. Please try again.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
