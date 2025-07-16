@@ -40,6 +40,13 @@ const StudentDashboard = () => {
     emergency_no: ''
   });
 
+  // ✅ Redirect logic - handles unauthorized access
+  useEffect(() => {
+    if (!loading && (!userProfile || userProfile.role !== 'student')) {
+      setLocation('/');
+    }
+  }, [loading, userProfile, setLocation]);
+
   // ✅ All hooks MUST be called before any early returns
   useEffect(() => {
     if (userProfile?.ht_no) {
@@ -62,13 +69,9 @@ const StudentDashboard = () => {
     }
   };
 
-  // ✅ Now safe to do early returns AFTER all hooks
-  if (loading) {
+  // ✅ Simplified loading check - redirect is handled by useEffect
+  if (loading || !userProfile) {
     return <div className="flex justify-center items-center h-screen">Loading...</div>;
-  }
-
-  if (!userProfile || userProfile.role !== 'student') {
-    return <div className="flex justify-center items-center h-screen text-red-500">User profile not found or not a student.</div>;
   }
 
   const getInitials = (name: string) =>
