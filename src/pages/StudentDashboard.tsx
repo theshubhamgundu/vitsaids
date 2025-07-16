@@ -1,18 +1,16 @@
 // StudentDashboard.tsx
 import React, { useEffect, useState, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext'; // Adjust path if necessary
+import { supabase } from '@/integrations/supabase/client'; // Adjust path if necessary
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast'; // Adjust path if necessary
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-// Assuming ProfileCompletionModal is a component you created that takes onComplete prop
-// and expects a userProfile prop (which should align with AuthContext's UserProfile type)
-import ProfileCompletionModal from '@/components/ProfileCompletionModal';
+import ProfileCompletionModal from '@/components/ProfileCompletionModal'; // Adjust path if necessary
 import {
     LogOut, Eye, Trash2, Upload, Pencil, Edit, Save, X,
 } from 'lucide-react';
@@ -25,7 +23,7 @@ interface StudentUserProfile {
     status: string;
     student_name: string | null;
     ht_no: string | null;
-    year: string | null; // Assuming this might be '1st Year', '2nd Year', etc.
+    year: string | null;
     email: string;
     phone?: string | null;
     section?: string | null;
@@ -37,20 +35,21 @@ interface StudentUserProfile {
 }
 
 const StudentDashboard = () => {
-    // Use the user and userProfile from AuthContext to determine access and display data
-    // Ensure `user` is also available if you need to check general authentication status
-    const { user, userProfile, logout, loading, createProfile } = useAuth(); // Added `user` and `createProfile` from AuthContext
+    // Use the user, userProfile, loading, logout, and refreshUserProfile from AuthContext
+    const { user, userProfile, logout, loading, refreshUserProfile } = useAuth();
     const [, setLocation] = useLocation();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
+    // State for dashboard data
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-    const [certificates, setCertificates] = useState<any[]>([]); // Changed to match common naming convention
+    const [certificates, setCertificates] = useState<any[]>([]);
     const [results, setResults] = useState<any[]>([]);
     const [attendance, setAttendance] = useState<any[]>([]);
     const [timetable, setTimetable] = useState<any[]>([]);
     const [tab, setTab] = useState('profile');
 
+    // State for certificate upload form
     const [certTitle, setCertTitle] = useState('');
     const [certDesc, setCertDesc] = useState('');
     const [certFile, setCertFile] = useState<File | null>(null);
@@ -66,41 +65,46 @@ const StudentDashboard = () => {
 
     // --- Core Redirection and Data Fetching Logic ---
 
-    // Effect for initial authentication check and redirection
-    // This runs AFTER AuthContext has set its `loading` and `userProfile` states
+    // Effect for initial authentication check, redirection, and data fetching
     useEffect(() => {
+        console.log("StudentDashboard useEffect: loading=", loading, "user=", user, "userProfile=", userProfile);
+
         if (!loading) { // Once AuthContext has finished its initial load
-            // If there's no user, or userProfile doesn't exist, or their role isn't 'student'
             if (!user || !userProfile || userProfile.role !== 'student') {
                 console.log("StudentDashboard: Unauthorized access or not a student. Redirecting to home.");
+                toast({
+                    title: 'Unauthorized Access',
+                    description: 'You must be a logged-in student to view this dashboard.',
+                    variant: 'destructive',
+                });
                 setLocation('/'); // Redirect to homepage or login page
+            } else {
+                // If userProfile exists and is a student, check for completion
+                const isIncomplete = !userProfile.phone || !userProfile.address || !userProfile.emergency_no;
+                console.log("StudentDashboard - UserProfile complete check:", userProfile, "Is Incomplete:", isIncomplete);
+                setShowProfileCompletion(isIncomplete);
+
+                // Initialize editForm with current profile data when userProfile becomes available
+                setEditForm({
+                    phone: userProfile.phone || '',
+                    address: userProfile.address || '',
+                    emergency_no: userProfile.emergency_no || ''
+                });
+
+                // Fetch data after successful profile load and role verification
+                fetchPhoto();
+                fetchCertificates();
+                fetchResults();
+                fetchAttendance();
+                fetchTimetable();
             }
         }
-    }, [loading, user, userProfile, setLocation]); // Depend on user and userProfile from AuthContext
-
-    // Effect for fetching data once userProfile is reliably available
-    useEffect(() => {
-        // Only proceed if loading is false and userProfile exists and is a student
-        if (!loading && userProfile && userProfile.role === 'student') {
-            // Check for profile completion here as well, in case it wasn't caught on signup/login
-            const isIncomplete = !userProfile.phone || !userProfile.address || !userProfile.emergency_no;
-            if (isIncomplete) {
-                setShowProfileCompletion(true);
-            }
-
-            // Fetch data using userProfile properties
-            fetchPhoto();
-            fetchCertificates(); // Corrected function name
-            fetchResults();
-            fetchAttendance();
-            fetchTimetable();
-        }
-    }, [loading, userProfile]); // Depend on loading and userProfile
+    }, [loading, user, userProfile, setLocation, toast]); // Depend on loading, user, and userProfile from AuthContext
 
     // --- Loading State and Initial Render ---
     // Display a loading message or spinner while authentication state is being determined
-    // This should be the first thing checked in the component's render
     if (loading) {
+        console.log("StudentDashboard: Displaying loading spinner.");
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="text-center">
@@ -114,6 +118,7 @@ const StudentDashboard = () => {
     // If we reach here and userProfile is still null or not a student,
     // the useEffect above should have redirected. This acts as a final safeguard.
     if (!userProfile || userProfile.role !== 'student') {
+        console.log("StudentDashboard: UserProfile is not valid or not student. Returning null.");
         return null; // Component should not render its content if not authorized, let useEffect handle redirect
     }
 
@@ -125,7 +130,10 @@ const StudentDashboard = () => {
         name?.split(' ').map(n => n[0]).join('').toUpperCase() || ''; // Handle null name gracefully
 
     const fetchPhoto = async () => {
-        if (!currentUserProfile.id) return; // Ensure ID is present
+        if (!currentUserProfile.id) {
+            console.warn("fetchPhoto: currentUserProfile.id is null or undefined.");
+            return;
+        }
         const { data, error } = await supabase.storage
             .from('profile_photos')
             .getPublicUrl(`profiles/${currentUserProfile.id}/photo.jpg`);
@@ -160,8 +168,12 @@ const StudentDashboard = () => {
         }
     };
 
-    const fetchCertificates = async () => { // Corrected function name
-        if (!currentUserProfile.ht_no) return;
+    const fetchCertificates = async () => {
+        if (!currentUserProfile.ht_no) {
+            console.warn("fetchCertificates: currentUserProfile.ht_no is null or undefined.");
+            setCertificates([]);
+            return;
+        }
         const { data, error } = await supabase
             .from('student_certificates')
             .select('*')
@@ -176,7 +188,11 @@ const StudentDashboard = () => {
     };
 
     const fetchResults = async () => {
-        if (!currentUserProfile.ht_no) return;
+        if (!currentUserProfile.ht_no) {
+            console.warn("fetchResults: currentUserProfile.ht_no is null or undefined.");
+            setResults([]);
+            return;
+        }
         const { data, error } = await supabase
             .from('results')
             .select('*')
@@ -191,7 +207,11 @@ const StudentDashboard = () => {
     };
 
     const fetchAttendance = async () => {
-        if (!currentUserProfile.ht_no) return;
+        if (!currentUserProfile.ht_no) {
+            console.warn("fetchAttendance: currentUserProfile.ht_no is null or undefined.");
+            setAttendance([]);
+            return;
+        }
         const { data, error } = await supabase
             .from('attendance')
             .select('*')
@@ -210,6 +230,7 @@ const StudentDashboard = () => {
         const yearAsNumber = parseInt(currentUserProfile.year || '0');
         if (!yearAsNumber || yearAsNumber === 0) {
             console.warn("Timetable: userProfile.year is not a valid number.");
+            setTimetable([]);
             return;
         }
         const { data, error } = await supabase
@@ -315,8 +336,6 @@ const StudentDashboard = () => {
             // Extract path from URL for storage deletion
             const url = new URL(fileUrl);
             const pathSegments = url.pathname.split('/');
-            // Assumes path is like /bucketname/profiles/HTNO/filename.ext
-            // So we need pathSegments[pathSegments.length - 2] for HTNO and last for filename
             const fileName = pathSegments[pathSegments.length - 1];
             const folderName = pathSegments[pathSegments.length - 2]; // This should be your htno
             const storagePath = `${folderName}/${fileName}`; // Reconstruct path relative to bucket root
@@ -349,6 +368,7 @@ const StudentDashboard = () => {
 
     // Edit profile functions
     const handleEditProfile = () => {
+        // Populate the form with current profile data when opening the dialog
         setEditForm({
             phone: currentUserProfile.phone || '',
             address: currentUserProfile.address || '',
@@ -359,7 +379,6 @@ const StudentDashboard = () => {
 
     const handleSaveProfile = async () => {
         try {
-            // Assuming AuthContext has an updateProfile function or you re-fetch after update
             const { error } = await supabase
                 .from('user_profiles')
                 .update({
@@ -377,14 +396,8 @@ const StudentDashboard = () => {
             });
 
             setShowEditProfile(false);
-            // Instead of full reload, trigger AuthContext to re-fetch and update its profile state
-            // This relies on your AuthContext having a mechanism to refresh the profile.
-            // My proposed AuthContext fix would update the state automatically on auth state change.
-            // For now, if AuthContext doesn't expose a direct refresh, a soft reload might be needed.
-            // If AuthContext is updated, simply fetching the profile again will update the state here.
-            // Alternatively, add a `updateUserProfile` function to AuthContext that does this:
-            // await updateAuthUserProfile({ phone: editForm.phone, ... });
-            window.location.reload(); // Temporarily kept this, but ideal is to update AuthContext state
+            // CRUCIAL: Call refreshUserProfile to update AuthContext's state
+            await refreshUserProfile();
         } catch (error: any) {
             console.error('Error saving profile:', error);
             toast({
@@ -396,13 +409,12 @@ const StudentDashboard = () => {
     };
 
     // This handles completion from ProfileCompletionModal
-    const handleProfileCompletion = () => {
+    const handleProfileCompletion = async () => {
         setShowProfileCompletion(false);
-        // After profile completion (which updates the DB), re-fetch the userProfile in AuthContext
-        // to ensure the latest data is available to all components.
-        // If your AuthContext has a `refreshUserProfile` method, call it here.
-        // Otherwise, a full page reload might be the simplest temporary solution.
-        window.location.reload(); // Temporarily kept this for simplicity. Ideal is state update.
+        // CRUCIAL: Call refreshUserProfile to update AuthContext's state after modal completes
+        await refreshUserProfile();
+        // The main useEffect will then re-evaluate with the refreshed userProfile
+        // and ideally, isIncomplete will now be false, preventing the modal from reopening.
     };
 
 
@@ -538,7 +550,7 @@ const StudentDashboard = () => {
                                 <div key={c.id} className="flex justify-between items-center p-2 border-b last:border-b-0">
                                     <span>{c.title}</span>
                                     <div className="space-x-2">
-                                        <a href={c.file_url} target="_blank" rel="noopener noreferrer"> {/* Added rel="noopener noreferrer" for security */}
+                                        <a href={c.file_url} target="_blank" rel="noopener noreferrer">
                                             <Button size="sm" variant="ghost"><Eye size={14} /></Button>
                                         </a>
                                         <Button variant="destructive" size="sm" onClick={() => deleteCert(c.file_url, c.id)}>
@@ -591,11 +603,8 @@ const StudentDashboard = () => {
             {/* Profile Completion Modal */}
             <ProfileCompletionModal
                 isOpen={showProfileCompletion}
-                // Pass currentUserProfile directly, ensuring it's not null here
-                userProfile={currentUserProfile}
-                onComplete={handleProfileCompletion}
-                // You might need to pass `createProfile` from useAuth here if the modal handles the DB update
-                // Or ensure `onComplete` in the modal triggers the AuthContext's update logic
+                userProfile={currentUserProfile} // Pass currentUserProfile directly
+                onComplete={handleProfileCompletion} // Use the new handler
             />
 
             {/* Edit Profile Dialog */}
@@ -649,7 +658,6 @@ const StudentDashboard = () => {
                             <Button
                                 variant="outline"
                                 onClick={() => setShowEditProfile(false)}
-                                className="flex-1"
                             >
                                 <X className="mr-2" size={16} />
                                 Cancel
