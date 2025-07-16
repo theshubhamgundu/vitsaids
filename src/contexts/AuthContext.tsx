@@ -358,7 +358,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 return;
             }
 
-            console.log('[Auth] Login successful for user ID:', data.user.id);
+            // RELOAD USER: Ensure we have the most up-to-date user object after sign-in
+            const { data: userData, error: userReloadError } = await supabase.auth.getUser();
+            if (userReloadError || !userData.user) {
+                console.error('[Auth] Failed to reload user after login:', userReloadError);
+                toast({ title: 'Login Error', description: 'Could not load user data after login.', variant: 'destructive' });
+                await supabase.auth.signOut(); // Force logout if user data is inconsistent
+                return;
+            }
+            console.log("Reloaded user ID after login:", userData.user?.id);
+
 
             // The auth state listener will handle loading the profile and redirection.
             // No direct redirection needed here to prevent conflicts.
@@ -429,8 +438,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             console.log('[Auth] Supabase sign up successful. User ID:', data.user.id);
 
+            // RELOAD USER: Ensure we have the most up-to-date user object after sign-up
+            const { data: userData, error: userReloadError } = await supabase.auth.getUser();
+            if (userReloadError || !userData.user) {
+                console.error('[Auth] Failed to reload user after signup:', userReloadError);
+                toast({ title: 'Signup Error', description: 'Could not load user data after signup.', variant: 'destructive' });
+                await supabase.auth.signOut(); // Force logout if user data is inconsistent
+                return { error: userReloadError || { message: 'User data inconsistent after signup.' } };
+            }
+            console.log("Reloaded user ID after signup:", userData.user?.id);
+
+
             const insertData: Partial<UserProfile> = {
-                id: data.user.id,
+                id: userData.user.id, // Use the reloaded user's ID
                 email: email,
                 role: userType,
                 // FIX: Auto-approve students for direct access after signup
@@ -446,7 +466,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const { data: existingProfile, error: checkError } = await supabase
                 .from('user_profiles')
                 .select('id')
-                .eq('id', data.user.id)
+                .eq('id', userData.user.id) // Use the reloaded user's ID for check
                 .maybeSingle();
 
             if (checkError) {
@@ -482,7 +502,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             await new Promise(resolve => setTimeout(resolve, 1000));
 
-            const newProfile = await loadUserProfile(data.user.id);
+            // Use the reloaded user's ID to load the profile
+            const newProfile = await loadUserProfile(userData.user.id);
 
             if (!newProfile) {
                 console.error('[Auth] Profile insertion succeeded but profile not found on reload.');
