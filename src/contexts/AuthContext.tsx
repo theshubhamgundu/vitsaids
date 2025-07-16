@@ -339,6 +339,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, [validateSession, loadUserProfile, handleProfileCreation, handlePostAuthRedirect, initialized]);
 
+    // This new useEffect handles tab visibility changes to re-validate session
+    useEffect(() => {
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === 'visible') {
+                console.log('[Auth] Tab became visible again. Re-validating session...');
+                setLoading(true); // Start loading spinner
+                const { user: refreshedUser, session: refreshedSession } = await validateSession();
+
+                setUser(refreshedUser);
+                setSession(refreshedSession);
+
+                if (refreshedUser) {
+                    const profile = await loadUserProfile(refreshedUser.id);
+                    setUserProfile(profile);
+                    setNeedsProfileCreation(!profile && refreshedUser.user_metadata?.role === 'student');
+                } else {
+                    setUserProfile(null);
+                    setNeedsProfileCreation(false);
+                }
+                setLoading(false); // Stop loading spinner
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [validateSession, loadUserProfile]); // Dependencies for this effect
+
+
     const login = async (email: string, password: string, userType: 'student' | 'admin') => {
         setLoading(true);
         try {
