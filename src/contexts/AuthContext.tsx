@@ -1,4 +1,4 @@
-// AuthContext.tsx
+""// AuthContext.tsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
@@ -89,7 +89,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (currentSession?.user) {
         let profile = await loadUserProfile(currentSession.user.id);
 
-        // Auto-create admin profile
         if (!profile && currentSession.user.email === 'admin@vignanits.ac.in') {
           await supabase.from('user_profiles').insert({
             id: currentSession.user.id,
@@ -228,37 +227,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) return { error };
 
-      if (data.user) {
-        const insertData: any = {
-          id: data.user.id,
-          email: data.user.email, // ✅ REQUIRED FIELD
-          role: userType,
-          status: 'approved',
-        };
+      await supabase.auth.refreshSession();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user.id;
+      const userEmail = sessionData.session?.user.email;
 
-        if (userType === 'student') {
-          insertData.ht_no = htNo;
-          insertData.student_name = studentName;
-          insertData.year = year;
-        }
-
-        const { error: insertError } = await supabase.from('user_profiles').insert(insertData);
-        if (insertError) return { error: insertError };
-
-        await supabase.auth.refreshSession();
-
-        const profile = await loadUserProfile(data.user.id);
-        setUserProfile(profile);
-        setUser(data.user);
-
-        if (profile?.role === 'student') {
-          setLocation('/student-dashboard');
-        } else if (profile?.role === 'admin') {
-          setLocation('/admin-dashboard');
-        }
-
-        toast({ title: 'Account created', description: 'Welcome!' });
+      if (!userId || !userEmail) {
+        return { error: { message: 'User session not found after sign up' } };
       }
+
+      const insertData: any = {
+        id: userId,
+        email: userEmail,
+        role: userType,
+        status: 'approved',
+      };
+
+      if (userType === 'student') {
+        insertData.ht_no = htNo;
+        insertData.student_name = studentName;
+        insertData.year = year;
+      }
+
+      const { error: insertError } = await supabase.from('user_profiles').insert(insertData);
+      if (insertError) return { error: insertError };
+
+      const profile = await loadUserProfile(userId);
+      setUserProfile(profile);
+      setUser(sessionData.session.user);
+
+      if (profile?.role === 'student') {
+        setLocation('/student-dashboard');
+      } else if (profile?.role === 'admin') {
+        setLocation('/admin-dashboard');
+      }
+
+      toast({ title: 'Account created', description: 'Welcome!' });
 
       return { error: null };
     } catch (error: any) {
