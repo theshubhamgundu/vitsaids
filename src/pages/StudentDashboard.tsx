@@ -211,7 +211,6 @@ const StudentDashboard = () => {
 
       toast({ 
         title: '✅ Certificate uploaded successfully',
-        description: 'Your certificate is pending admin approval.'
       });
 
       setCertFile(null);
