@@ -1,4 +1,4 @@
-""// AuthContext.tsx
+// AuthContext.tsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
@@ -227,13 +227,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) return { error };
 
-      await supabase.auth.refreshSession();
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData.session?.user.id;
-      const userEmail = sessionData.session?.user.email;
+      const userId = data.user?.id;
+      const userEmail = data.user?.email;
 
       if (!userId || !userEmail) {
-        return { error: { message: 'User session not found after sign up' } };
+        return { error: { message: 'Sign-up succeeded but user info missing.' } };
       }
 
       const insertData: any = {
@@ -254,7 +252,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const profile = await loadUserProfile(userId);
       setUserProfile(profile);
-      setUser(sessionData.session.user);
+      setUser(data.user);
 
       if (profile?.role === 'student') {
         setLocation('/student-dashboard');
