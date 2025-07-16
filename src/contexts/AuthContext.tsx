@@ -99,10 +99,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (currentSession?.user) {
           let profile = await loadUserProfile(currentSession.user.id);
 
-          // Auto-create admin profile if email matches
           if (!profile && currentSession.user.email === 'admin@vignanits.ac.in') {
             const { error } = await supabase.from('user_profiles').insert({
               id: currentSession.user.id,
+              email: currentSession.user.email,
               role: 'admin',
               status: 'approved',
             });
@@ -114,7 +114,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUserProfile(profile);
           setNeedsProfileCreation(!profile && currentSession.user.user_metadata?.role === 'student');
 
-          // Handle redirect after profile is loaded on initial load
           if (profile) {
             if (profile.role === 'student' && profile.status === 'approved') {
               setLocation('/student-dashboard');
@@ -151,6 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!profile && session.user.email === 'admin@vignanits.ac.in') {
             const { error } = await supabase.from('user_profiles').insert({
               id: session.user.id,
+              email: session.user.email,
               role: 'admin',
               status: 'approved',
             });
@@ -162,7 +162,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUserProfile(profile);
           setNeedsProfileCreation(!profile && session.user.user_metadata?.role === 'student');
 
-          // Handle redirect after profile is loaded
           if (profile) {
             if (profile.role === 'student' && profile.status === 'approved') {
               setLocation('/student-dashboard');
@@ -193,7 +192,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.user) {
         let profile = await loadUserProfile(data.user.id);
 
-        // 🔁 Retry once if null
         if (!profile) {
           await new Promise((res) => setTimeout(res, 1000));
           profile = await loadUserProfile(data.user.id);
@@ -265,6 +263,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.user) {
         const insertData: any = {
           id: data.user.id,
+          email: data.user.email,
           role: userType,
           status: 'approved',
         };
@@ -278,10 +277,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { error: insertError } = await supabase.from('user_profiles').insert(insertData);
         if (insertError) return { error: insertError };
 
-        // Force session refresh after profile creation
         await supabase.auth.refreshSession();
 
-        // Load the newly created profile and update state
         const updatedProfile = await loadUserProfile(data.user.id);
         setUserProfile(updatedProfile);
         setUser(data.user);
@@ -294,7 +291,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : 'Student account created successfully. Redirecting...',
         });
 
-        // Manual redirect after successful sign-up
         if (updatedProfile) {
           if (updatedProfile.role === 'student' && updatedProfile.status === 'approved') {
             setLocation('/student-dashboard');
@@ -329,14 +325,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (error) throw error;
 
-    // Force session refresh after profile update
     await supabase.auth.refreshSession();
 
     const updatedProfile = await loadUserProfile(user.id);
     setUserProfile(updatedProfile);
     setNeedsProfileCreation(false);
 
-    // Redirect after profile creation
     if (updatedProfile && updatedProfile.role === 'student' && updatedProfile.status === 'approved') {
       setLocation('/student-dashboard');
     }
