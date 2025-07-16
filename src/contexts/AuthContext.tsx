@@ -1,3 +1,4 @@
+// ...imports remain the same
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
@@ -61,7 +62,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadUserProfile = async (userId: string): Promise<UserProfile | null> => {
     try {
-      console.log('[Auth] loadUserProfile: querying for userId:', userId);
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -73,7 +73,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return null;
       }
 
-      console.log('[Auth] loadUserProfile result:', data);
       return data || null;
     } catch (error) {
       console.error('[Auth] loadUserProfile exception:', error);
@@ -85,7 +84,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let isMounted = true;
 
     const initAuth = async () => {
-      console.log('[Auth] Initializing auth...');
       setLoading(true);
 
       try {
@@ -98,27 +96,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (currentSession?.user) {
           let profile = await loadUserProfile(currentSession.user.id);
-          
-          // Auto-create admin profile if it doesn't exist
+
+          // Auto-create admin profile if email matches
           if (!profile && currentSession.user.email === 'admin@vignanits.ac.in') {
             const { error } = await supabase.from('user_profiles').insert({
               id: currentSession.user.id,
               role: 'admin',
-              status: 'approved'
+              status: 'approved',
             });
-            
             if (!error) {
               profile = await loadUserProfile(currentSession.user.id);
             }
           }
-          
-          setUserProfile(profile);
 
-          if (!profile && currentSession.user.user_metadata?.role === 'student') {
-            setNeedsProfileCreation(true);
-          } else {
-            setNeedsProfileCreation(false);
-          }
+          setUserProfile(profile);
+          setNeedsProfileCreation(!profile && currentSession.user.user_metadata?.role === 'student');
         } else {
           setUserProfile(null);
           setNeedsProfileCreation(false);
@@ -129,76 +121,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserProfile(null);
         setNeedsProfileCreation(false);
       } finally {
-        if (isMounted) {
-          setLoading(false);
-          console.log('[Auth] Auth initialization complete.');
-        }
+        if (isMounted) setLoading(false);
       }
     };
 
     initAuth();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('[Auth] Auth state changed:', _event, session?.user?.email || 'no user');
       if (!isMounted) return;
-      
       setSession(session);
       setUser(session?.user ?? null);
 
-      // Use setTimeout to prevent blocking the auth state change callback
       setTimeout(async () => {
         if (!isMounted) return;
-        
         if (session?.user) {
           let profile = await loadUserProfile(session.user.id);
-          
-          // Auto-create admin profile if it doesn't exist
+
           if (!profile && session.user.email === 'admin@vignanits.ac.in') {
-            console.log('[Auth] Creating admin profile...');
             const { error } = await supabase.from('user_profiles').insert({
               id: session.user.id,
               role: 'admin',
-              status: 'approved'
+              status: 'approved',
             });
-            
             if (!error) {
               profile = await loadUserProfile(session.user.id);
             }
           }
-          
-          if (isMounted) {
-            setUserProfile(profile);
-            setNeedsProfileCreation(!profile && session.user.user_metadata?.role === 'student');
-          }
+
+          setUserProfile(profile);
+          setNeedsProfileCreation(!profile && session.user.user_metadata?.role === 'student');
         } else {
-          if (isMounted) {
-            setUserProfile(null);
-            setNeedsProfileCreation(false);
-          }
+          setUserProfile(null);
+          setNeedsProfileCreation(false);
         }
 
-        if (isMounted) {
-          setLoading(false);
-          console.log('[Auth] Auth state processing complete');
-        }
+        setLoading(false);
       }, 0);
     });
 
     return () => {
       isMounted = false;
       listener.subscription.unsubscribe();
-      console.log('[Auth] Cleaned up auth listener.');
     };
   }, []);
 
   const login = async (email: string, password: string, userType: 'student' | 'admin') => {
     try {
-      console.log('[Auth] Login attempt:', email);
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
       if (data.user) {
-        const profile = await loadUserProfile(data.user.id);
+        let profile = await loadUserProfile(data.user.id);
+
+        // 🔁 Retry once if null
+        if (!profile) {
+          await new Promise((res) => setTimeout(res, 1000));
+          profile = await loadUserProfile(data.user.id);
+        }
+
         setUser(data.user);
         setUserProfile(profile);
 
@@ -208,11 +188,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
 
-        // ✅ NEW: Auto-redirect logic - bypass status check
         if (profile?.role === 'admin') {
           setLocation('/admin-dashboard');
         } else if (profile?.role === 'student') {
-          // ✅ CHANGED: Remove status check, redirect directly to dashboard
           setLocation('/student-dashboard');
         }
 
@@ -220,7 +198,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err: any) {
       toast({ title: 'Login failed', description: err.message || 'Unknown error' });
-      console.error('[Auth] Login failed:', err);
       throw err;
     }
   };
@@ -237,7 +214,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let verified: any = null;
 
       if (userType === 'student') {
-        // Verify student details match verified_students table
         const { data, error: verifyError } = await supabase
           .from('verified_students')
           .select('*')
@@ -247,7 +223,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .maybeSingle();
 
         if (verifyError || !data) {
-          return { error: { message: 'Student details not found in verified students list. Please check your information or contact admin.' } };
+          return {
+            error: {
+              message:
+                'Student details not found in verified students list. Please check your information or contact admin.',
+            },
+          };
         }
 
         verified = data;
@@ -265,8 +246,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const insertData: any = {
           id: data.user.id,
           role: userType,
-          // ✅ CHANGED: Set status to 'approved' for students to bypass approval
-          status: 'approved', // Previously: userType === 'admin' ? 'approved' : 'pending'
+          status: 'approved',
         };
 
         if (userType === 'student') {
@@ -306,8 +286,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ht_no: profileData.ht_no,
         student_name: profileData.student_name,
         year: profileData.year,
-        // ✅ CHANGED: Set status to 'approved' immediately
-        status: 'approved', // Previously: 'pending'
+        status: 'approved',
       })
       .eq('id', user.id);
 
