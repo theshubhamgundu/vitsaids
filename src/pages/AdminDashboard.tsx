@@ -57,6 +57,93 @@ interface Placement {
 }
 
 const AdminDashboard = () => {
+  const { toast } = useToast();
+
+  // ✅ Promote Student
+  const promoteStudent = async (studentId: string, currentYear: number | string) => {
+    const numericYear = parseInt(currentYear as string);
+    if (isNaN(numericYear)) {
+      toast({ title: 'Error', description: 'Invalid year format for promotion', variant: 'destructive' });
+      return;
+    }
+    if (numericYear >= 4) {
+      toast({ title: 'Notice', description: 'Student is already in final year' });
+      return;
+    }
+    const nextYear = numericYear + 1;
+    const confirm = window.confirm(`Promote this student to year ${nextYear}?`);
+    if (!confirm) return;
+    try {
+      const { error } = await supabase.from('user_profiles').update({ year: nextYear }).eq('id', studentId);
+      if (!error) toast({ title: `Student promoted to year ${nextYear}` });
+    } catch (error) {
+      console.error('Error promoting student:', error);
+      toast({ title: 'Promotion failed', description: 'Please try again later.', variant: 'destructive' });
+    }
+  };
+
+  // ✅ Admin: Search Certificates
+  const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
+  const [adminCertificates, setAdminCertificates] = useState<any[]>([]);
+  const fetchStudentCertificates = async () => {
+    if (!certificateSearchHTNO) {
+      toast({ title: 'Enter HT No. to search' });
+      return;
+    }
+    const { data, error } = await supabase
+      .from('student_certificates')
+      .select('*')
+      .eq('htno', certificateSearchHTNO);
+    if (error) {
+      toast({ title: 'Error fetching certificates', variant: 'destructive' });
+    } else {
+      setAdminCertificates(data || []);
+      if ((data || []).length === 0) toast({ title: 'No certificates found' });
+    }
+  };
+
+  // ✅ Results Upload
+  const [resultTitle, setResultTitle] = useState('');
+  const [resultFile, setResultFile] = useState<File | null>(null);
+  const uploadResult = async () => {
+    if (!resultFile || !resultTitle) {
+      toast({ title: 'Error', description: 'Please provide a title and choose a file', variant: 'destructive' });
+      return;
+    }
+    const fileName = `${Date.now()}-${resultFile.name}`;
+    const { error: uploadError } = await supabase.storage.from('results').upload(fileName, resultFile, { upsert: true });
+    if (uploadError) {
+      toast({ title: 'Upload failed', variant: 'destructive' });
+      return;
+    }
+    const { error: dbError } = await supabase.from('results').insert([{ title: resultTitle, file_url: fileName }]);
+    if (dbError) {
+      toast({ title: 'Error saving record', variant: 'destructive' });
+      return;
+    }
+    toast({ title: '✅ Result uploaded successfully' });
+    setResultTitle('');
+    setResultFile(null);
+  };
+
+  // ✅ Notifications
+  const [notificationTitle, setNotificationTitle] = useState('');
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const postNotification = async () => {
+    if (!notificationTitle || !notificationMessage) {
+      toast({ title: 'Fill both title and message', variant: 'destructive' });
+      return;
+    }
+    const { error } = await supabase.from('notifications').insert([{ title: notificationTitle, message: notificationMessage }]);
+    if (error) {
+      toast({ title: 'Error posting notification', variant: 'destructive' });
+    } else {
+      toast({ title: '✅ Notification posted' });
+      setNotificationTitle('');
+      setNotificationMessage('');
+    }
+  };
+
   const { user, userProfile, logout, loading } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -1222,7 +1309,7 @@ const PlacementForm = ({ onSave }: { onSave: (data: Omit<Placement, 'id'>) => vo
     ctc: '', 
     type: 'Full-Time', 
     year: '2025', 
-    branch: 'AI & Data Science' 
+    branch: 'AI & DS' 
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1235,7 +1322,7 @@ const PlacementForm = ({ onSave }: { onSave: (data: Omit<Placement, 'id'>) => vo
       year: parseInt(formData.year),
       branch: formData.branch
     });
-    setFormData({ student_name: '', company: '', ctc: '', type: 'Full-Time', year: '2025', branch: 'AI & Data Science' });
+    setFormData({ student_name: '', company: '', ctc: '', type: 'Full-Time', year: '2025', branch: 'AI & DS' });
   };
 
   return (
