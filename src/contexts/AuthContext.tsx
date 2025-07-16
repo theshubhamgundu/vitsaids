@@ -208,18 +208,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
 
+        // ✅ NEW: Auto-redirect logic - bypass status check
         if (profile?.role === 'admin') {
           setLocation('/admin-dashboard');
         } else if (profile?.role === 'student') {
-          if (profile.status === 'approved') {
-            setLocation('/student-dashboard');
-          } else {
-            toast({
-              title: 'Pending Approval',
-              description: 'Your profile is awaiting admin approval.',
-            });
-            setLocation('/');
-          }
+          // ✅ CHANGED: Remove status check, redirect directly to dashboard
+          setLocation('/student-dashboard');
         }
 
         toast({ title: 'Login successful', description: 'Welcome back!' });
@@ -271,7 +265,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const insertData: any = {
           id: data.user.id,
           role: userType,
-          status: userType === 'admin' ? 'approved' : 'pending',
+          // ✅ CHANGED: Set status to 'approved' for students to bypass approval
+          status: 'approved', // Previously: userType === 'admin' ? 'approved' : 'pending'
         };
 
         if (userType === 'student') {
@@ -288,7 +283,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description:
             userType === 'admin'
               ? 'Admin account created successfully.'
-              : 'Student account created and sent for admin approval.',
+              : 'Student account created successfully. You can now access your dashboard.',
         });
       }
 
@@ -311,7 +306,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ht_no: profileData.ht_no,
         student_name: profileData.student_name,
         year: profileData.year,
-        status: 'pending',
+        // ✅ CHANGED: Set status to 'approved' immediately
+        status: 'approved', // Previously: 'pending'
       })
       .eq('id', user.id);
 
@@ -322,8 +318,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setNeedsProfileCreation(false);
 
     toast({
-      title: 'Profile submitted',
-      description: 'Your profile is pending admin approval.',
+      title: 'Profile created',
+      description: 'Your profile has been created successfully.',
     });
   };
 
