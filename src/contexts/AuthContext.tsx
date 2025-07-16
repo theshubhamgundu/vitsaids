@@ -262,8 +262,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           title: 'Account created',
           description:
             userType === 'admin'
-              ? 'Admin account created successfully.'
-              : 'Student account created successfully. You can now access your dashboard.',
+              ? 'Admin account created successfully. You can now log in.'
+              : 'Student account created successfully. You can now log in.',
         });
       }
 
