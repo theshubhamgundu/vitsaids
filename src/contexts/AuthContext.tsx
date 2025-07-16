@@ -113,6 +113,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           setUserProfile(profile);
           setNeedsProfileCreation(!profile && currentSession.user.user_metadata?.role === 'student');
+
+          // Handle redirect after profile is loaded on initial load
+          if (profile) {
+            if (profile.role === 'student' && profile.status === 'approved') {
+              setLocation('/student-dashboard');
+            } else if (profile.role === 'admin' && profile.status === 'approved') {
+              setLocation('/admin-dashboard');
+            }
+          }
         } else {
           setUserProfile(null);
           setNeedsProfileCreation(false);
@@ -152,6 +161,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           setUserProfile(profile);
           setNeedsProfileCreation(!profile && session.user.user_metadata?.role === 'student');
+
+          // Handle redirect after profile is loaded
+          if (profile) {
+            if (profile.role === 'student' && profile.status === 'approved') {
+              setLocation('/student-dashboard');
+            } else if (profile.role === 'admin' && profile.status === 'approved') {
+              setLocation('/admin-dashboard');
+            }
+          }
         } else {
           setUserProfile(null);
           setNeedsProfileCreation(false);
@@ -277,10 +295,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         // Manual redirect after successful sign-up
-        if (userType === 'student') {
-          setLocation('/student-dashboard');
-        } else if (userType === 'admin') {
-          setLocation('/admin-dashboard');
+        if (updatedProfile) {
+          if (updatedProfile.role === 'student' && updatedProfile.status === 'approved') {
+            setLocation('/student-dashboard');
+          } else if (updatedProfile.role === 'admin' && updatedProfile.status === 'approved') {
+            setLocation('/admin-dashboard');
+          }
         }
       }
 
@@ -315,6 +335,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updatedProfile = await loadUserProfile(user.id);
     setUserProfile(updatedProfile);
     setNeedsProfileCreation(false);
+
+    // Redirect after profile creation
+    if (updatedProfile && updatedProfile.role === 'student' && updatedProfile.status === 'approved') {
+      setLocation('/student-dashboard');
+    }
 
     toast({
       title: 'Profile created',
