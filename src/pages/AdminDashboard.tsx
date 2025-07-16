@@ -268,11 +268,12 @@ const AdminDashboard = () => {
 
   const loadAllStudents = async () => {
     try {
+      // Applied the filter based on the provided "Fix" logic
       const { data, error } = await (supabase as any)
         .from('user_profiles')
         .select('*')
         .eq('role', 'student')
-        .order('status', { ascending: false }); // pending first
+        .eq('status', 'approved'); // Only fetching approved students as per the fix request
       
       if (!error && data) {
         setAllStudents(data);
@@ -390,6 +391,7 @@ const AdminDashboard = () => {
       
       if (!error) {
         toast({ title: "Student approved successfully" });
+        loadAllStudents(); // Reload students to reflect status change
       }
     } catch (error) {
       console.error('Error approving student:', error);
@@ -405,6 +407,7 @@ const AdminDashboard = () => {
       
       if (!error) {
         toast({ title: "Student rejected" });
+        loadAllStudents(); // Reload students to reflect status change
       }
     } catch (error) {
       console.error('Error rejecting student:', error);
@@ -598,6 +601,7 @@ const AdminDashboard = () => {
       if (!error) {
         toast({ title: "Student details updated successfully" });
         setEditingStudent(null);
+        loadAllStudents(); // Reload students to reflect status change
       }
     } catch (error) {
       console.error('Error updating student:', error);
