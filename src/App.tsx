@@ -1,129 +1,157 @@
-// App.tsx
+// App.tsx - Revised for LoginModal
 
-import React, { useEffect } from 'react';
-import { Route, Switch } from 'wouter'; // Assuming 'wouter' is your router library
-import { Toaster } from '@/components/ui/toaster'; // For shadcn/ui toasts
-import { Toaster as Sonner } from '@/components/ui/sonner'; // For shadcn/ui sonner (if used)
-import { TooltipProvider } from '@/components/ui/tooltip'; // For shadcn/ui tooltips
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'; // For react-query
+import React, { useEffect, useState } from 'react'; // Import useState for modal visibility
+import { Route, Switch, useLocation as useWouterLocation } from 'wouter'; // Renamed to avoid conflict with AuthContext's useLocation
+import { Toaster } from '@/components/ui/toaster';
+import { Toaster as Sonner } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// Import AuthProvider and useAuth from your contexts directory
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
-// Import the ProtectedRoute component
-import ProtectedRoute from '@/components/ProtectedRoute'; // Make sure this path is correct
+// Import your page/component files
+import Index from './pages/Index';
+import AdminDashboard from './pages/AdminDashboard';
+import StudentDashboard from './pages/StudentDashboard';
+import NotFound from './pages/NotFound';
+import StudentOnboarding from './pages/StudentOnboarding';
+import LoginModal from '@/components/LoginModal'; // Assuming your LoginModal is here
 
-// Import your page components
-import Index from './pages/Index'; // Your homepage/public index
-import AdminDashboard from './pages/AdminDashboard'; // Admin-specific dashboard
-import StudentDashboard from './pages/StudentDashboard'; // Student-specific dashboard
-import NotFound from './pages/NotFound'; // 404 Not Found page
-import LoginPage from './pages/LoginPage'; // Your login page component
-import StudentOnboarding from './pages/StudentOnboarding'; // Page for student profile completion
-
-// Initialize React Query client
 const queryClient = new QueryClient();
 
 // This component encapsulates your application's routing logic.
-// It sits inside the AuthProvider to consume the authentication context.
 const RoutesWithAuthProtection: React.FC = () => {
-  const { 
-    loading, 
-    isAuthenticated, 
-    userProfile, 
+  const {
+    loading,
+    isAuthenticated,
+    userProfile,
     needsProfileCreation,
-    user // Need the user object to check metadata role for onboarding redirects
+    user // Added user to check for user_metadata.role
   } = useAuth();
-  
-  const [currentPath, setLocation] = useLocation(); // wouter's setLocation hook
 
-  // This useEffect handles initial/post-auth redirection for users
-  // who might land on public routes (like '/') directly while already logged in,
-  // or for students who just signed up/logged in and need profile completion.
+  const [location, setWouterLocation] = useWouterLocation(); // Using wouter's useLocation
+
+  // State to control the visibility of the LoginModal
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+  // Effect to handle initial/post-auth redirection and modal visibility
   useEffect(() => {
     // Only proceed if the AuthContext has completed its initial loading phase
     if (loading) {
-      console.log('[RoutesWithAuthProtection] AuthContext is still loading. Skipping initial route check.');
+      console.log('[RoutesWithAuthProtection] AuthContext is still loading. Skipping initial route/modal check.');
       return;
     }
 
-    console.log('[RoutesWithAuthProtection] AuthContext loading complete. Checking initial redirect conditions.');
+    console.log('[RoutesWithAuthProtection] AuthContext loading complete. Checking initial redirect/modal conditions.');
     console.log('[RoutesWithAuthProtection] isAuthenticated:', isAuthenticated);
     console.log('[RoutesWithAuthProtection] userProfile:', userProfile);
     console.log('[RoutesWithAuthProtection] needsProfileCreation:', needsProfileCreation);
-    console.log('[RoutesWithAuthProtection] Current Path:', currentPath);
+    console.log('[RoutesWithAuthProtection] Current Path:', location);
 
-    // If authenticated and profile loaded/approved, and currently on a public route,
-    // redirect them to their respective dashboard.
+    // Scenario 1: User is authenticated and profile is approved
     if (isAuthenticated && userProfile && userProfile.status === 'approved') {
-        // Prevent redirecting from protected routes back to dashboard if already there
-        if (currentPath === '/login' || currentPath === '/' || currentPath === '/student-onboarding' || currentPath === '/complete-profile') {
-            if (userProfile.role === 'student' && currentPath !== '/student-dashboard') {
-                console.log('[RoutesWithAuthProtection] Authenticated student on public/onboarding page. Redirecting to /student-dashboard.');
-                setLocation('/student-dashboard');
+        // If user is on a public page ('/', '/login-modal-trigger') after successful auth,
+        // redirect them to their respective dashboard.
+        if (location === '/' || location === '/login-modal-trigger') { // Add any other paths that might trigger the modal/are public entry points
+            if (userProfile.role === 'student' && location !== '/student-dashboard') {
+                console.log('[RoutesWithAuthProtection] Authenticated student on public page. Redirecting to /student-dashboard.');
+                setWouterLocation('/student-dashboard');
+                setIsLoginModalOpen(false); // Close modal if open
                 return;
-            } else if (userProfile.role === 'admin' && currentPath !== '/admin-dashboard') {
+            } else if (userProfile.role === 'admin' && location !== '/admin-dashboard') {
                 console.log('[RoutesWithAuthProtection] Authenticated admin on public page. Redirecting to /admin-dashboard.');
-                setLocation('/admin-dashboard');
+                setWouterLocation('/admin-dashboard');
+                setIsLoginModalOpen(false); // Close modal if open
                 return;
             }
         }
+        // Close login modal if user is authenticated and not on a public path.
+        if (isLoginModalOpen) {
+            setIsLoginModalOpen(false);
+        }
     }
-    // If authenticated, but needs profile creation (only applicable for students as per AuthContext logic)
-    // and not currently on an onboarding page, redirect to onboarding.
+    // Scenario 2: Authenticated student needs profile creation
     else if (isAuthenticated && needsProfileCreation && userProfile === null && user?.user_metadata?.role === 'student') {
-        if (currentPath !== '/student-onboarding' && currentPath !== '/complete-profile') {
+        if (location !== '/student-onboarding' && location !== '/complete-profile') {
             console.log('[RoutesWithAuthProtection] Authenticated student needs profile creation. Redirecting to /student-onboarding.');
-            setLocation('/student-onboarding');
+            setWouterLocation('/student-onboarding');
+            setIsLoginModalOpen(false); // Close modal if open
             return;
         }
     }
-    // If authenticated but profile is pending, ensure they are on the home page (or a specific pending page)
+    // Scenario 3: Authenticated user with pending profile status
     else if (isAuthenticated && userProfile?.status === 'pending') {
-        if (currentPath !== '/') {
+        if (location !== '/') { // Redirect to home for pending approval
             console.log('[RoutesWithAuthProtection] Authenticated user with pending profile. Redirecting to /.');
-            setLocation('/');
+            setWouterLocation('/');
+            setIsLoginModalOpen(false); // Close modal if open
             return;
         }
     }
-    // If not authenticated and not on a public route, ProtectedRoute will handle redirect to /login.
-    // If not authenticated and on a public route (`/`, `/login`, etc.), it's fine to stay there.
+    // Scenario 4: Not authenticated and on a path that should trigger the login modal
+    // For example, if you want the login modal to pop up when someone lands on '/'
+    // or if a ProtectedRoute redirects to '/' when unauthenticated.
+    else if (!isAuthenticated) {
+        // Decide when to show the modal.
+        // Option A: Always show on '/' if not authenticated
+        // if (location === '/') {
+        //     setIsLoginModalOpen(true);
+        // }
+        // Option B: Show when a protected route tries to redirect to '/'
+        // You might need a query param or separate state for this.
+        // For simplicity, let's assume LoginModal is initially opened by a button on Index page.
+        // Or, you can have a specific path like '/login-prompt' that opens the modal.
+        // For now, if unauthenticated AND on the root, we'll prompt the modal.
+        if (location === '/') {
+            setIsLoginModalOpen(true);
+        } else {
+             setIsLoginModalOpen(false); // Ensure it's closed on other public pages
+        }
+    }
+  }, [loading, isAuthenticated, userProfile, needsProfileCreation, user, location, setWouterLocation]);
 
-  }, [loading, isAuthenticated, userProfile, needsProfileCreation, user, currentPath, setLocation]); // Added user and currentPath to dependencies
 
-  // During the initial loading phase of AuthContext, return null or a global loader.
-  // The AuthProvider itself already renders a full-screen spinner when `loading` is true
-  // and `!isInitialCheckDone.current` (initial state).
-  // This `RoutesWithAuthProtection` component's `loading` check is primarily to prevent
-  // premature rendering of routes BEFORE the initial redirect logic runs.
+  // During the initial loading phase of AuthContext, return null
+  // (the root AuthProvider already displays the global spinner).
   if (loading) {
-      console.log('[RoutesWithAuthProtection] Still in AuthContext loading phase (or processing an action). Not rendering routes yet.');
-      return null; // AuthProvider's spinner is already shown.
+      console.log('[RoutesWithAuthProtection] Still in AuthContext loading phase. Not rendering routes.');
+      return null;
   }
 
-  // Once loading is false, render the actual routes
+  // Once AuthContext is ready, render the routes and the modal conditionally
   console.log('[RoutesWithAuthProtection] AuthContext ready. Rendering application routes.');
   return (
-    <Switch>
-      {/* Public Routes - Accessible to anyone, authenticated or not */}
-      <Route path="/" component={Index} />
-      <Route path="/login" component={LoginPage} />
-      <Route path="/student-onboarding" component={StudentOnboarding} />
-      <Route path="/complete-profile" component={StudentOnboarding} /> {/* Alias for student onboarding */}
-      {/* Add any other genuinely public routes here (e.g., /about, /contact) */}
+    <>
+      <Switch>
+        {/* Public Routes */}
+        <Route path="/" component={Index} />
+        {/* The LoginModal is NOT a route itself */}
+        <Route path="/student-onboarding" component={StudentOnboarding} />
+        <Route path="/complete-profile" component={StudentOnboarding} />
 
-      {/* Protected Routes - Require authentication and specific roles */}
-      <ProtectedRoute path="/student-dashboard" allowedRoles={['student']}>
-        <StudentDashboard />
-      </ProtectedRoute>
+        {/* Protected Routes - Use ProtectedRoute wrapper */}
+        <ProtectedRoute path="/student-dashboard" allowedRoles={['student']}>
+          <StudentDashboard />
+        </ProtectedRoute>
 
-      <ProtectedRoute path="/admin-dashboard" allowedRoles={['admin']}>
-        <AdminDashboard />
-      </ProtectedRoute>
+        <ProtectedRoute path="/admin-dashboard" allowedRoles={['admin']}>
+          <AdminDashboard />
+        </ProtectedRoute>
 
-      {/* Catch-all route for any unmatched paths - must be last */}
-      <Route component={NotFound} />
-    </Switch>
+        {/* Catch-all for unmatched paths */}
+        <Route component={NotFound} />
+      </Switch>
+
+      {/* Conditionally render LoginModal based on state */}
+      {/* This modal needs to be high enough in the tree to overlay everything */}
+      {isLoginModalOpen && !isAuthenticated && ( // Only show if modal state is open AND not authenticated
+          <LoginModal
+              open={isLoginModalOpen}
+              onOpenChange={setIsLoginModalOpen} // Allow modal to control its own open/close state
+          />
+      )}
+    </>
   );
 };
 
@@ -132,10 +160,8 @@ const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        {/* AuthProvider must wrap all components that use auth context or ProtectedRoute */}
         <AuthProvider>
-          {/* RoutesWithAuthProtection handles all application routing decisions */}
-          <RoutesWithAuthProtection /> 
+          <RoutesWithAuthProtection />
           <Toaster />
           <Sonner />
         </AuthProvider>
