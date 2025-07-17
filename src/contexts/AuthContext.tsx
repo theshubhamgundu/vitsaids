@@ -510,15 +510,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 return { error: signUpError?.message || 'Signup failed' };
             }
 
-            const { user } = userData;
-            console.log('[Auth] Supabase user created with ID:', user.id);
+            const supabaseUser = userData.user; // <-- Rename to avoid shadowing
+            console.log('[Auth] Supabase user created with ID:', supabaseUser.id);
 
             // 2. Check for existing profile
-            console.log('[Auth] Checking for existing profile for user ID:', user.id);
+            console.log('[Auth] Checking for existing profile for user ID:', supabaseUser.id);
             const { data: existingProfile, error: existingProfileCheckError } = await supabase
                 .from('user_profiles')
                 .select('id')
-                .eq('id', user.id)
+                .eq('id', supabaseUser.id)
                 .maybeSingle();
 
             if (existingProfileCheckError) {
@@ -542,8 +542,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     .from('user_profiles')
                     .insert([
                         {
-                            id: user.id,
-                            email: user.email!,
+                            id: supabaseUser.id,
+                            email: supabaseUser.email!,
                             student_name,
                             ht_no,
                             year: formYear,
@@ -571,13 +571,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.log('[Auth] Student profile inserted successfully:', insertedProfile);
                 createdOrFetchedProfile = insertedProfile;
             } else {
-                console.warn('[Auth] User profile unexpectedly exists for new signup. Fetching existing profile for ID:', user.id);
-                createdOrFetchedProfile = await loadUserProfile(user);
+                console.warn('[Auth] User profile unexpectedly exists for new signup. Fetching existing profile for ID:', supabaseUser.id);
+                createdOrFetchedProfile = await loadUserProfile(supabaseUser);
             }
 
             if (createdOrFetchedProfile) {
                 console.log('[Auth] Setting user profile in state:', createdOrFetchedProfile);
-                setUser(user);
+                setUser(supabaseUser);
                 setSession(userData.session);
                 setUserProfile(createdOrFetchedProfile);
                 setNeedsProfileCreation(false);
