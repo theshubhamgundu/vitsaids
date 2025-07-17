@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
-import { useLocation } = from 'wouter';
+import { useLocation } from 'wouter';
 
 // --- Configuration ---
 // IMPORTANT: Use environment variables for sensitive or environment-specific values.
