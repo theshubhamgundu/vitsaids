@@ -320,14 +320,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setNeedsProfileCreation(false); // No user, so no profile creation is pending
 
             const currentWindowPath = window.location.pathname;
-            const isPublicOrAuthPage = currentWindowPath === '/' || currentWindowPath === '/login' ||
-                                       currentWindowPath.startsWith('/public') ||
+            const isPublicOrAuthPage = currentWindowPath === '/' || currentWindowPath.startsWith('/public') ||
                                        currentWindowPath.startsWith('/student-onboarding') ||
                                        currentWindowPath.startsWith('/complete-profile');
 
+            // ✅ FIX: Redirect to homepage '/' after logout, assuming LoginModal lives there
             if (!isPublicOrAuthPage) {
-                console.log('[Auth] No user session and not on public/auth page. Redirecting to login.');
-                setLocation('/login');
+                console.log('[Auth] No user session and not on public/auth page. Redirecting to homepage.');
+                setLocation('/'); // Redirect to homepage where the modal would appear
             } else {
                 console.log('[Auth] No user session, but on a public/auth page. Staying put.');
             }
@@ -449,7 +449,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setSession(null);
                 setUserProfile(null);
                 setNeedsProfileCreation(false);
-                setLocation('/login'); // Redirect to login
+                // No specific redirect needed here, as `handleAuthChangeWrapper` handles the global
+                // state of no user/session and redirects to `/` if not on a public page.
             }
             // `handleAuthChangeWrapper` or direct updates will set loading to false.
             // No explicit setLoading(false) here.
@@ -682,7 +683,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else {
                 console.log('[Auth] Logout successful.');
                 toast({ title: 'Logged out successfully' });
-                // The `onAuthStateChange` listener will handle clearing local state and redirection to `/login`.
+                // ✅ FIX: No manual state clearing or redirect here.
+                // The `onAuthStateChange` listener (via `handleAuthChangeWrapper`)
+                // will automatically handle clearing context state and redirecting to '/'
+                // after receiving the SIGNED_OUT event.
             }
         } catch (error) {
             console.error('[Auth] Logout caught error:', error);
