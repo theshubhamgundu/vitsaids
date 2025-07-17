@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
-import { useLocation } from 'wouter'; // Corrected: Removed the extra '=' here
+import { useLocation } from 'wouter'; // FIXED: Removed the extra '=' here
 
 // --- Configuration ---
 // IMPORTANT: Use environment variables for sensitive or environment-specific values.
@@ -270,7 +270,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (currentPath !== '/student-dashboard') {
                 console.log('[Auth] Redirecting to student dashboard');
                 setLocation('/student-dashboard');
-                window.location.reload(); // Keep this reload for now as per your original code
+                window.location.reload(); // Keep this reload as it was in your original code
             } else {
                 console.log('[Auth] Already on student dashboard, skipping redirect.');
             }
@@ -448,9 +448,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const signUp = async (
         email: string,
         password: string,
-        studentName: string,
+        studentName: string, // This parameter should contain the student's full name
         htNo: string,
-        year: string,
+        year: string,         // This parameter should contain the student's year
         phone?: string,
         address?: string,
         emergency_no?: string
@@ -549,10 +549,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const profileToInsert = {
                     id: user.id,
                     email: user.email!,
-                    // THE CRITICAL FIX: Ensure these are mapped correctly
-                    student_name: trimmedName, // Correctly assigns the student's name
+                    // FIXED: Corrected the mapping as per our discussion
+                    student_name: trimmedName,
                     ht_no: trimmedHtNo,
-                    year: year,               // Correctly assigns the year
+                    year: year,
                     phone: phone || null,
                     address: address || null,
                     emergency_no: emergency_no || null,
