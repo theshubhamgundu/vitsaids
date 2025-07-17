@@ -59,7 +59,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [needsProfileCreation, setNeedsProfileCreation] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [initialized, setInitialized] = useState(false);
+    const [initialized, setInitialized] = useState(false); // Indicates if initial auth check is complete
 
     const { toast } = useToast();
     const [, setLocation] = useLocation();
@@ -99,6 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             console.log('[Auth] Validating session...');
 
+            // Fetch the current session
             const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
             if (sessionError) {
@@ -107,10 +108,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             if (!sessionData.session) {
-                console.log('[Auth] No session found');
+                console.log('[Auth] No session found from getSession().');
                 return { user: null, session: null };
             }
 
+            // Fetch the user data using the session
             const { data: userData, error: userError } = await supabase.auth.getUser();
 
             if (userError) {
@@ -119,7 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             if (!userData.user) {
-                console.log('[Auth] No user found despite having session');
+                console.log('[Auth] No user found from getUser() despite having session.');
                 return { user: null, session: null };
             }
 
@@ -169,6 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleProfileCreation = useCallback(async (currentUser: User) => {
         if (!currentUser) return null;
 
+        // Auto-create admin profile if needed
         if (currentUser.email === 'admin@vignanits.ac.in') {
             console.log('[Auth] Auto-creating admin profile for:', currentUser.email);
             try {
@@ -179,11 +182,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     status: 'approved',
                 });
 
-                if (adminInsertError && adminInsertError.code !== '23505') {
+                if (adminInsertError && adminInsertError.code !== '23505') { // Ignore duplicate key error
                     console.error('[Auth] Admin auto-creation error:', adminInsertError);
                     return null;
                 }
 
+                // Wait a bit for DB consistency
                 await new Promise(resolve => setTimeout(resolve, 500));
                 const profile = await loadUserProfile(currentUser.id);
 
@@ -208,6 +212,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             status: profile.status
         });
 
+        // Only redirect if not already on the correct page
         if (profile.role === 'admin' && profile.status === 'approved' && currentPath !== '/admin-dashboard') {
             console.log('[Auth] Redirecting to admin dashboard');
             setLocation('/admin-dashboard');
@@ -220,12 +225,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [setLocation]);
 
+    // Initial auth state setup and listener for real-time changes
     useEffect(() => {
         let isMounted = true;
 
         const initializeAuth = async () => {
             try {
                 console.log('[Auth] Initializing auth (initial load)...');
+                setLoading(true); // Start loading
 
                 const { user: validatedUser, session: validatedSession } = await validateSession();
 
@@ -236,13 +243,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (validatedUser && validatedSession) {
                     console.log('[Auth] Valid session found during init:', validatedUser.email);
 
+                    // Load existing profile
                     currentProfile = await loadUserProfile(validatedUser.id);
 
+                    // If no profile exists, try to create one for admin
                     if (!currentProfile) {
                         currentProfile = await handleProfileCreation(validatedUser);
                     }
 
+                    // Handle initial redirect after successful initialization
                     if (currentProfile) {
+                        // Small delay to ensure UI is ready before redirecting
                         setTimeout(() => {
                             if (isMounted) {
                                 handlePostAuthRedirect(currentProfile!);
@@ -250,7 +261,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         }, 100);
                     }
                 } else {
-                    console.log('[Auth] No valid session found during init');
+                    console.log('[Auth] No valid session found during init. Clearing state.');
+                    // If no valid session, ensure state is clear
+                    setUser(null);
+                    setSession(null);
+                    setUserProfile(null);
+                    setNeedsProfileCreation(false);
                 }
 
                 if (isMounted) {
@@ -275,18 +291,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } finally {
                 if (isMounted) {
                     setLoading(false);
-                    setInitialized(true);
+                    setInitialized(true); // Mark initial check as complete
                 }
             }
         };
 
         initializeAuth();
 
+        // Set up auth state listener for real-time changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log(`[Auth] Auth state changed via listener. Event: ${event}, User: ${session?.user?.email}`);
 
-            if (!isMounted || !initialized) return;
+            if (!isMounted || !initialized) return; // Only process if component is mounted and initially loaded
 
+            // Don't set loading for SIGNED_OUT events to prevent UI flicker
             if (event !== 'SIGNED_OUT') {
                 setLoading(true);
             }
@@ -299,17 +317,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setUser(newUser);
 
                 if (newUser && session) {
-                    console.log('[Auth] Listener: User present. Loading profile for:', newUser.email);
+                    console.log('[Auth] Listener: User present. Loading profile for:', newUser.email, 'ID:', newUser.id, 'Role:', newUser.user_metadata?.role);
 
+                    // Load existing profile
                     newProfile = await loadUserProfile(newUser.id);
 
+                    // If no profile exists, try to create one for admin
                     if (!newProfile) {
                         newProfile = await handleProfileCreation(newUser);
                     }
 
+                    // Handle redirection for auth state changes (specifically on SIGNED_IN event)
                     if (newProfile && event === 'SIGNED_IN') {
                         handlePostAuthRedirect(newProfile);
                     }
+                } else if (event === 'SIGNED_OUT') {
+                    // Clear state completely on sign out
+                    setUser(null);
+                    setSession(null);
+                    setUserProfile(null);
+                    setNeedsProfileCreation(false);
+                    setLocation('/'); // Redirect to home/login on explicit logout
+                    console.log('[Auth] User signed out. State cleared and redirected.');
                 }
 
                 if (isMounted) {
@@ -337,34 +366,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isMounted = false;
             subscription.unsubscribe();
         };
-    }, [validateSession, loadUserProfile, handleProfileCreation, handlePostAuthRedirect, initialized]);
+    }, [validateSession, loadUserProfile, handleProfileCreation, handlePostAuthRedirect, initialized]); // Added initialized to deps
 
-    // This new useEffect handles tab visibility changes to re-validate session
+    // NEW: Handle tab visibility changes to re-validate session and prevent spinner issues
     useEffect(() => {
         const handleVisibilityChange = async () => {
             if (document.visibilityState === 'visible') {
-                console.log('[Auth] Tab became visible again. Re-validating session...');
-                setLoading(true); // Start loading spinner
-                const { user: refreshedUser, session: refreshedSession } = await validateSession();
+                console.log('[Auth] Tab became visible. Re-validating session...');
+                setLoading(true); // Show spinner while re-validating
+                try {
+                    const { user: refreshedUser, session: refreshedSession } = await validateSession();
 
-                setUser(refreshedUser);
-                setSession(refreshedSession);
+                    // Update state based on re-validation
+                    setUser(refreshedUser);
+                    setSession(refhedSession);
 
-                if (refreshedUser) {
-                    const profile = await loadUserProfile(refreshedUser.id);
-                    setUserProfile(profile);
-                    setNeedsProfileCreation(!profile && refreshedUser.user_metadata?.role === 'student');
-                } else {
+                    if (refreshedUser) {
+                        const profile = await loadUserProfile(refreshedUser.id);
+                        setUserProfile(profile);
+                        setNeedsProfileCreation(!profile && refreshedUser.user_metadata?.role === 'student');
+                        console.log('[Auth] Session re-validated and profile reloaded on tab visibility.');
+                    } else {
+                        // If session is no longer valid, clear state
+                        setUserProfile(null);
+                        setNeedsProfileCreation(false);
+                        console.log('[Auth] Session not found after tab switch. State cleared.');
+                        // Optional: Redirect to login if needed. Current setup relies on the redirect useEffect below.
+                    }
+                } catch (error) {
+                    console.error('[Auth] Error during visibility change re-validation:', error);
+                    setUser(null);
+                    setSession(null);
                     setUserProfile(null);
                     setNeedsProfileCreation(false);
+                } finally {
+                    setLoading(false); // Hide spinner
                 }
-                setLoading(false); // Stop loading spinner
             }
         };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [validateSession, loadUserProfile]); // Dependencies for this effect
+
+    // NEW: Redirect to login/home if session is explicitly null after initial check is done
+    useEffect(() => {
+        // Only trigger if auth has been initialized AND there's no user/session
+        if (initialized && !user && !session) {
+            console.log('[Auth] Initial auth check complete, no valid user/session. Redirecting to home/login.');
+            // Adjust this path to your actual login page if different from '/'
+            // For example: setLocation('/login');
+            setLocation('/');
+        }
+    }, [initialized, user, session, setLocation]);
 
 
     const login = async (email: string, password: string, userType: 'student' | 'admin') => {
@@ -387,18 +444,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             // RELOAD USER: Ensure we have the most up-to-date user object after sign-in
+            // This also helps trigger onAuthStateChange more reliably for immediate state update
             const { data: userData, error: userReloadError } = await supabase.auth.getUser();
             if (userReloadError || !userData.user) {
                 console.error('[Auth] Failed to reload user after login:', userReloadError);
-                toast({ title: 'Login Error', description: 'Could not load user data after login.', variant: 'destructive' });
+                toast({ title: 'Login Error', description: 'Could not load user data after login. Please try again.', variant: 'destructive' });
                 await supabase.auth.signOut(); // Force logout if user data is inconsistent
                 return;
             }
             console.log("Reloaded user ID after login:", userData.user?.id);
 
-
-            // The auth state listener will handle loading the profile and redirection.
-            // No direct redirection needed here to prevent conflicts.
+            // The onAuthStateChange listener will handle updating context state and redirection.
+            // No direct redirection logic here to prevent conflicts.
 
         } catch (err: any) {
             console.error('[Auth] Login caught error:', err);
@@ -420,6 +477,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             console.log(`[Auth] Attempting sign up for ${userType} with email: ${email}`);
 
+            // Verify student if needed (only for student signups)
             if (userType === 'student') {
                 console.log(`[Auth] Verifying student: HT No: ${htNo}, Name: ${studentName}, Year: ${year}`);
 
@@ -446,10 +504,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.log('[Auth] Student verification successful:', studentData);
             }
 
+            // Create auth user in Supabase Auth
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
-                options: { data: { role: userType } },
+                options: { data: { role: userType } }, // Pass role to user_metadata
             });
 
             if (error) {
@@ -466,23 +525,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             console.log('[Auth] Supabase sign up successful. User ID:', data.user.id);
 
-            // RELOAD USER: Ensure we have the most up-to-date user object after sign-up
+            // RELOAD USER: Crucial to get the latest user object immediately after signup
+            // This ensures user_metadata (like role) is available for profile creation
             const { data: userData, error: userReloadError } = await supabase.auth.getUser();
             if (userReloadError || !userData.user) {
                 console.error('[Auth] Failed to reload user after signup:', userReloadError);
-                toast({ title: 'Signup Error', description: 'Could not load user data after signup.', variant: 'destructive' });
+                toast({ title: 'Signup Error', description: 'Could not load user data after signup. Please try logging in.', variant: 'destructive' });
                 await supabase.auth.signOut(); // Force logout if user data is inconsistent
                 return { error: userReloadError || { message: 'User data inconsistent after signup.' } };
             }
             console.log("Reloaded user ID after signup:", userData.user?.id);
 
 
+            // Prepare profile data for insertion into 'user_profiles' table
             const insertData: Partial<UserProfile> = {
                 id: userData.user.id, // Use the reloaded user's ID
                 email: email,
                 role: userType,
-                // FIX: Auto-approve students for direct access after signup
-                status: 'approved',
+                status: 'approved', // Auto-approve all new signups as per previous instruction
             };
 
             if (userType === 'student') {
@@ -491,10 +551,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 insertData.year = year || null;
             }
 
+            // Check if profile already exists before attempting insert (prevents duplicate key errors)
             const { data: existingProfile, error: checkError } = await supabase
                 .from('user_profiles')
                 .select('id')
-                .eq('id', userData.user.id) // Use the reloaded user's ID for check
+                .eq('id', userData.user.id) // Use the reloaded user's ID for this check
                 .maybeSingle();
 
             if (checkError) {
@@ -508,7 +569,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             if (existingProfile) {
-                console.log('[Auth] Profile already exists. Skipping insert.');
+                console.log('[Auth] Profile already exists for this user. Skipping profile insert.');
             } else {
                 console.log('[Auth] No existing profile. Attempting to insert new profile with data:', insertData);
                 const { error: insertError } = await supabase
@@ -516,21 +577,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     .insert(insertData);
 
                 if (insertError) {
-                    console.error('[Auth] Error inserting user profile:', insertError);
+                    console.error('[Auth] Error inserting user profile:', insertError); // Log full error object
                     toast({
                         title: 'Profile Creation Error',
                         description: insertError.message || 'An error occurred while creating your profile.',
                         variant: 'destructive',
                     });
-                    await supabase.auth.signOut();
+                    await supabase.auth.signOut(); // Sign out user if profile creation fails
                     return { error: insertError };
                 }
                 console.log('[Auth] User profile inserted successfully.');
             }
 
+            // Small delay to ensure Supabase DB consistency before fetching profile
             await new Promise(resolve => setTimeout(resolve, 1000));
 
-            // Use the reloaded user's ID to load the profile
+            // Verify the new profile was created and is accessible
             const newProfile = await loadUserProfile(userData.user.id);
 
             if (!newProfile) {
@@ -539,8 +601,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 return { error: { message: 'Profile created but not accessible.' } };
             }
 
-            toast({ title: 'Account created successfully' });
-            // The auth state listener will handle redirection after successful sign-up and profile loading.
+            toast({ title: 'Account created successfully', description: 'You can now log in.' });
+            // The onAuthStateChange listener will pick up the new session/user and handle redirection.
+            // No explicit setLocation here to avoid double redirects.
 
             return { error: null };
 
@@ -567,9 +630,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ...profileData,
                 id: user.id,
                 email: user.email!,
-                status: 'approved',
+                status: 'approved', // Mark as approved when profile is completed
             };
 
+            // Clean up undefined/null/empty string values from payload
             Object.keys(updatePayload).forEach(key => {
                 const value = (updatePayload as any)[key];
                 if (value === undefined || value === null || value === '') {
@@ -592,11 +656,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             console.log('[Auth] Student profile updated successfully. Refreshing context...');
 
+            // Wait for DB consistency before refreshing
             await new Promise(resolve => setTimeout(resolve, 500));
+            // Refresh profile data in state
             await refreshUserProfile();
 
             toast({ title: 'Profile created successfully', description: 'Welcome to your dashboard!' });
-            setLocation('/student-dashboard');
+            setLocation('/student-dashboard'); // Redirect after successful profile creation
 
         } catch (error: any) {
             console.error('[Auth] Error in createProfile:', error);
@@ -627,14 +693,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (error) {
             console.error('[Auth] Logout caught error:', error);
         } finally {
+            // Clear state immediately on logout
             setUser(null);
             setSession(null);
             setUserProfile(null);
             setNeedsProfileCreation(false);
-            setLocation('/');
+            setLocation('/'); // Redirect to home/login on logout
         }
     };
 
+    // Render loading spinner until initial auth check is complete
     if (!initialized) {
         return (
             <div className="flex items-center justify-center min-h-screen">
@@ -649,7 +717,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 user,
                 session,
                 userProfile,
-                loading,
+                loading, // loading will now correctly reflect initial load, listener updates, and visibility changes
                 needsProfileCreation,
                 login,
                 signUp,
