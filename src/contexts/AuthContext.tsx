@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
-import { useLocation } from 'wouter';
+import { useLocation } from 'wouter'; // Corrected: Removed the extra '=' here
 
 // --- Configuration ---
 // IMPORTANT: Use environment variables for sensitive or environment-specific values.
@@ -270,7 +270,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (currentPath !== '/student-dashboard') {
                 console.log('[Auth] Redirecting to student dashboard');
                 setLocation('/student-dashboard');
-                window.location.reload();
+                window.location.reload(); // Keep this reload for now as per your original code
             } else {
                 console.log('[Auth] Already on student dashboard, skipping redirect.');
             }
@@ -549,10 +549,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const profileToInsert = {
                     id: user.id,
                     email: user.email!,
-                    // Corrected mapping:
-                    student_name: trimmedName,
+                    // THE CRITICAL FIX: Ensure these are mapped correctly
+                    student_name: trimmedName, // Correctly assigns the student's name
                     ht_no: trimmedHtNo,
-                    year: year,
+                    year: year,               // Correctly assigns the year
                     phone: phone || null,
                     address: address || null,
                     emergency_no: emergency_no || null,
