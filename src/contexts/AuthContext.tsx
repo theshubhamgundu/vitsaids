@@ -364,6 +364,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         address?: string,
         emergency_no?: string
     ): Promise<{ error: string | null }> => {
+        console.log('[Auth] signUp function invoked with email:', email);
         setLoading(true);
         console.log('[Auth] Starting signUp with email:', email);
 
