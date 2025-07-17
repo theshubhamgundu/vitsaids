@@ -43,50 +43,48 @@ const LoginModal = ({ isOpen, onClose, userType }: LoginModalProps) => {
           // For students, validate required fields and pass student data
           if (!htNo || !studentName || !year || !email || !password) {
             setError('All fields are required for student registration.');
-            setIsLoading(false); // Fix 3: Set isLoading to false on validation error
+            setIsLoading(false);
             return;
           }
           
-          const result = await signUp(email, password, userType, htNo, studentName, year);
+          // FIX: Correct argument order for signUp - email, password, studentName, htNo, year
+          const result = await signUp(email, password, studentName, htNo, year);
           if (result.error) {
             setError(result.error.message);
-            setIsLoading(false); // Fix 3: Set isLoading to false on signup error
+            setIsLoading(false);
             return;
           }
         } else { // userType === 'admin'
-          // Fix 4: Added minimal check for admin
           if (!email || !password) {
             setError('Email and password are required for admin registration.');
-            setIsLoading(false); // Fix 3: Set isLoading to false on validation error
+            setIsLoading(false);
             return;
           }
           const result = await signUp(email, password, userType);
           if (result.error) {
             setError(result.error.message);
-            setIsLoading(false); // Fix 3: Set isLoading to false on signup error
+            setIsLoading(false);
             return;
           }
         }
 
         toast({
           title: 'Account Created',
-          description: userType === 'admin' ? 'Admin account created successfully.' : 'Student account created successfully.', // Fix 1: Updated toast message
+          description: userType === 'admin' ? 'Admin account created successfully.' : 'Student account created successfully.',
         });
 
-        // Fix 2: Removed resetForm() and onClose() from here.
         // AuthContext handles redirection after successful signup.
         // The modal will be closed by the handleClose in onOpenChange when redirection occurs,
         // or after the finally block if no error occurred.
         
       } else { // Not sign up, it's login
         await login(email, password, userType);
-        // Fix 2: Removed resetForm() and onClose() from here too.
         // AuthContext handles redirection after successful login.
       }
     } catch (error: any) {
-      setError(error.message || 'Something went wrong. Please try again.'); // Fix 5: Enhanced error feedback
+      setError(error.message || 'Something went wrong. Please try again.');
     } finally {
-      setIsLoading(false); // Ensure isLoading is always reset
+      setIsLoading(false);
       // Reset form and close modal only if no error was set during the process.
       // This prevents closing the modal on failed attempts before the user sees the error.
       if (!error) { 
