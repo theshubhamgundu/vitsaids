@@ -72,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isInitialCheckDone = useRef(false);
     const previousUserIdRef = useRef<string | null>(null);
     const { toast } = useToast();
-    const [,guest: any, setLocation] = useLocation();
+    const [location, setLocation] = useLocation();
 
     // --- Helper Functions ---
     const createAdminProfile = useCallback(async (currentUser: User): Promise<UserProfile | null> => {
