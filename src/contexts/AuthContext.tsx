@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
-import { useLocation } from 'wouter';
+import { useLocation } = from 'wouter';
 
 // --- Configuration ---
 // IMPORTANT: Use environment variables for sensitive or environment-specific values.
@@ -193,7 +193,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!data) {
                 console.log(`[Auth] loadUserProfile: No profile data found for userId ${currentUser.id}.`);
 
-                const userAuthRole = currentUser.user_metadata?.role;
+                // Supabase `user.user_metadata.role` is set on signup by `signUp` function.
+                // This is a common pattern to quickly know the intended role from auth,
+                // but the definitive role and status come from the `user_profiles` table.
+                const userAuthRole = currentUser.user_metadata?.role; 
 
                 // If user is authenticated but profile is missing, especially for students, prompt for creation.
                 if (userAuthRole === 'student') {
@@ -267,6 +270,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (currentPath !== '/student-dashboard') {
                 console.log('[Auth] Redirecting to student dashboard');
                 setLocation('/student-dashboard');
+                window.location.reload();
             } else {
                 console.log('[Auth] Already on student dashboard, skipping redirect.');
             }
@@ -321,10 +325,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const currentWindowPath = window.location.pathname;
             const isPublicOrAuthPage = currentWindowPath === '/' || currentWindowPath.startsWith('/public') ||
-                                       currentWindowPath.startsWith('/student-onboarding') ||
-                                       currentWindowPath.startsWith('/complete-profile');
+                                         currentWindowPath.startsWith('/student-onboarding') ||
+                                         currentWindowPath.startsWith('/complete-profile');
 
-            // ✅ FIX: Redirect to homepage '/' after logout, assuming LoginModal lives there
+            // Redirect to homepage '/' after logout, assuming LoginModal lives there
             if (!isPublicOrAuthPage) {
                 console.log('[Auth] No user session and not on public/auth page. Redirecting to homepage.');
                 setLocation('/'); // Redirect to homepage where the modal would appear
@@ -357,6 +361,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 });
                 setLoading(false); // Turn off loading if refresh itself fails
             }
+            // handleAuthChangeWrapper will ultimately set loading to false after processing.
         } else {
             console.warn('[Auth] Cannot refresh profile: No user logged in. Clearing profile state.');
             setUserProfile(null);
@@ -422,43 +427,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!data.user || !data.session) {
                 console.warn('[Auth] Login successful, but no user or session data returned. This is unusual.');
                 toast({ title: 'Login issue', description: 'Login successful, but user data missing. Please refresh.', variant: 'destructive' });
-                setLoading(false); // Fallback if listener doesn't fire
-                return;
+                // Do not setLoading(false) here, let the listener handle it or the error below.
+                return; 
             }
 
-            console.log('[Auth] Login successful. Manually refreshing session and loading profile...');
-            // ✅ FIX: Force refresh session and load profile immediately after login
-            const { data: refreshedSessionData } = await supabase.auth.getSession();
-            if (refreshedSessionData.session) {
-                setUser(refreshedSessionData.session.user);
-                setSession(refreshedSessionData.session);
-                const profile = await loadUserProfile(refreshedSessionData.session.user);
-                if (profile) {
-                    setUserProfile(profile);
-                    setNeedsProfileCreation(false);
-                    handlePostAuthRedirect(profile);
-                } else {
-                     // If profile couldn't be loaded immediately after login,
-                     // loadUserProfile would have set needsProfileCreation or redirected to onboarding.
-                     // The loading state will be managed by loadUserProfile/handleAuthChangeWrapper.
-                }
-            } else {
-                // If session couldn't be refreshed, act as if logged out
-                console.warn('[Auth] Failed to get session after login, treating as logged out.');
-                setUser(null);
-                setSession(null);
-                setUserProfile(null);
-                setNeedsProfileCreation(false);
-                // No specific redirect needed here, as `handleAuthChangeWrapper` handles the global
-                // state of no user/session and redirects to `/` if not on a public page.
-            }
-            // `handleAuthChangeWrapper` or direct updates will set loading to false.
-            // No explicit setLoading(false) here.
+            console.log('[Auth] Login successful. Listener should pick it up.');
+            // The onAuthStateChange listener (via handleAuthChangeWrapper) will be triggered
+            // by signInWithPassword and handle all subsequent state updates and redirections.
+            // No explicit state updates or redirects are needed here.
 
         } catch (err: any) {
             console.error('[Auth] Login caught error:', err);
             toast({ title: 'Login Failed', description: err.message || 'An unexpected error occurred during login.', variant: 'destructive' });
-            setLoading(false); // Always turn off loading on error in the action itself
+        } finally {
+            // Ensure loading is always turned off. The listener might have already done so, but this is a safeguard.
+            if (loading) setLoading(false); 
         }
     };
 
@@ -477,17 +460,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             console.log(`[Auth] Attempting sign up for student with email: ${email}`);
 
-            // ✅ SUGGESTION: Add Field Validation
-            if (!studentName || !email || !htNo || !year) {
-                toast({ title: 'Missing required fields', description: 'Student Name, Email, Hall Ticket Number, and Year are required.' });
+            // --- Field Validation ---
+            if (!studentName || studentName.trim() === '') {
+                const errorMessage = 'Student Name is required.';
+                toast({ title: 'Missing Field', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
-                return { error: 'Missing required fields' };
+                return { error: errorMessage };
+            }
+            if (!email || email.trim() === '') {
+                const errorMessage = 'Email is required.';
+                toast({ title: 'Missing Field', description: errorMessage, variant: 'destructive' });
+                setLoading(false);
+                return { error: errorMessage };
+            }
+            if (!htNo || htNo.trim() === '') {
+                const errorMessage = 'Hall Ticket Number is required.';
+                toast({ title: 'Missing Field', description: errorMessage, variant: 'destructive' });
+                setLoading(false);
+                return { error: errorMessage };
+            }
+            if (!year || year.trim() === '') {
+                const errorMessage = 'Year is required.';
+                toast({ title: 'Missing Field', description: errorMessage, variant: 'destructive' });
+                setLoading(false);
+                return { error: errorMessage };
+            }
+            if (!password || password.length < 6) { // Supabase default minimum is 6
+                const errorMessage = 'Password must be at least 6 characters long.';
+                toast({ title: 'Invalid Password', description: errorMessage, variant: 'destructive' });
+                setLoading(false);
+                return { error: errorMessage };
             }
 
+            const trimmedName = studentName.trim();
+            const trimmedHtNo = htNo.trim().toUpperCase();
+
             // 1. Create the user in Supabase Auth. This also implicitly logs the user in.
+            // You can optionally set initial user_metadata here.
             const { data: userData, error: signUpError } = await supabase.auth.signUp({
                 email,
                 password,
+                options: {
+                    data: {
+                        role: 'student' // This adds role to user.user_metadata, useful for initial checks
+                    }
+                }
             });
 
             if (signUpError || !userData.user) {
@@ -503,10 +520,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const { user } = userData;
 
-            const trimmedName = studentName.trim();
-            const trimmedHtNo = htNo.trim().toUpperCase();
-
             // 2. Check if a profile already exists for the newly signed-up user.
+            // This is primarily a safeguard; for fresh signups, it shouldn't exist.
             const { data: existingProfile, error: existingProfileCheckError } = await supabase
                 .from('user_profiles')
                 .select('id')
@@ -528,15 +543,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             let createdOrFetchedProfile: UserProfile | null = null;
-            // 3. Create the profile if it doesn't exist, or fetch existing one.
+            // 3. Create the profile if it doesn't exist.
             if (!existingProfile) {
                 console.log('[Auth] No existing profile found. Attempting to insert new student profile.');
                 const profileToInsert = {
                     id: user.id,
                     email: user.email!,
+                    // Corrected mapping:
                     student_name: trimmedName,
                     ht_no: trimmedHtNo,
-                    year: year, // ✅ FIX: Correctly maps 'year'
+                    year: year,
                     phone: phone || null,
                     address: address || null,
                     emergency_no: emergency_no || null,
@@ -561,7 +577,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.log('[Auth] Student profile inserted successfully.', insertedProfile);
                 createdOrFetchedProfile = insertedProfile;
             } else {
-                console.log('[Auth] User profile already exists. Fetching existing profile for ID:', user.id);
+                console.warn('[Auth] User profile unexpectedly exists for new signup. Fetching existing profile for ID:', user.id);
+                // If for some reason a profile already existed (e.g., partial signup before, or manual intervention)
                 createdOrFetchedProfile = await loadUserProfile(user);
             }
 
@@ -573,7 +590,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setUserProfile(createdOrFetchedProfile);
                 setNeedsProfileCreation(false); // Profile is complete
 
-                // ✅ FIX: Directly trigger redirection to dashboard
+                // Directly trigger redirection to dashboard
                 handlePostAuthRedirect(createdOrFetchedProfile);
                 
                 toast({
@@ -601,8 +618,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
             return { error: err.message || 'An unexpected error occurred during sign up.' };
         } finally {
-            // Keep setLoading(false) here as a final fallback for *any* path that doesn't implicitly
-            // end with handleAuthChangeWrapper setting it to false.
+            // Ensure loading is always turned off. The listener might have already done so, but this is a safeguard.
             if (loading) setLoading(false);
         }
     };
@@ -610,7 +626,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const createProfile = async (profileData: { phone?: string; address?: string; emergency_no?: string; ht_no?: string; student_name?: string; year?: string; }) => {
         if (!user) {
             toast({ title: 'Error', description: 'User not authenticated to create profile.', variant: 'destructive' });
-            setLoading(false);
+            setLoading(false); // Ensure loading is off if not authenticated
             return;
         }
 
@@ -622,6 +638,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ...profileData,
                 email: user.email!, // Ensure email is included
                 status: 'approved', // Set status to approved on completion
+                // The role should already be set during signup, but if missing, could default here
+                role: (userProfile?.role || 'student') as 'student', // Ensure role is student or existing
             };
 
             // Remove any undefined, null, or empty string values from the payload before sending to Supabase
@@ -659,8 +677,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error('[Auth] Error in createProfile:', error);
             toast({ title: 'Profile Update Failed', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
         } finally {
-            // `refreshUserProfile` (and indirectly `handleAuthChangeWrapper`) primarily handles `setLoading(false)`.
-            // This `finally` block acts as a safeguard if something prevents that chain.
+            // Ensure loading is always turned off. `refreshUserProfile` (and indirectly `handleAuthChangeWrapper`)
+            // primarily handles `setLoading(false)`, but this `finally` acts as a safeguard.
             if (loading) setLoading(false);
         }
     };
@@ -683,15 +701,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else {
                 console.log('[Auth] Logout successful.');
                 toast({ title: 'Logged out successfully' });
-                // ✅ FIX: No manual state clearing or redirect here.
                 // The `onAuthStateChange` listener (via `handleAuthChangeWrapper`)
                 // will automatically handle clearing context state and redirecting to '/'
                 // after receiving the SIGNED_OUT event.
             }
         } catch (error) {
             console.error('[Auth] Logout caught error:', error);
+            toast({ title: 'Logout Failed', description: error.message || 'An unexpected error occurred during logout.', variant: 'destructive' });
         } finally {
-            setLoading(false); // Always turn off loading after logout attempt
+            // Ensure loading is always turned off. The listener might have already done so, but this is a safeguard.
+            if (loading) setLoading(false);
         }
     };
 
