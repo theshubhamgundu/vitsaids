@@ -87,6 +87,116 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .eq('id', currentUser.id)
                 .maybeSingle();
 
+            if (existingAdminProfileErrorwidehat
+
+System: I notice that the updated `AuthContext.tsx` artifact was cut off. Let me provide the complete corrected version of `AuthContext.tsx`, addressing the `ReferenceError: can't access lexical declaration 'ce' before initialization`, ensuring proper field mappings for `student_name` and `year`, excluding `branch` and `section` as per your requirements, and adding detailed logging to trace the error. I’ll also explain how to debug the issue further, especially since the error originates from `LoginModal.tsx:50`, and provide steps to clean up bad data in the database.
+
+### Analysis of the Error
+The `ReferenceError: can't access lexical declaration 'ce' before initialization` at `AuthContext.tsx:371` (in the `catch` block of the `signUp` function) suggests a variable named `ce` is being accessed before its declaration. Since `ce` doesn’t appear in the provided `AuthContext.tsx` code, it’s likely caused by:
+- **A Typo or External Code**: The error might originate from `LoginModal.tsx` or a related component passing invalid data or triggering a scoping issue.
+- **Minification/Transpilation Issue**: If your project uses a bundler (e.g., Webpack, Vite), `ce` could be a minified variable name or a result of a transpilation error.
+- **Form Submission Issue**: The `LoginModal.tsx:50` reference suggests the `signUp` function is called with incorrect parameters, possibly causing the error.
+
+The stack trace also points to `Header.tsx:65` (an `onClick` handler), indicating that `LoginModal.tsx` is likely triggered from a header component.
+
+### Fix: Updated `AuthContext.tsx`
+The updated `AuthContext.tsx` below:
+- Uses explicit destructuring for `student_name` and `year` to ensure correct mappings.
+- Removes `branch` and `section` from the `UserProfile` interface and `signUp` function.
+- Adds detailed logging to trace input parameters and the Supabase insert.
+- Includes robust error handling to catch the `ReferenceError` and provide meaningful feedback.
+- Maintains compatibility with `StudentDashboard.tsx`.
+
+<xaiArtifact artifact_id="4f27d6b1-b689-4d23-a0a1-4c0c76ff064a" artifact_version_id="9ecadd8a-b22d-48b9-86f2-c26d38dda9ec" title="AuthContext.tsx" contentType="text/typescript">
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Session, User } from '@supabase/supabase-js';
+import { useToast } from '@/hooks/use-toast';
+import { useLocation } from 'wouter';
+
+// --- Configuration ---
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'admin@vignanits.ac.in';
+
+// --- Interfaces ---
+interface UserProfile {
+    id: string;
+    role: 'student' | 'admin' | 'faculty' | 'none';
+    status: 'pending' | 'approved' | 'rejected' | 'active' | 'inactive';
+    student_name: string | null;
+    ht_no: string | null;
+    year: string | null;
+    email: string;
+    phone?: string | null;
+    semester?: string | null;
+    cgpa?: number | null;
+    photo_url?: string | null;
+    address?: string | null;
+    emergency_no?: string | null;
+    created_at?: string;
+    updated_at?: string;
+}
+
+interface AuthContextType {
+    user: User | null;
+    session: Session | null;
+    userProfile: UserProfile | null;
+    loading: boolean;
+    isAuthenticated: boolean;
+    needsProfileCreation: boolean;
+    login: (email: string, password: string, userType: 'student' | 'admin') => Promise<void>;
+    signUp: (
+        email: string,
+        password: string,
+        studentName: string,
+        htNo: string,
+        year: string,
+        phone?: string,
+        address?: string,
+        emergency_no?: string
+    ) => Promise<{ error: string | null }>;
+    logout: () => Promise<void>;
+    createProfile: (profileData: { phone?: string; address?: string; emergency_no?: string; ht_no?: string; student_name?: string; year?: string; }) => Promise<void>;
+    closeProfileCreationModal: () => void;
+    refreshUserProfile: () => Promise<void>;
+}
+
+// --- Auth Context and Hook ---
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (!context) {
+        console.error("useAuth must be used within an AuthProvider. Context is undefined.");
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
+};
+
+// --- Auth Provider Component ---
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [user, setUser] = useState<User | null>(null);
+    const [session, setSession] = useState<Session | null>(null);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    const [needsProfileCreation, setNeedsProfileCreation] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const isInitialCheckDone = useRef(false);
+    const previousUserIdRef = useRef<string | null>(null);
+    const { toast } = useToast();
+    const [, setLocation] = useLocation();
+
+    // --- Helper Functions ---
+    const createAdminProfile = useCallback(async (currentUser: User): Promise<UserProfile | null> => {
+        if (!currentUser || currentUser.email !== ADMIN_EMAIL) {
+            return null;
+        }
+        console.log('[Auth] Attempting auto-creation of admin profile for:', currentUser.email);
+        try {
+            const { data: existingAdminProfile, error: existingAdminProfileError } = await supabase
+                .from('user_profiles')
+                .select('id')
+                .eq('id', currentUser.id)
+                .maybeSingle();
+
             if (existingAdminProfileError && existingAdminProfileError.code !== 'PGRST116') {
                 console.error('[Auth] Error checking for existing admin profile:', existingAdminProfileError);
                 toast({ title: 'Profile Check Error', description: existingAdminProfileError.message, variant: 'destructive' });
@@ -270,8 +380,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setNeedsProfileCreation(false);
             const currentWindowPath = window.location.pathname;
             const isPublicOrAuthPage = currentWindowPath === '/' || currentWindowPath.startsWith('/public') ||
-                                         currentWindowPath.startsWith('/student-onboarding') ||
-                                         currentWindowPath.startsWith('/complete-profile');
+                                       currentWindowPath.startsWith('/student-onboarding') ||
+                                       currentWindowPath.startsWith('/complete-profile');
             if (!isPublicOrAuthPage) {
                 console.log('[Auth] No user session and not on public/auth page. Redirecting to homepage.');
                 setLocation('/');
@@ -365,56 +475,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         emergency_no?: string
     ): Promise<{ error: string | null }> => {
         setLoading(true);
+        console.log('[Auth] Starting signUp with email:', email);
 
         try {
-            console.log('[Auth] Attempting sign up for student with email:', email);
             console.log('[Auth] signUp parameters:', { email, studentName, htNo, year, phone, address, emergency_no });
 
             // --- Field Validation ---
             if (!studentName || studentName.trim() === '') {
                 const errorMessage = 'Student Name is required.';
+                console.error('[Auth] Validation failed:', errorMessage);
                 toast({ title: 'Missing Field', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
                 return { error: errorMessage };
             }
             if (studentName.trim().toLowerCase() === 'student') {
                 const errorMessage = 'Student Name cannot be "student". Please provide a valid name.';
+                console.error('[Auth] Validation failed:', errorMessage);
                 toast({ title: 'Invalid Field', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
                 return { error: errorMessage };
             }
             if (!email || email.trim() === '') {
                 const errorMessage = 'Email is required.';
+                console.error('[Auth] Validation failed:', errorMessage);
                 toast({ title: 'Missing Field', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
                 return { error: errorMessage };
             }
             if (!htNo || htNo.trim() === '') {
                 const errorMessage = 'Hall Ticket Number is required.';
+                console.error('[Auth] Validation failed:', errorMessage);
                 toast({ title: 'Missing Field', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
                 return { error: errorMessage };
             }
             if (!year || year.trim() === '') {
                 const errorMessage = 'Year is required.';
+                console.error('[Auth] Validation failed:', errorMessage);
                 toast({ title: 'Missing Field', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
                 return { error: errorMessage };
             }
             if (year.trim().toUpperCase() === studentName.trim().toUpperCase()) {
                 const errorMessage = 'Year cannot be the same as the student name.';
+                console.error('[Auth] Validation failed:', errorMessage);
                 toast({ title: 'Invalid Field', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
                 return { error: errorMessage };
             }
             if (!/^\d+$/.test(year.trim())) {
                 const errorMessage = 'Year must be a numeric value (e.g., 1, 2, 3, 4).';
+                console.error('[Auth] Validation failed:', errorMessage);
                 toast({ title: 'Invalid Field', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
                 return { error: errorMessage };
             }
             if (!password || password.length < 6) {
                 const errorMessage = 'Password must be at least 6 characters long.';
+                console.error('[Auth] Validation failed:', errorMessage);
                 toast({ title: 'Invalid Password', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
                 return { error: errorMessage };
@@ -424,7 +542,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const trimmedHtNo = htNo.trim().toUpperCase();
             const trimmedYear = year.trim();
 
-            // Create formData object to ensure correct field mappings
+            // Create formData object for validation and logging
             const formData = {
                 student_name: trimmedName,
                 ht_no: trimmedHtNo,
@@ -440,6 +558,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const { student_name, ht_no, year: formYear, phone, address, emergency_no } = formData;
 
             // 1. Create the user in Supabase Auth
+            console.log('[Auth] Calling supabase.auth.signUp for email:', email);
             const { data: userData, error: signUpError } = await supabase.auth.signUp({
                 email,
                 password,
@@ -462,8 +581,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             const { user } = userData;
+            console.log('[Auth] Supabase user created with ID:', user.id);
 
             // 2. Check for existing profile
+            console.log('[Auth] Checking for existing profile for user ID:', user.id);
             const { data: existingProfile, error: existingProfileCheckError } = await supabase
                 .from('user_profiles')
                 .select('id')
@@ -486,7 +607,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             let createdOrFetchedProfile: UserProfile | null = null;
             if (!existingProfile) {
-                console.log('[Auth] No existing profile found. Attempting to insert new student profile.');
+                console.log('[Auth] No existing profile found. Inserting new student profile.');
                 const { data: insertedProfile, error: profileInsertError } = await supabase
                     .from('user_profiles')
                     .insert([
@@ -525,6 +646,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             if (createdOrFetchedProfile) {
+                console.log('[Auth] Setting user profile in state:', createdOrFetchedProfile);
                 setUser(user);
                 setSession(userData.session);
                 setUserProfile(createdOrFetchedProfile);
@@ -545,20 +667,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             return { error: null };
         } catch (err: any) {
-            console.error('[Auth] Unexpected error during sign up (catch block):', err);
+            console.error('[Auth] Unexpected error during sign up:', {
+                message: err.message,
+                stack: err.stack,
+                name: err.name
+            });
             toast({
                 title: 'Signup Failed',
                 description: err.message || 'An unexpected error occurred during sign up.',
                 variant: 'destructive',
             });
+            setLoading(false);
             return { error: err.message || 'An unexpected error occurred during sign up.' };
         } finally {
-            if (loading) setLoading(false);
+            console.log('[Auth] signUp completed, loading state:', loading);
+            setLoading(false);
         }
     };
 
     const createProfile = async (profileData: { phone?: string; address?: string; emergency_no?: string; ht_no?: string; student_name?: string; year?: string; }) => {
         if (!user) {
+            console.error('[Auth] createProfile: No authenticated user.');
             toast({ title: 'Error', description: 'User not authenticated to create profile.', variant: 'destructive' });
             setLoading(false);
             return;
@@ -596,7 +725,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error('[Auth] Error in createProfile:', error);
             toast({ title: 'Profile Update Failed', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
         } finally {
-            if (loading) setLoading(false);
+            setLoading(false);
         }
     };
 
@@ -617,11 +746,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.log('[Auth] Logout successful.');
                 toast({ title: 'Logged out successfully' });
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('[Auth] Logout caught error:', error);
             toast({ title: 'Logout Failed', description: error.message || 'An unexpected error occurred during logout.', variant: 'destructive' });
         } finally {
-            if (loading) setLoading(false);
+            setLoading(false);
         }
     };
 
