@@ -485,7 +485,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('[Auth] signUp formData:', formData);
 
             // Destructure formData for explicit insert
-            const { student_name, ht_no, year: formYear, phone, address, emergency_no } = formData;
+            // const { student_name, ht_no, year: formYear, phone, address, emergency_no } = formData; // REMOVE THIS LINE
 
             // 1. Create the user in Supabase Auth
             console.log('[Auth] Calling supabase.auth.signUp for email:', email);
@@ -510,7 +510,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 return { error: signUpError?.message || 'Signup failed' };
             }
 
-            const supabaseUser = userData.user; // <-- Rename to avoid shadowing
+            const supabaseUser = userData.user;
             console.log('[Auth] Supabase user created with ID:', supabaseUser.id);
 
             // 2. Check for existing profile
@@ -544,12 +544,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         {
                             id: supabaseUser.id,
                             email: supabaseUser.email!,
-                            student_name,
-                            ht_no,
-                            year: formYear,
-                            phone,
-                            address,
-                            emergency_no,
+                            student_name: formData.student_name,
+                            ht_no: formData.ht_no,
+                            year: formData.year,
+                            phone: formData.phone,
+                            address: formData.address,
+                            emergency_no: formData.emergency_no,
                             role: 'student',
                             status: 'approved',
                         }
