@@ -3,8 +3,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
-import { useToast } from '@/hooks/use-toast';
-import { useLocation } from 'wouter';
+import { useToast } => '@/hooks/use-toast';
+import { useLocation } from 'wouter'; // Ensure wouter is correctly installed and imported
 
 // --- Interfaces ---
 interface UserProfile {
@@ -36,9 +36,9 @@ interface AuthContextType {
     signUp: (
         email: string,
         password: string,
-        studentName: string, // Changed from optional, expecting these for student signup
-        htNo: string,        // Changed from optional, expecting these for student signup
-        year?: string        // Still optional
+        studentName: string,
+        htNo: string,
+        year?: string
     ) => Promise<{ error: any }>;
     logout: () => Promise<void>;
     createProfile: (profileData: { phone?: string; address?: string; emergency_no?: string; ht_no?: string; student_name?: string; year?: string; }) => Promise<void>;
@@ -67,7 +67,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const previousUserIdRef = useRef<string | null>(null);
 
     const { toast } = useToast();
-    const [location, setLocation] = useLocation(); // Use `location` directly for current path
+    // FIX: Explicitly name the path variable from useLocation() to prevent potential minification conflicts
+    const [location, setLocation] = useLocation();
 
     // --- Helper Functions (Memoized with useCallback) ---
 
@@ -101,7 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // Scenario: User is authenticated but profile is missing (e.g., new student signup)
                 if (userAuthRole === 'student') {
                     setNeedsProfileCreation(true);
-                    // Redirect to onboarding/profile completion if not already there
+                    // Only redirect if not already on an onboarding/completion page
                     if (location !== '/student-onboarding' && location !== '/complete-profile') {
                         setLocation('/student-onboarding'); // Preferred onboarding path
                         toast({
@@ -262,18 +263,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         setLoading(true); // Indicate loading while authentication state is being determined
 
-        // This is the core listener for all authentication state changes from Supabase.
+        // The single listener for all authentication state changes from Supabase.
         const { data: authListener } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 console.log(`[Auth] Auth state changed via listener. Event: ${event}, User: ${session?.user?.email || 'No User'}`);
 
-                // --- FIX: Prevent Multiple Auth State Triggers ---
-                // If the user ID hasn't changed and it's a 'SIGNED_IN' event,
-                // it's likely a redundant trigger (e.g., tab focus, token refresh without user change).
-                // Skip full re-processing to prevent unnecessary profile loads and redirects.
+                // Prevent redundant processing for the same SIGNED_IN user if state hasn't genuinely changed
                 if (session?.user && previousUserIdRef.current === session.user.id && event === 'SIGNED_IN') {
                     console.log(`[Auth] Listener: Skipping redundant SIGNED_IN processing for user ${session.user.id}`);
-                    setLoading(false); // Crucial: ensure loading state is false even if skipped
+                    setLoading(false); // Crucial: ensure loading state is false if we're skipping
                     return; // Exit early
                 }
                 // Update the ref with the current user's ID for the next event check
@@ -291,12 +289,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     if (profile) {
                         setUserProfile(profile);
                         setNeedsProfileCreation(false);
-                        // Once the profile is successfully loaded, determine and apply redirection.
+                        // Redirect AFTER all profile data is loaded and state is updated
                         handlePostAuthRedirect(profile);
                     } else {
-                        // If loadUserProfile returned null (meaning no profile found or an error occurred),
-                        // the needsProfileCreation state and potential redirect to onboarding/home
-                        // for students/admins without profiles are handled within loadUserProfile itself.
+                        // If loadUserProfile returned null (e.g., profile not found or error occurred in it)
+                        // needsProfileCreation and potential redirect to onboarding/home are handled within loadUserProfile itself.
                         setUserProfile(null); // Ensure userProfile state is clear if no profile was loaded/found
                     }
                 } else {
@@ -307,12 +304,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setNeedsProfileCreation(false);
 
                     // Redirect to login only if the user is not already on a public/home/login/onboarding page.
-                    // This prevents infinite redirect loops or redirecting users from public content.
-                    const currentPath = location;
+                    const currentPath = location; // Use the `location` variable from `useLocation()`
                     const isPublicOrAuthPage = currentPath === '/' || currentPath === '/login' ||
                                                currentPath.startsWith('/public') ||
-                                               currentPath.startsWith('/student-onboarding') || // Your onboarding path
-                                               currentPath.startsWith('/complete-profile');     // Your profile completion path
+                                               currentPath.startsWith('/student-onboarding') ||
+                                               currentPath.startsWith('/complete-profile');
 
                     if (!isPublicOrAuthPage) {
                         setLocation('/login'); // Redirect to the login page
@@ -331,7 +327,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // Mimic a 'SIGNED_IN' event for initial state setup if a session exists
                 authListener.handler('SIGNED_IN', initialSession);
             } else {
-                // Mimic a 'SIGNED_OUT' event for initial state setup if no session exists
+                // Mimic a 'SIGNED_OUT' event for initial state setup (no session found)
                 authListener.handler('SIGNED_OUT', null);
             }
         });
@@ -341,6 +337,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             authListener.subscription.unsubscribe();
         };
     }, [loadUserProfile, handleProfileCreation, handlePostAuthRedirect, location, setLocation]); // Dependencies for this useEffect
+
 
     // --- Authentication Actions (Login, SignUp, CreateProfile, Logout) ---
 
@@ -473,8 +470,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await new Promise(resolve => setTimeout(resolve, 1000));
 
             // The onAuthStateChange listener (in the main useEffect) will now pick up the
-            // 'SIGNED_IN' event (due to supabase.auth.signUp auto-logging in the user).
-            // It will then load the profile, update context state, and perform the appropriate redirection.
+            // 'SIGNED_IN' event (from signUp's auto-login) and handle state, profile, and redirection.
             // No manual state updates or direct redirects are needed here to avoid redundancy and race conditions.
 
             return { error: null }; // Indicate success
@@ -506,7 +502,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ...profileData,
                 id: user.id,
                 email: user.email!, // Use email from current authenticated user
-                status: 'approved', // Mark as approved once profile is completed
+                status: 'approved', // Mark as approved upon completion
             };
 
             // Clean up undefined, null, or empty string values from payload
@@ -532,10 +528,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             console.log('[Auth] Student profile updated successfully. Triggering refresh...');
 
-            // Small delay for DB consistency before refreshing auth state
+            // Small delay for DB consistency before the refresh operation
             await new Promise(resolve => setTimeout(resolve, 500));
             // Trigger refreshUserProfile, which will in turn cause onAuthStateChange to re-evaluate,
-            // load the now-complete profile, and handle the final redirection.
+            // load the updated profile, and handle the final redirection.
             await refreshUserProfile();
 
             toast({ title: 'Profile created successfully', description: 'Welcome to your dashboard!' });
