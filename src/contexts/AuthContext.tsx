@@ -424,20 +424,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setLoading(false);
                 return { error: errorMessage };
             }
-            if (!email || email.trim() === '') {
-                const errorMessage = 'Email is required.';
+            // Additional validation: studentName should not look like a year or contain only digits
+            if (/^\d+$/.test(studentName.trim())) {
+                const errorMessage = 'Student Name cannot be a number. Please enter your full name.';
                 console.error('[Auth] Validation failed:', errorMessage);
-                toast({ title: 'Missing Field', description: errorMessage, variant: 'destructive' });
+                toast({ title: 'Invalid Name', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
                 return { error: errorMessage };
             }
-            if (!htNo || htNo.trim() === '') {
-                const errorMessage = 'Hall Ticket Number is required.';
-                console.error('[Auth] Validation failed:', errorMessage);
-                toast({ title: 'Missing Field', description: errorMessage, variant: 'destructive' });
-                setLoading(false);
-                return { error: errorMessage };
-            }
+            // Additional validation: year should not look like a name (should be 1, 2, 3, or 4)
             if (!year || year.trim() === '') {
                 const errorMessage = 'Year is required.';
                 console.error('[Auth] Validation failed:', errorMessage);
@@ -452,10 +447,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setLoading(false);
                 return { error: errorMessage };
             }
-            if (!/^\d+$/.test(year.trim())) {
-                const errorMessage = 'Year must be a numeric value (e.g., 1, 2, 3, 4).';
+            // Only allow year values 1, 2, 3, or 4
+            if (!/^[1-4]$/.test(year.trim())) {
+                const errorMessage = 'Year must be a number between 1 and 4 (e.g., 1, 2, 3, or 4).';
                 console.error('[Auth] Validation failed:', errorMessage);
-                toast({ title: 'Invalid Field', description: errorMessage, variant: 'destructive' });
+                toast({ title: 'Invalid Year', description: errorMessage, variant: 'destructive' });
                 setLoading(false);
                 return { error: errorMessage };
             }
