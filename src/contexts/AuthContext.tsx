@@ -67,7 +67,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const previousUserIdRef = useRef<string | null>(null);
 
     const { toast } = useToast();
-    // FIX: Explicitly name the path variable from useLocation() to prevent potential minification conflicts
+    // Keep `location` destructured for potential use elsewhere or for dependencies,
+    // but read `window.location.pathname` inside useEffect for safety.
     const [location, setLocation] = useLocation();
 
     // --- Helper Functions (Memoized with useCallback) ---
@@ -103,7 +104,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (userAuthRole === 'student') {
                     setNeedsProfileCreation(true);
                     // Only redirect if not already on an onboarding/completion page
-                    if (location !== '/student-onboarding' && location !== '/complete-profile') {
+                    const currentWindowPath = window.location.pathname; // Use window.location.pathname for safety
+                    if (currentWindowPath !== '/student-onboarding' && currentWindowPath !== '/complete-profile') {
                         setLocation('/student-onboarding'); // Preferred onboarding path
                         toast({
                             title: 'Profile incomplete',
@@ -145,7 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
             return null; // Return null on unexpected errors
         }
-    }, [handleProfileCreation, location, setLocation, toast]); // Dependencies for useCallback
+    }, [handleProfileCreation, setLocation, toast]); // Removed `location` from deps as we use window.location.pathname
 
     // refreshUserProfile should trigger the main listener to re-evaluate the state
     const refreshUserProfile = useCallback(async () => {
@@ -153,12 +155,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('[Auth] refreshUserProfile called. Triggering session refresh...');
             setLoading(true); // Show loading state during refresh
 
-            // Trigger a silent session refresh. This will fire onAuthStateChange,
-            // which is the primary mechanism for updating all states.
-            const { error } = await supabase.auth.refreshSession();
-            if (error) {
-                console.error('[Auth] Error refreshing session during refreshUserProfile:', error.message);
-                toast({ title: 'Session Refresh Error', description: 'Could not refresh session.', variant: 'destructive' });
+            // FIX: Renamed destructured 'error' to 'refreshError' to avoid potential minification conflicts
+            const { error: refreshError } = await supabase.auth.refreshSession();
+            if (refreshError) {
+                console.error('[Auth] Error refreshing session during refreshUserProfile:', refreshError.message);
+                toast({
+                    title: 'Session Refresh Error',
+                    description: 'Could not refresh session.',
+                    variant: 'destructive',
+                });
             }
             // The onAuthStateChange listener will handle setting setLoading(false) once it processes the event.
         } else {
@@ -235,7 +240,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // handlePostAuthRedirect handles all role-based dashboard redirection
     const handlePostAuthRedirect = useCallback((profile: UserProfile) => {
-        const currentPath = window.location.pathname;
+        const currentPath = window.location.pathname; // Use window.location.pathname for reads
 
         console.log('[Auth] Handling post-auth redirect:', {
             currentPath,
@@ -256,8 +261,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLocation('/');
         }
         // If already on the correct page or a related onboarding/public page, no redirect needed.
-    }, [setLocation]);
-
+    }, [setLocation]); // `location` is not a direct dependency as we read window.location.pathname
 
     // --- PRIMARY EFFECT HOOK: Single Source of Truth for Authentication State ---
     useEffect(() => {
@@ -304,11 +308,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setNeedsProfileCreation(false);
 
                     // Redirect to login only if the user is not already on a public/home/login/onboarding page.
-                    const currentPath = location; // Use the `location` variable from `useLocation()`
-                    const isPublicOrAuthPage = currentPath === '/' || currentPath === '/login' ||
-                                               currentPath.startsWith('/public') ||
-                                               currentPath.startsWith('/student-onboarding') ||
-                                               currentPath.startsWith('/complete-profile');
+                    const currentWindowPath = window.location.pathname; // Use window.location.pathname for safety
+                    const isPublicOrAuthPage = currentWindowPath === '/' || currentWindowPath === '/login' ||
+                                               currentWindowPath.startsWith('/public') ||
+                                               currentWindowPath.startsWith('/student-onboarding') ||
+                                               currentWindowPath.startsWith('/complete-profile');
 
                     if (!isPublicOrAuthPage) {
                         setLocation('/login'); // Redirect to the login page
@@ -336,8 +340,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => {
             authListener.subscription.unsubscribe();
         };
-    }, [loadUserProfile, handleProfileCreation, handlePostAuthRedirect, location, setLocation]); // Dependencies for this useEffect
-
+    }, [loadUserProfile, handleProfileCreation, handlePostAuthRedirect, setLocation]); // Removed 'location' from deps
 
     // --- Authentication Actions (Login, SignUp, CreateProfile, Logout) ---
 
