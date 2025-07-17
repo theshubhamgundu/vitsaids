@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
-import { useToast } => '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast'; // CORRECTED: Changed '=>' to 'from'
 import { useLocation } from 'wouter'; // Ensure wouter is correctly installed and imported
 
 // --- Interfaces ---
@@ -36,9 +36,9 @@ interface AuthContextType {
     signUp: (
         email: string,
         password: string,
-        studentName: string,
-        htNo: string,
-        year?: string
+        studentName: string, // Changed from optional, expecting these for student signup
+        htNo: string,        // Changed from optional, expecting these for student signup
+        year?: string        // Still optional
     ) => Promise<{ error: any }>;
     logout: () => Promise<void>;
     createProfile: (profileData: { phone?: string; address?: string; emergency_no?: string; ht_no?: string; student_name?: string; year?: string; }) => Promise<void>;
