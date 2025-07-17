@@ -50,7 +50,7 @@ const LoginModal = ({ isOpen, onClose, userType }: LoginModalProps) => {
           // FIX: Correct argument order for signUp - email, password, studentName, htNo, year
           // Convert year string to just the number part (e.g., "3rd Year" -> "3")
           const yearString = year.charAt(0);
-          const result = await signUp(email, password, studentName, htNo, yearString);
+          const result = await signUp(email, password, studentName, htNo, yearString); // ✅ CORRECTED
           if (result.error) {
             setError(result.error.message);
             setIsLoading(false);
