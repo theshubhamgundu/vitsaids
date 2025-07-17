@@ -36,9 +36,9 @@ interface AuthContextType {
     signUp: (
         email: string,
         password: string,
-        studentName: string, // Changed from optional, expecting these for student signup
-        htNo: string,        // Changed from optional, expecting these for student signup
-        year?: string        // Still optional
+        studentName: string,
+        htNo: string,
+        year?: string
     ) => Promise<{ error: any }>;
     logout: () => Promise<void>;
     createProfile: (profileData: { phone?: string; address?: string; emergency_no?: string; ht_no?: string; student_name?: string; year?: string; }) => Promise<void>;
@@ -69,7 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { toast } = useToast();
     // Keep `location` destructured for potential use elsewhere or for dependencies,
     // but read `window.location.pathname` inside useEffect for safety.
-    const [location, setLocation] = useLocation();
+    const [location, setLocation] = useLocation(); // 'location' here is the path string
 
     // --- Helper Functions (Memoized with useCallback) ---
 
