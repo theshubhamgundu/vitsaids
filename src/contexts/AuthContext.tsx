@@ -369,7 +369,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('[Auth] Starting signUp with email:', email);
 
         try {
-            console.log('[Auth] signUp parameters:', { email, studentName, htNo, year, phone, address, emergency_no });
+            // Defensive check for parameters
+            console.log('[Auth] Raw signUp parameters:', { email, password, studentName, htNo, year, phone, address, emergency_no });
+            if (typeof email !== 'string') {
+                const errorMessage = `Invalid email type: ${typeof email}`;
+                console.error('[Auth] Parameter error:', errorMessage);
+                toast({ title: 'Invalid Input', description: errorMessage, variant: 'destructive' });
+                setLoading(false);
+                return { error: errorMessage };
+            }
+            if (typeof password !== 'string') {
+                const errorMessage = `Invalid password type: ${typeof password}`;
+                console.error('[Auth] Parameter error:', errorMessage);
+                toast({ title: 'Invalid Input', description: errorMessage, variant: 'destructive' });
+                setLoading(false);
+                return { error: errorMessage };
+            }
+            if (typeof studentName !== 'string') {
+                const errorMessage = `Invalid studentName type: ${typeof studentName}`;
+                console.error('[Auth] Parameter error:', errorMessage);
+                toast({ title: 'Invalid Input', description: errorMessage, variant: 'destructive' });
+                setLoading(false);
+                return { error: errorMessage };
+            }
+            if (typeof htNo !== 'string') {
+                const errorMessage = `Invalid htNo type: ${typeof htNo}`;
+                console.error('[Auth] Parameter error:', errorMessage);
+                toast({ title: 'Invalid Input', description: errorMessage, variant: 'destructive' });
+                setLoading(false);
+                return { error: errorMessage };
+            }
+            if (typeof year !== 'string') {
+                const errorMessage = `Invalid year type: ${typeof year}`;
+                console.error('[Auth] Parameter error:', errorMessage);
+                toast({ title: 'Invalid Input', description: errorMessage, variant: 'destructive' });
+                setLoading(false);
+                return { error: errorMessage };
+            }
+            console.log('[Auth] Parameter type checks passed.');
 
             // --- Field Validation ---
             console.log('[Auth] Starting field validation...');
