@@ -34,10 +34,12 @@ interface AuthContextType {
     signUp: (
         email: string,
         password: string,
-        userType: 'student' | 'admin',
-        htNo?: string,
-        studentName?: string,
-        year?: string
+        // Removed userType from signUp parameters as it's implied for students,
+        // and htNo/studentName/year are specific to students.
+        // Admin signup is handled by a fixed email or separate flow.
+        studentName?: string, // Made optional for robust handling
+        htNo?: string,        // Made optional for robust handling
+        year?: string         // Made optional for robust handling
     ) => Promise<{ error: any }>;
     logout: () => Promise<void>;
     createProfile: (profileData: { phone?: string; address?: string; emergency_no?: string; ht_no?: string; student_name?: string; year?: string; }) => Promise<void>;
@@ -379,7 +381,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                     // Update state based on re-validation
                     setUser(refreshedUser);
-                    setSession(refhedSession);
+                    setSession(refreshedSession);
 
                     if (refreshedUser) {
                         const profile = await loadUserProfile(refreshedUser.id);
@@ -465,152 +467,140 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    // Updated signUp function with all suggested improvements
     const signUp = async (
         email: string,
         password: string,
-        userType: 'student' | 'admin',
-        htNo?: string,
-        studentName?: string,
-        year?: string
-    ): Promise<{ error: any }> => {
-        setLoading(true);
+        student_name: string,
+        ht_no: string
+    ): Promise<{ error: string | null }> => {
         try {
-            console.log(`[Auth] Attempting sign up for ${userType} with email: ${email}`);
+            setLoading(true);
 
-            // Verify student if needed (only for student signups)
-            if (userType === 'student') {
-                console.log(`[Auth] Verifying student: HT No: ${htNo}, Name: ${studentName}, Year: ${year}`);
-
-                const { data: studentData, error: verifyError } = await supabase
-                    .from('verified_students')
-                    .select('*')
-                    .ilike('ht_no', htNo || '')
-                    .ilike('student_name', studentName || '')
-                    .ilike('year', year || '')
-                    .maybeSingle();
-
-                if (verifyError) {
-                    console.error('[Auth] Student verification query failed:', verifyError.message);
-                    toast({ title: 'Verification Error', description: verifyError.message, variant: 'destructive' });
-                    return { error: verifyError };
-                }
-
-                if (!studentData) {
-                    console.error('[Auth] Student verification failed: No matching student found.');
-                    toast({ title: 'Verification Failed', description: 'Student not found in verified list. Contact admin.', variant: 'destructive' });
-                    return { error: { message: 'Student not found in verified list. Contact admin.' } };
-                }
-
-                console.log('[Auth] Student verification successful:', studentData);
-            }
-
-            // Create auth user in Supabase Auth
-            const { data, error } = await supabase.auth.signUp({
+            // Step 1: Sign up user
+            const { data: userData, error: signUpError } = await supabase.auth.signUp({
                 email,
                 password,
-                options: { data: { role: userType } }, // Pass role to user_metadata
             });
 
-            if (error) {
-                console.error('[Auth] Supabase signUp error:', error.message);
-                toast({ title: 'Signup Error', description: error.message, variant: 'destructive' });
-                return { error };
-            }
-
-            if (!data.user?.id) {
-                console.error('[Auth] Sign-up succeeded but user ID missing.');
-                toast({ title: 'Signup Error', description: 'Sign-up succeeded but user ID missing.', variant: 'destructive' });
-                return { error: { message: 'Sign-up succeeded but user ID missing.' } };
-            }
-
-            console.log('[Auth] Supabase sign up successful. User ID:', data.user.id);
-
-            // RELOAD USER: Crucial to get the latest user object immediately after signup
-            // This ensures user_metadata (like role) is available for profile creation
-            const { data: userData, error: userReloadError } = await supabase.auth.getUser();
-            if (userReloadError || !userData.user) {
-                console.error('[Auth] Failed to reload user after signup:', userReloadError);
-                toast({ title: 'Signup Error', description: 'Could not load user data after signup. Please try logging in.', variant: 'destructive' });
-                await supabase.auth.signOut(); // Force logout if user data is inconsistent
-                return { error: userReloadError || { message: 'User data inconsistent after signup.' } };
-            }
-            console.log("Reloaded user ID after signup:", userData.user?.id);
-
-
-            // Prepare profile data for insertion into 'user_profiles' table
-            const insertData: Partial<UserProfile> = {
-                id: userData.user.id, // Use the reloaded user's ID
-                email: email,
-                role: userType,
-                status: 'approved', // Auto-approve all new signups as per previous instruction
-            };
-
-            if (userType === 'student') {
-                insertData.ht_no = htNo || null;
-                insertData.student_name = studentName || null;
-                insertData.year = year || null;
-            }
-
-            // Check if profile already exists before attempting insert (prevents duplicate key errors)
-            const { data: existingProfile, error: checkError } = await supabase
-                .from('user_profiles')
-                .select('id')
-                .eq('id', userData.user.id) // Use the reloaded user's ID for this check
-                .maybeSingle();
-
-            if (checkError) {
-                console.error('[Auth] Error checking for existing profile:', checkError);
+            if (signUpError || !userData.user) {
                 toast({
-                    title: 'Error checking profile',
-                    description: checkError.message,
+                    title: 'Error creating account',
+                    description: signUpError?.message || 'An unknown error occurred during signup.',
                     variant: 'destructive',
                 });
-                return { error: checkError };
+                return { error: signUpError?.message || 'Signup failed' };
             }
 
-            if (existingProfile) {
-                console.log('[Auth] Profile already exists for this user. Skipping profile insert.');
-            } else {
-                console.log('[Auth] No existing profile. Attempting to insert new profile with data:', insertData);
-                const { error: insertError } = await supabase
-                    .from('user_profiles')
-                    .insert(insertData);
+            const { user } = userData;
 
-                if (insertError) {
-                    console.error('[Auth] Error inserting user profile:', insertError); // Log full error object
+            // Step 2: Sanitize input
+            const trimmedName = student_name.trim();
+            const trimmedHtNo = ht_no.trim().toUpperCase();
+
+            // Step 3: Avoid inserting duplicate profile (safeguard)
+            // Using maybeSingle to handle cases where no record is found gracefully
+            const { data: existingProfile, error: existingProfileError } = await supabase
+                .from('user_profiles')
+                .select('id')
+                .eq('id', user.id)
+                .maybeSingle(); // Changed from .single() to .maybeSingle() for robustness
+
+            if (existingProfileError && existingProfileError.code !== 'PGRST116') { // PGRST116 means no rows found
+                 console.error('[Auth] Error checking for existing profile:', existingProfileError);
+                 toast({
+                    title: 'Error checking profile',
+                    description: existingProfileError.message,
+                    variant: 'destructive',
+                 });
+                 // Consider if you want to sign out the user here or proceed with a warning
+                 return { error: existingProfileError.message };
+            }
+
+
+            if (!existingProfile) {
+                const { error: profileError } = await supabase.from('user_profiles').insert([
+                    {
+                        id: user.id,
+                        email, // optional: remove if not needed as user.email already exists
+                        student_name: trimmedName,
+                        ht_no: trimmedHtNo,
+                        role: 'student', // Assuming this signUp path is exclusively for students
+                        status: 'active', // Set to 'active' as per the prompt's implied auto-approval
+                    },
+                ]);
+
+                if (profileError) {
+                    console.error('[Auth] Error creating profile:', profileError.message);
                     toast({
-                        title: 'Profile Creation Error',
-                        description: insertError.message || 'An error occurred while creating your profile.',
+                        title: 'Error creating profile',
+                        description: profileError.message,
                         variant: 'destructive',
                     });
-                    await supabase.auth.signOut(); // Sign out user if profile creation fails
-                    return { error: insertError };
+                    // If profile creation fails, it's safer to log out the user to prevent inconsistent states
+                    await supabase.auth.signOut();
+                    return { error: profileError.message };
                 }
-                console.log('[Auth] User profile inserted successfully.');
+            } else {
+                console.log('[Auth] User profile already exists. Skipping profile creation for ID:', user.id);
             }
 
-            // Small delay to ensure Supabase DB consistency before fetching profile
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Step 4: Toast success
+            toast({
+                title: 'Account created successfully',
+                description: 'Redirecting to dashboard...',
+            });
 
-            // Verify the new profile was created and is accessible
-            const newProfile = await loadUserProfile(userData.user.id);
+            // Step 5: Refresh session manually
+            const { data: sessionData, error: sessionRefreshError } = await supabase.auth.getSession();
 
-            if (!newProfile) {
-                console.error('[Auth] Profile insertion succeeded but profile not found on reload.');
-                toast({ title: 'Profile Error', description: 'Profile created but not accessible. Please try logging in.', variant: 'destructive' });
-                return { error: { message: 'Profile created but not accessible.' } };
+            if (sessionRefreshError) {
+                console.error('[Auth] Failed to refresh session:', sessionRefreshError.message);
+                toast({
+                    title: 'Session Error',
+                    description: 'Failed to refresh session after signup. Please try logging in.',
+                    variant: 'destructive',
+                });
+                return { error: sessionRefreshError.message };
             }
 
-            toast({ title: 'Account created successfully', description: 'You can now log in.' });
-            // The onAuthStateChange listener will pick up the new session/user and handle redirection.
-            // No explicit setLocation here to avoid double redirects.
+            if (!sessionData.session) {
+                console.error('[Auth] Session null after refresh.');
+                toast({
+                    title: 'Session Error',
+                    description: 'Session not found after signup. Please try logging in.',
+                    variant: 'destructive',
+                });
+                return { error: 'Failed to refresh session: session is null' };
+            }
+
+            setUser(user);
+            setSession(sessionData.session);
+
+            // Step 6: Load user profile & redirect
+            // Added a small delay to ensure DB consistency before loading profile
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const newProfile = await loadUserProfile(user.id);
+
+            if (newProfile) {
+                setUserProfile(newProfile);
+                handlePostAuthRedirect(newProfile);
+            } else {
+                console.warn('[Auth] No profile found immediately after signup/creation. Setting needsProfileCreation.');
+                setNeedsProfileCreation(true);
+                // Optionally redirect to a profile completion page if that's your flow
+                setLocation('/'); // or setLocation('/complete-profile');
+            }
 
             return { error: null };
-
-        } catch (error: any) {
-            console.error('[Auth] General signUp catch error:', error);
-            toast({ title: 'Signup Failed', description: error.message || 'An unexpected error occurred during sign up.', variant: 'destructive' });
-            return { error: { message: error.message || 'An unexpected error occurred during sign up.' } };
+        } catch (err: any) {
+            console.error('[Auth] Unexpected error during sign up:', err);
+            toast({
+                title: 'Unexpected error during sign up',
+                description: err.message || 'Please try again.',
+                variant: 'destructive',
+            });
+            return { error: err.message || 'Signup error' };
         } finally {
             setLoading(false);
         }
