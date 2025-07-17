@@ -371,6 +371,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('[Auth] signUp parameters:', { email, studentName, htNo, year, phone, address, emergency_no });
 
             // --- Field Validation ---
+            console.log('[Auth] Starting field validation...');
             if (!studentName || studentName.trim() === '') {
                 const errorMessage = 'Student Name is required.';
                 console.error('[Auth] Validation failed:', errorMessage);
@@ -427,6 +428,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setLoading(false);
                 return { error: errorMessage };
             }
+            console.log('[Auth] Field validation passed.');
 
             const trimmedName = studentName.trim();
             const trimmedHtNo = htNo.trim().toUpperCase();
