@@ -371,6 +371,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             // Defensive check for parameters
             console.log('[Auth] Raw signUp parameters:', { email, password, studentName, htNo, year, phone, address, emergency_no });
+
+            // --- Detect likely swapped fields ---
+            if (
+                studentName &&
+                year &&
+                // If studentName is "student" or similar, and year contains a name-like value
+                studentName.trim().toLowerCase() === 'student' &&
+                /[a-zA-Z]/.test(year.trim()) &&
+                year.trim().length > 3
+            ) {
+                console.warn('[Auth] WARNING: It looks like the studentName and year fields are swapped in the frontend form. Please check your form mapping.');
+            }
+
+            // --- Parameter Type Checks ---
             if (typeof email !== 'string') {
                 const errorMessage = `Invalid email type: ${typeof email}`;
                 console.error('[Auth] Parameter error:', errorMessage);
