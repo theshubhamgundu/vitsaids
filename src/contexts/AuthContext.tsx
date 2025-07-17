@@ -269,57 +269,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         setLoading(true);
 
-        const { data: authListener } = supabase.auth.onAuthStateChange(
-            async (event, session) => {
-                console.log(`[Auth] Auth state changed via listener. Event: ${event}, User: ${session?.user?.email || 'No User'}`);
+        // Store the handler function separately so we can call it for initial session
+        const handleAuthChange = async (event: string, session: Session | null) => {
+            console.log(`[Auth] Auth state changed via listener. Event: ${event}, User: ${session?.user?.email || 'No User'}`);
 
-                // Prevent redundant processing for the same SIGNED_IN user
-                if (session?.user && previousUserIdRef.current === session.user.id && event === 'SIGNED_IN') {
-                    console.log(`[Auth] Listener: Skipping redundant SIGNED_IN processing for user ${session.user.id}`);
-                    setLoading(false);
-                    return;
-                }
-                previousUserIdRef.current = session?.user?.id || null;
-
-                if (session?.user) {
-                    setUser(session.user);
-                    setSession(session);
-
-                    const profile = await loadUserProfile(session.user);
-
-                    if (profile) {
-                        setUserProfile(profile);
-                        setNeedsProfileCreation(false);
-                        handlePostAuthRedirect(profile);
-                    } else {
-                        setUserProfile(null);
-                    }
-                } else {
-                    setUser(null);
-                    setSession(null);
-                    setUserProfile(null);
-                    setNeedsProfileCreation(false);
-
-                    const currentWindowPath = window.location.pathname;
-                    const isPublicOrAuthPage = currentWindowPath === '/' || currentWindowPath === '/login' ||
-                                               currentWindowPath.startsWith('/public') ||
-                                               currentWindowPath.startsWith('/student-onboarding') ||
-                                               currentWindowPath.startsWith('/complete-profile');
-
-                    if (!isPublicOrAuthPage) {
-                        setLocation('/login');
-                    }
-                }
+            // Prevent redundant processing for the same SIGNED_IN user
+            if (session?.user && previousUserIdRef.current === session.user.id && event === 'SIGNED_IN') {
+                console.log(`[Auth] Listener: Skipping redundant SIGNED_IN processing for user ${session.user.id}`);
                 setLoading(false);
+                return;
             }
-        );
+            previousUserIdRef.current = session?.user?.id || null;
+
+            if (session?.user) {
+                setUser(session.user);
+                setSession(session);
+
+                const profile = await loadUserProfile(session.user);
+
+                if (profile) {
+                    setUserProfile(profile);
+                    setNeedsProfileCreation(false);
+                    handlePostAuthRedirect(profile);
+                } else {
+                    setUserProfile(null);
+                }
+            } else {
+                setUser(null);
+                setSession(null);
+                setUserProfile(null);
+                setNeedsProfileCreation(false);
+
+                const currentWindowPath = window.location.pathname;
+                const isPublicOrAuthPage = currentWindowPath === '/' || currentWindowPath === '/login' ||
+                                           currentWindowPath.startsWith('/public') ||
+                                           currentWindowPath.startsWith('/student-onboarding') ||
+                                           currentWindowPath.startsWith('/complete-profile');
+
+                if (!isPublicOrAuthPage) {
+                    setLocation('/login');
+                }
+            }
+            setLoading(false);
+        };
+
+        const { data: authListener } = supabase.auth.onAuthStateChange(handleAuthChange);
 
         // Initial check on component mount
         supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
             if (initialSession) {
-                authListener.handler('SIGNED_IN', initialSession);
+                handleAuthChange('INITIAL_SESSION', initialSession);
             } else {
-                authListener.handler('SIGNED_OUT', null);
+                handleAuthChange('INITIAL_SESSION', null);
             }
         });
 
