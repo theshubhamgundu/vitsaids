@@ -11,8 +11,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    mode === 'development' &&
-    componentTagger(),
+    mode === "development" && componentTagger(),
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -20,6 +19,26 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    sourcemap: true, // ✅ Add this to generate source maps in production
+    sourcemap: true,
+    rollupOptions: {
+      external: [
+        // Avoid bundling native Node.js modules that may break in Vercel (if backend libs are imported)
+        "fs",
+        "path",
+        "os",
+        "child_process",
+        "stream",
+        "http",
+        "https",
+        "zlib",
+        "util",
+      ],
+    },
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
+  },
+  optimizeDeps: {
+    exclude: ["@octokit/rest"], // Don’t prebundle Octokit — keep as ESM
   },
 }));
