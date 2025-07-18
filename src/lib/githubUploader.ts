@@ -1,103 +1,122 @@
-// utils/githubUploader.ts
-import { Octokit } from 'octokit';
-import { Buffer } from 'buffer';
+import { Octokit } from "octokit";
 
-interface UploadParams {
-  folder: 'faculty' | 'events' | 'gallery' | 'placements';
-  imageFile: File;
-  metadata: Record<string, any>; // object containing name, email, etc.
-  githubToken: string;
-  repo: string;
-  owner: string;
-  branch?: string;
-}
+const GITHUB_TOKEN = process.env.NEXT_PUBLIC_GITHUB_TOKEN!;
+const REPO = "vitsaids"; // replace with your repo
+const OWNER = "theshubhamgundu"; // replace with your GitHub username
+const BRANCH = "main";
 
-const getMetadataFileName = (folder: string) => {
-  return `${folder}.ts`; // eg. faculty.ts
-};
+// Octokit client
+const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
+// Helper to get export name
 const getExportName = (folder: string) => {
-  return folder === 'gallery' ? 'galleryItems' : folder;
+  switch (folder) {
+    case "gallery": return "gallery";
+    case "events": return "events";
+    case "faculty": return "faculty";
+    case "placements": return "placements";
+    default: return "data";
+  }
 };
 
+// Uploads a single image and updates metadata file
 export async function uploadToGitHub({
   folder,
   imageFile,
   metadata,
-  githubToken,
-  repo,
-  owner,
-  branch = 'main',
-}: UploadParams): Promise<{ success: boolean; message: string }> {
-  const octokit = new Octokit({ auth: githubToken });
-  const imageFileName = imageFile.name;
-
+}: {
+  folder: string;
+  imageFile: File;
+  metadata: Record<string, any>;
+}) {
   try {
-    const fileBuffer = await imageFile.arrayBuffer();
-    const base64Content = Buffer.from(fileBuffer).toString('base64');
-
+    // 1. Upload image
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const content = Buffer.from(arrayBuffer).toString("base64");
+    const imageFileName = `${Date.now()}-${imageFile.name}`;
     const imagePath = `public/${folder}/${imageFileName}`;
 
-    // Step 1: Upload image file
     await octokit.rest.repos.createOrUpdateFileContents({
-      owner,
-      repo,
+      owner: OWNER,
+      repo: REPO,
       path: imagePath,
-      message: `Add ${imageFileName} to ${folder}`,
-      content: base64Content,
-      branch,
+      message: `Upload ${imageFileName} to ${folder}`,
+      content,
+      branch: BRANCH,
     });
 
-    // Step 2: Update metadata TypeScript file
-    const metadataPath = `public/${folder}/${getMetadataFileName(folder)}`;
-    let fileSha = '';
-    let existingContent = '';
+    console.log("✅ Image uploaded to GitHub:", imagePath);
+
+    // 2. Update metadata file
+    const metadataFilePath = `data/${folder}.ts`; // Or use `.json` if switching to JSON
+    const exportName = getExportName(folder);
+
+    let existingContent: string;
+
+    try {
+      const { data: existingFile } = await octokit.rest.repos.getContent({
+        owner: OWNER,
+        repo: REPO,
+        path: metadataFilePath,
+        ref: BRANCH,
+      });
+
+      const decoded = Buffer.from(
+        (existingFile as any).content,
+        "base64"
+      ).toString("utf-8");
+
+      existingContent = decoded;
+    } catch (err: any) {
+      // File doesn't exist
+      existingContent = `export const ${exportName} = []`;
+    }
+
+    // Add image path to metadata
+    metadata.image = `/${folder}/${imageFileName}`;
+
+    // Inject into existing content safely
+    const trimmedContent = existingContent.trim();
+    const lastBracketIndex = trimmedContent.lastIndexOf("]");
+
+    const newContent =
+      trimmedContent.slice(0, lastBracketIndex) +
+      `,\n  ${JSON.stringify(metadata, null, 2)}\n` +
+      trimmedContent.slice(lastBracketIndex);
+
+    // 3. Upload updated metadata file
+    const updatedBase64Content = Buffer.from(newContent).toString("base64");
+
+    // Get the SHA of the file if it exists
+    let sha: string | undefined = undefined;
 
     try {
       const { data } = await octokit.rest.repos.getContent({
-        owner,
-        repo,
-        path: metadataPath,
-        ref: branch,
+        owner: OWNER,
+        repo: REPO,
+        path: metadataFilePath,
+        ref: BRANCH,
       });
 
-      if ('content' in data && data.content) {
-        existingContent = Buffer.from(data.content, 'base64').toString();
-        fileSha = data.sha;
-      }
-    } catch (error: any) {
-      // File may not exist, we will create it
-      existingContent = `export const ${getExportName(folder)} = []`;
+      sha = (data as any).sha;
+    } catch {
+      // File doesn't exist — sha stays undefined
     }
 
-    const exportName = getExportName(folder);
-
-    // Remove trailing bracket and export
-    const updatedList = JSON.stringify(metadata, null, 2);
-
-    const newContent = existingContent.replace(
-      new RegExp(`export const ${exportName} = \[([\s\S]*)\]`),
-      `export const ${exportName} = [
-$1,
-${updatedList}
-]`
-    );
-
-    const encodedNewContent = Buffer.from(newContent).toString('base64');
-
     await octokit.rest.repos.createOrUpdateFileContents({
-      owner,
-      repo,
-      path: metadataPath,
-      message: `Update ${metadataPath} with new entry`,
-      content: encodedNewContent,
-      sha: fileSha || undefined,
-      branch,
+      owner: OWNER,
+      repo: REPO,
+      path: metadataFilePath,
+      message: `Update metadata for ${folder}`,
+      content: updatedBase64Content,
+      branch: BRANCH,
+      sha,
     });
 
-    return { success: true, message: 'Upload successful' };
-  } catch (error: any) {
-    console.error('Upload failed:', error.message);
-    return { success: false, message: error.message };
+    console.log("✅ Metadata file updated:", metadataFilePath);
+    return { success: true };
+  } catch (error) {
+    console.error("❌ GitHub upload failed:", error);
+    return { success: false, error };
   }
 }
