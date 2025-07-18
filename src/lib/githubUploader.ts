@@ -1,6 +1,6 @@
-import { Octokit } from "octokit";
+import { Octokit } from "@octokit/rest";
 
-const GITHUB_TOKEN = process.env.NEXT_PUBLIC_GITHUB_TOKEN!;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN!;
 const REPO = "vitsaids"; // replace with your repo
 const OWNER = "theshubhamgundu"; // replace with your GitHub username
 const BRANCH = "main";
