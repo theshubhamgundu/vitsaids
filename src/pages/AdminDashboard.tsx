@@ -7,7 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Check, X, Upload, Clock, FileText, Search } from 'lucide-react'; // Added Search icon
+import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Check, X, Upload, Clock, FileText, Search, MoreVertical, User } from 'lucide-react'; // Added MoreVertical and User icons
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Added Select components
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'; // Added DropdownMenu components
+
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import TimetableManager from '@/components/TimetableManager';
@@ -23,7 +26,7 @@ interface PendingStudent {
     phone?: string;
     address?: string;
     emergency_no?: string;
-    photo_url?: string;
+    photo_url?: string; // Added photo_url for student profile
     email?: string;
 }
 
@@ -88,7 +91,16 @@ const AdminDashboard = () => {
     const [placements, setPlacements] = useState<Placement[]>([]);
     const [gallery, setGallery] = useState<any[]>([]); // Assuming gallery structure can be anything for now
     const [certifications, setCertifications] = useState<CertificateItem[]>([]); // Updated to use CertificateItem type
+
+    // Student Management States
     const [editingStudent, setEditingStudent] = useState<PendingStudent | null>(null);
+    const [viewingStudent, setViewingStudent] = useState<PendingStudent | null>(null); // New state for viewing details
+    const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all'); // New state for year filter
+    const [newProfilePhotoFile, setNewProfilePhotoFile] = useState<File | null>(null); // State for new photo upload
+
+    // Bulk Promote Students States
+    const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false); // New state for modal visibility
+    const [yearToPromote, setYearToPromote] = useState<string>(''); // New state for selected year in modal
 
     // Results Upload State
     const [resultTitle, setResultTitle] = useState('');
@@ -102,15 +114,16 @@ const AdminDashboard = () => {
     const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
     const [adminCertificates, setAdminCertificates] = useState<CertificateItem[]>([]);
 
-
     // Load data from Supabase (functions defined here for proper hook order)
     const loadAllStudents = async () => {
         try {
-            const { data, error } = await (supabase as any)
-                .from('user_profiles')
-                .select('*')
-                .eq('role', 'student')
-                .order('student_name', { ascending: true });
+            let query = supabase.from('user_profiles').select('*').eq('role', 'student');
+
+            if (selectedYearFilter !== 'all') { // Apply year filter
+                query = query.eq('year', parseInt(selectedYearFilter));
+            }
+
+            const { data, error } = await query.order('student_name', { ascending: true });
 
             if (error) throw error;
 
@@ -223,7 +236,8 @@ const AdminDashboard = () => {
                     *,
                     user_profiles!inner(student_name, id, ht_no) // Need 'id' for user_profile, and 'ht_no' for the profile
                 `)
-                .order('uploaded_at', { ascending: false }); // Changed from 'created_at' to 'uploaded_at'
+                .order('uploaded_at', { ascending: false });
+            // Changed from 'created_at' to 'uploaded_at'
 
             if (!error && data) {
                 setCertifications(data);
@@ -270,7 +284,6 @@ const AdminDashboard = () => {
         }
     };
 
-
     // Redirect if not admin
     useEffect(() => {
         if (!loading && userProfile) {
@@ -286,7 +299,7 @@ const AdminDashboard = () => {
     // Set up real-time subscriptions and initial data load
     useEffect(() => {
         if (userProfile?.role === 'admin') {
-            loadAllStudents();
+            loadAllStudents(); // This will now react to selectedYearFilter
             loadEvents();
             loadFaculty();
             loadPlacements();
@@ -311,22 +324,18 @@ const AdminDashboard = () => {
                 .channel('faculty-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'faculty' }, loadFaculty)
                 .subscribe();
-
             const placementsChannel = supabase
                 .channel('placements-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'placements' }, loadPlacements)
                 .subscribe();
-
             const galleryChannel = supabase
                 .channel('gallery-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery' }, loadGallery)
                 .subscribe();
-
             const certificatesChannel = supabase // Changed channel name
                 .channel('certificates-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, loadCertifications) // Changed table
                 .subscribe();
-
             return () => {
                 supabase.removeChannel(studentsChannel);
                 supabase.removeChannel(eventsChannel);
@@ -336,8 +345,7 @@ const AdminDashboard = () => {
                 supabase.removeChannel(certificatesChannel); // Removed previous certifications channel if it existed
             };
         }
-    }, [userProfile]); // Dependencies for useEffect
-
+    }, [userProfile, selectedYearFilter]); // Add selectedYearFilter to dependencies
 
     // Show loading while checking authentication
     if (loading || !userProfile) {
@@ -378,7 +386,6 @@ const AdminDashboard = () => {
                 .from('user_profiles')
                 .update({ status: 'approved' })
                 .eq('id', studentId);
-
             if (!error) {
                 toast({ title: "Student approved successfully" });
             } else {
@@ -389,14 +396,12 @@ const AdminDashboard = () => {
             toast({ title: 'Error approving student', description: error.message || 'Please try again later.', variant: 'destructive' });
         }
     };
-
     const rejectStudent = async (studentId: string) => {
         try {
             const { error } = await (supabase as any)
                 .from('user_profiles')
                 .update({ status: 'rejected' })
                 .eq('id', studentId);
-
             if (!error) {
                 toast({ title: "Student rejected" });
             } else {
@@ -407,7 +412,6 @@ const AdminDashboard = () => {
             toast({ title: 'Error rejecting student', description: error.message || 'Please try again later.', variant: 'destructive' });
         }
     };
-
     // ✅ Promote Student (Function from earlier code)
     const promoteStudent = async (studentId: string, currentYear: number | string) => {
         const numericYear = parseInt(currentYear as string);
@@ -435,6 +439,55 @@ const AdminDashboard = () => {
         }
     };
 
+    // New: Handle Bulk Promote Students
+    const handleBulkPromote = async () => {
+        if (!yearToPromote) {
+            toast({ title: 'Error', description: 'Please select a year to promote.', variant: 'destructive' });
+            return;
+        }
+
+        const currentYearNum = parseInt(yearToPromote);
+        if (isNaN(currentYearNum)) {
+            toast({ title: 'Error', description: 'Invalid year selected for promotion.', variant: 'destructive' });
+            return;
+        }
+
+        if (currentYearNum >= 4) {
+            toast({ title: 'Notice', description: 'Students in 4th Year cannot be promoted further.', variant: 'info' });
+            setIsPromoteModalOpen(false); // Close modal
+            setYearToPromote(''); // Reset selection
+            return;
+        }
+
+        const nextYear = currentYearNum + 1;
+        const confirmBulkPromotion = window.confirm(`Are you sure you want to promote ALL students currently in ${currentYearNum}st/nd/rd Year to ${nextYear}th Year? This action cannot be undone.`);
+
+        if (!confirmBulkPromotion) {
+            return;
+        }
+
+        try {
+            // Update all students whose current year matches yearToPromote
+            const { error } = await supabase
+                .from('user_profiles')
+                .update({ year: nextYear })
+                .eq('year', currentYearNum)
+                .eq('role', 'student'); // Ensure only students are promoted
+
+            if (!error) {
+                toast({ title: `Successfully promoted all students from year ${currentYearNum} to ${nextYear}.` });
+                loadAllStudents(); // Reload all students to reflect changes
+                loadStats(); // Reload stats if needed (e.g., if total students count changes due to 'graduated' status in your design)
+                setIsPromoteModalOpen(false); // Close modal
+                setYearToPromote(''); // Reset selection
+            } else {
+                toast({ title: 'Bulk promotion failed', description: error.message, variant: 'destructive' });
+            }
+        } catch (error: any) {
+            console.error('Error during bulk promotion:', error);
+            toast({ title: 'Bulk promotion failed', description: error.message || 'Please try again later.', variant: 'destructive' });
+        }
+    };
 
     // Event Management Functions
     const addEvent = async (newEvent: Omit<Event, 'id'>) => {
@@ -442,7 +495,6 @@ const AdminDashboard = () => {
             const { error } = await (supabase as any)
                 .from('events')
                 .insert(newEvent);
-
             if (!error) {
                 toast({ title: "Event added successfully" });
             } else {
@@ -453,14 +505,12 @@ const AdminDashboard = () => {
             toast({ title: 'Error adding event', description: error.message || 'Please try again later.', variant: 'destructive' });
         }
     };
-
     const deleteEvent = async (eventId: string) => {
         try {
             const { error } = await (supabase as any)
                 .from('events')
                 .delete()
                 .eq('id', eventId);
-
             if (!error) {
                 toast({ title: "Event deleted successfully" });
                 loadEvents(); // Reload events after deletion
@@ -479,7 +529,6 @@ const AdminDashboard = () => {
             const { error } = await (supabase as any)
                 .from('faculty')
                 .insert(newFaculty);
-
             if (!error) {
                 toast({ title: "Faculty member added successfully" });
             } else {
@@ -497,7 +546,6 @@ const AdminDashboard = () => {
                 .from('faculty')
                 .delete()
                 .eq('id', facultyId);
-
             if (!error) {
                 toast({ title: "Faculty member removed successfully" });
                 loadFaculty(); // Reload faculty after deletion
@@ -516,7 +564,6 @@ const AdminDashboard = () => {
             const { error } = await (supabase as any)
                 .from('placements')
                 .insert(newPlacement);
-
             if (!error) {
                 toast({ title: "Placement record added successfully" });
             } else {
@@ -527,14 +574,12 @@ const AdminDashboard = () => {
             toast({ title: 'Error adding placement', description: error.message || 'Please try again later.', variant: 'destructive' });
         }
     };
-
     const deletePlacement = async (placementId: string) => {
         try {
             const { error } = await (supabase as any)
                 .from('placements')
                 .delete()
                 .eq('id', placementId);
-
             if (!error) {
                 toast({ title: "Placement record deleted successfully" });
                 loadPlacements(); // Reload placements after deletion
@@ -553,7 +598,6 @@ const AdminDashboard = () => {
             const { error } = await (supabase as any)
                 .from('gallery')
                 .insert(newItem);
-
             if (!error) {
                 toast({ title: "Gallery item added successfully" });
             } else {
@@ -571,7 +615,6 @@ const AdminDashboard = () => {
                 .from('gallery')
                 .delete()
                 .eq('id', itemId);
-
             if (!error) {
                 toast({ title: "Gallery item deleted successfully" });
                 loadGallery(); // Reload gallery after deletion
@@ -623,7 +666,6 @@ const AdminDashboard = () => {
                 .from('user_profiles')
                 .update(studentData)
                 .eq('id', editingStudent?.id);
-
             if (!error) {
                 toast({ title: "Student details updated successfully" });
                 setEditingStudent(null);
@@ -636,6 +678,56 @@ const AdminDashboard = () => {
             toast({ title: 'Error updating student', description: error.message || 'Please try again later.', variant: 'destructive' });
         }
     };
+
+    // New: Handle Profile Photo Upload
+    const handleProfilePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        setNewProfilePhotoFile(file || null);
+    };
+
+    const uploadProfilePhoto = async () => {
+        if (!newProfilePhotoFile || !viewingStudent?.id) {
+            toast({ title: 'Error', description: 'No file or student selected.', variant: 'destructive' });
+            return;
+        }
+
+        const fileExtension = newProfilePhotoFile.name.split('.').pop();
+        const fileName = `${viewingStudent.id}-${Date.now()}.${fileExtension}`; // Unique filename
+        const filePath = `${fileName}`; // Path in the bucket
+
+        try {
+            const { error: uploadError } = await supabase.storage
+                .from('avatars') // Assuming your student profile photos are in an 'avatars' bucket
+                .upload(filePath, newProfilePhotoFile, {
+                    upsert: true, // Overwrite if exists (useful if re-uploading)
+                });
+
+            if (uploadError) {
+                throw uploadError;
+            }
+
+            // Update user_profiles table with the new photo URL
+            const { error: updateError } = await supabase
+                .from('user_profiles')
+                .update({ photo_url: filePath }) // Store the path, not the full public URL
+                .eq('id', viewingStudent.id);
+
+            if (updateError) {
+                throw updateError;
+            }
+
+            toast({ title: '✅ Profile photo updated successfully' });
+            setNewProfilePhotoFile(null); // Clear selected file
+            loadAllStudents(); // Reload students to show updated photo
+            // Update viewingStudent state to reflect the new photo_url immediately
+            setViewingStudent(prev => prev ? { ...prev, photo_url: filePath } : null);
+
+        } catch (error: any) {
+            console.error('Error uploading profile photo:', error);
+            toast({ title: 'Error uploading photo', description: error.message || 'Please try again.', variant: 'destructive' });
+        }
+    };
+
 
     // ✅ Results Upload Function (Consolidated here)
     const uploadResult = async () => {
@@ -819,70 +911,108 @@ const AdminDashboard = () => {
                                 <CardTitle className="flex items-center space-x-2">
                                     <Users className="w-5 h-5" />
                                     <span>Student Management ({allStudents.length})</span>
+                                    <div className="ml-auto flex items-center space-x-2">
+                                        {/* Promote Students Dropdown Menu */}
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+                                                    <span className="sr-only">Open menu</span>
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => setIsPromoteModalOpen(true)}>
+                                                    Promote Students
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {allStudents.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full border-collapse border border-gray-200">
-                                            <thead>
-                                                <tr className="bg-gray-50">
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Status</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {allStudents.map((student) => (
-                                                    <tr key={student.id}>
-                                                        <td className="border border-gray-200 px-4 py-2">{student.ht_no}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">{student.student_name}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">{student.year}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">
-                                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                                                student.status === 'pending'
-                                                                    ? 'bg-yellow-100 text-yellow-800'
-                                                                    : student.status === 'approved'
-                                                                        ? 'bg-green-100 text-green-800'
-                                                                        : 'bg-red-100 text-red-800'
-                                                                }`}>
-                                                                {student.status}
-                                                            </span>
-                                                        </td>
-                                                        <td className="border border-gray-200 px-4 py-2">
-                                                            <div className="flex space-x-2">
-                                                                {student.status === 'pending' && (
-                                                                    <>
-                                                                        <Button size="sm" onClick={() => approveStudent(student.id)} className="bg-green-600 hover:bg-green-700">
-                                                                            <Check className="w-4 h-4" />
-                                                                        </Button>
-                                                                        <Button size="sm" variant="destructive" onClick={() => rejectStudent(student.id)}>
-                                                                            <X className="w-4 h-4" />
-                                                                        </Button>
-                                                                    </>
-                                                                )}
-                                                                {/* Added Promote button */}
-                                                                <Button size="sm" variant="outline" onClick={() => promoteStudent(student.id, student.year)}>
-                                                                    Promote
-                                                                </Button>
-                                                                <Button size="sm" variant="outline" onClick={() => setEditingStudent(student)}>
-                                                                    Edit
-                                                                </Button>
-                                                            </div>
-                                                        </td>
+                                {/* Filter by Year Dropdown */}
+                                <div className="mb-4 flex items-center space-x-2">
+                                    <Label htmlFor="year-filter" className="sr-only">Filter by Year</Label>
+                                    <Select value={selectedYearFilter} onValueChange={(value) => setSelectedYearFilter(value)}>
+                                        <SelectTrigger className="w-[180px]">
+                                            <SelectValue placeholder="Filter by Year" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Years</SelectItem>
+                                            <SelectItem value="1">1st Year</SelectItem>
+                                            <SelectItem value="2">2nd Year</SelectItem>
+                                            <SelectItem value="3">3rd Year</SelectItem>
+                                            <SelectItem value="4">4th Year</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {allStudents.length > 0 ?
+                                    (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full border-collapse border border-gray-200">
+                                                <thead>
+                                                    <tr className="bg-gray-50">
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Status</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-8">
-                                        <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                        <p className="text-gray-500 text-lg">No students found</p>
-                                    </div>
-                                )}
+                                                </thead>
+                                                <tbody>
+                                                    {allStudents.map((student) => (
+                                                        <tr key={student.id}>
+                                                            <td className="border border-gray-200 px-4 py-2">{student.ht_no}</td>
+                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                <Button variant="link" onClick={() => setViewingStudent(student)} className="p-0 h-auto">
+                                                                    {student.student_name}
+                                                                </Button>
+                                                            </td>
+                                                            <td className="border border-gray-200 px-4 py-2">{student.year}</td>
+                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                                                    student.status === 'pending'
+                                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                                        : student.status === 'approved'
+                                                                            ? 'bg-green-100 text-green-800'
+                                                                            : 'bg-red-100 text-red-800'
+                                                                    }`}>
+                                                                    {student.status}
+                                                                </span>
+                                                            </td>
+                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                <div className="flex space-x-2">
+                                                                    {student.status === 'pending' && (
+                                                                        <>
+                                                                            <Button size="sm" onClick={() => approveStudent(student.id)} className="bg-green-600 hover:bg-green-700">
+                                                                                <Check className="w-4 h-4" />
+                                                                            </Button>
+                                                                            <Button size="sm" variant="destructive" onClick={() => rejectStudent(student.id)}>
+                                                                                <X className="w-4 h-4" />
+                                                                            </Button>
+                                                                        </>
+                                                                    )}
+                                                                    {/* Added Promote button */}
+                                                                    <Button size="sm" variant="outline" onClick={() => promoteStudent(student.id, student.year)}>
+                                                                        Promote
+                                                                    </Button>
+                                                                    <Button size="sm" variant="outline" onClick={() => setEditingStudent(student)}>
+                                                                        Edit
+                                                                    </Button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8">
+                                            <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                            <p className="text-gray-500 text-lg">No students found</p>
+                                        </div>
+                                    )}
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -960,65 +1090,66 @@ const AdminDashboard = () => {
                                         </div>
                                     </div>
                                 ) : (
-                                    certifications.length > 0 ? (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full border-collapse border border-gray-200">
-                                                <thead>
-                                                    <tr className="bg-gray-50">
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Student</th>
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Certificate Name</th> {/* Updated header */}
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Uploaded At</th> {/* Updated header */}
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {certifications.map((cert) => (
-                                                        <tr key={cert.id}>
-                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                {cert.user_profiles?.student_name || 'Unknown'}
-                                                            </td>
-                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                {cert.ht_no}
-                                                            </td>
-                                                            <td className="border border-gray-200 px-4 py-2">{cert.certificate_name}</td> {/* Updated data access */}
-                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'} {/* Updated data access and formatting */}
-                                                            </td>
-                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                <div className="flex space-x-2">
-                                                                    {cert.certificate_url && (
-                                                                        <a
-                                                                            href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl} // Updated bucket name for URL
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                        >
-                                                                            <Button size="sm" variant="outline">
-                                                                                View
-                                                                            </Button>
-                                                                        </a>
-                                                                    )}
-                                                                    {/* Removed status-related buttons as 'status' column is not in 'certificates' table */}
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="destructive"
-                                                                        onClick={() => deleteCertification(cert.id, cert.certificate_url)} // Pass correct URL column
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </Button>
-                                                                </div>
-                                                            </td>
+                                    certifications.length > 0 ?
+                                        (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full border-collapse border border-gray-200">
+                                                    <thead>
+                                                        <tr className="bg-gray-50">
+                                                            <th className="border border-gray-200 px-4 py-2 text-left">Student</th>
+                                                            <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
+                                                            <th className="border border-gray-200 px-4 py-2 text-left">Certificate Name</th> {/* Updated header */}
+                                                            <th className="border border-gray-200 px-4 py-2 text-left">Uploaded At</th> {/* Updated header */}
+                                                            <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
                                                         </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-gray-500 text-lg">No certificates found</p>
-                                        </div>
-                                    )
+                                                    </thead>
+                                                    <tbody>
+                                                        {certifications.map((cert) => (
+                                                            <tr key={cert.id}>
+                                                                <td className="border border-gray-200 px-4 py-2">
+                                                                    {cert.user_profiles?.student_name || 'Unknown'}
+                                                                </td>
+                                                                <td className="border border-gray-200 px-4 py-2">
+                                                                    {cert.ht_no}
+                                                                </td>
+                                                                <td className="border border-gray-200 px-4 py-2">{cert.certificate_name}</td> {/* Updated data access */}
+                                                                <td className="border border-gray-200 px-4 py-2">
+                                                                    {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'} {/* Updated data access and formatting */}
+                                                                </td>
+                                                                <td className="border border-gray-200 px-4 py-2">
+                                                                    <div className="flex space-x-2">
+                                                                        {cert.certificate_url && (
+                                                                            <a
+                                                                                href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl} // Updated bucket name for URL
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                            >
+                                                                                <Button size="sm" variant="outline">
+                                                                                    View
+                                                                                </Button>
+                                                                            </a>
+                                                                        )}
+                                                                        {/* Removed status-related buttons as 'status' column is not in 'certificates' table */}
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="destructive"
+                                                                            onClick={() => deleteCertification(cert.id, cert.certificate_url)} // Pass correct URL column
+                                                                        >
+                                                                            <Trash2 className="w-4 h-4" />
+                                                                        </Button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-8">
+                                                <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                <p className="text-gray-500 text-lg">No certificates found</p>
+                                            </div>
+                                        )
                                 )}
                             </CardContent>
                         </Card>
@@ -1047,39 +1178,40 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {events.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full border-collapse border border-gray-200">
-                                            <thead>
-                                                <tr className="bg-gray-50">
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Venue</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {events.map((event) => (
-                                                    <tr key={event.id}>
-                                                        <td className="border border-gray-200 px-4 py-2">{event.title}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">{new Date(event.date).toLocaleDateString()}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">{event.venue}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">
-                                                            <Button size="sm" variant="destructive" onClick={() => deleteEvent(event.id)}>
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </Button>
-                                                        </td>
+                                {events.length > 0 ?
+                                    (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full border-collapse border border-gray-200">
+                                                <thead>
+                                                    <tr className="bg-gray-50">
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Venue</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-8">
-                                        <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                        <p className="text-gray-500 text-lg">No events scheduled.</p>
-                                    </div>
-                                )}
+                                                </thead>
+                                                <tbody>
+                                                    {events.map((event) => (
+                                                        <tr key={event.id}>
+                                                            <td className="border border-gray-200 px-4 py-2">{event.title}</td>
+                                                            <td className="border border-gray-200 px-4 py-2">{new Date(event.date).toLocaleDateString()}</td>
+                                                            <td className="border border-gray-200 px-4 py-2">{event.venue}</td>
+                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                <Button size="sm" variant="destructive" onClick={() => deleteEvent(event.id)}>
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </Button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8">
+                                            <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                            <p className="text-gray-500 text-lg">No events scheduled.</p>
+                                        </div>
+                                    )}
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -1107,37 +1239,38 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {faculty.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full border-collapse border border-gray-200">
-                                            <thead>
-                                                <tr className="bg-gray-50">
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Name</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Designation</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {faculty.map((member) => (
-                                                    <tr key={member.id}>
-                                                        <td className="border border-gray-200 px-4 py-2">{member.name}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">{member.designation}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">
-                                                            <Button size="sm" variant="destructive" onClick={() => deleteFaculty(member.id)}>
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </Button>
-                                                        </td>
+                                {faculty.length > 0 ?
+                                    (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full border-collapse border border-gray-200">
+                                                <thead>
+                                                    <tr className="bg-gray-50">
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Name</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Designation</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-8">
-                                        <GraduationCap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                        <p className="text-gray-500 text-lg">No faculty members found.</p>
-                                    </div>
-                                )}
+                                                </thead>
+                                                <tbody>
+                                                    {faculty.map((member) => (
+                                                        <tr key={member.id}>
+                                                            <td className="border border-gray-200 px-4 py-2">{member.name}</td>
+                                                            <td className="border border-gray-200 px-4 py-2">{member.designation}</td>
+                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                <Button size="sm" variant="destructive" onClick={() => deleteFaculty(member.id)}>
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </Button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8">
+                                            <GraduationCap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                            <p className="text-gray-500 text-lg">No faculty members found.</p>
+                                        </div>
+                                    )}
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -1165,39 +1298,40 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {placements.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full border-collapse border border-gray-200">
-                                            <thead>
-                                                <tr className="bg-gray-50">
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Company</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
-                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {placements.map((placement) => (
-                                                    <tr key={placement.id}>
-                                                        <td className="border border-gray-200 px-4 py-2">{placement.student_name}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">{placement.company}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
-                                                        <td className="border border-gray-200 px-4 py-2">
-                                                            <Button size="sm" variant="destructive" onClick={() => deletePlacement(placement.id)}>
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </Button>
-                                                        </td>
+                                {placements.length > 0 ?
+                                    (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full border-collapse border border-gray-200">
+                                                <thead>
+                                                    <tr className="bg-gray-50">
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Company</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-8">
-                                        <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                        <p className="text-gray-500 text-lg">No placement records found.</p>
-                                    </div>
-                                )}
+                                                </thead>
+                                                <tbody>
+                                                    {placements.map((placement) => (
+                                                        <tr key={placement.id}>
+                                                            <td className="border border-gray-200 px-4 py-2">{placement.student_name}</td>
+                                                            <td className="border border-gray-200 px-4 py-2">{placement.company}</td>
+                                                            <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
+                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                <Button size="sm" variant="destructive" onClick={() => deletePlacement(placement.id)}>
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </Button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8">
+                                            <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                            <p className="text-gray-500 text-lg">No placement records found.</p>
+                                        </div>
+                                    )}
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -1218,7 +1352,8 @@ const AdminDashboard = () => {
                                     <span>Process Attendance</span>
                                 </Button>
                                 <p className="text-sm text-gray-500">
-                                    Upload a spreadsheet containing student attendance data. This will be reflected in student profiles.
+                                    Upload a spreadsheet containing student attendance data.
+                                    This will be reflected in student profiles.
                                 </p>
                             </CardContent>
                         </Card>
@@ -1287,32 +1422,33 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {gallery.length > 0 ? (
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                        {gallery.map((item) => (
-                                            <Card key={item.id} className="relative group overflow-hidden">
-                                                <img src={item.url} alt={item.title} className="w-full h-32 object-cover" />
-                                                <CardContent className="p-2 text-sm">
-                                                    <h3 className="font-semibold">{item.title}</h3>
-                                                    <p className="text-gray-500 text-xs truncate">{item.description}</p>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="destructive"
-                                                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                        onClick={() => deleteGalleryItem(item.id)}
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                </CardContent>
-                                            </Card>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-8">
-                                        <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                        <p className="text-gray-500 text-lg">No gallery items found.</p>
-                                    </div>
-                                )}
+                                {gallery.length > 0 ?
+                                    (
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                            {gallery.map((item) => (
+                                                <Card key={item.id} className="relative group overflow-hidden">
+                                                    <img src={item.url} alt={item.title} className="w-full h-32 object-cover" />
+                                                    <CardContent className="p-2 text-sm">
+                                                        <h3 className="font-semibold">{item.title}</h3>
+                                                        <p className="text-gray-500 text-xs truncate">{item.description}</p>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="destructive"
+                                                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            onClick={() => deleteGalleryItem(item.id)}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </CardContent>
+                                                </Card>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8">
+                                            <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                            <p className="text-gray-500 text-lg">No gallery items found.</p>
+                                        </div>
+                                    )}
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -1427,6 +1563,116 @@ const AdminDashboard = () => {
                                     />
                                 </div>
                                 <Button onClick={() => updateStudent(editingStudent)}>Update Student</Button>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
+
+                {/* Promote Students Modal */}
+                <Dialog open={isPromoteModalOpen} onOpenChange={setIsPromoteModalOpen}>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle>Promote Students</DialogTitle>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="current-year" className="text-right">
+                                    Current Year
+                                </Label>
+                                <Select value={yearToPromote} onValueChange={setYearToPromote}>
+                                    <SelectTrigger className="col-span-3">
+                                        <SelectValue placeholder="Select current year to promote" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="1">1st Year</SelectItem>
+                                        <SelectItem value="2">2nd Year</SelectItem>
+                                        <SelectItem value="3">3rd Year</SelectItem>
+                                        {/* Students in 4th year typically don't get promoted further */}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button onClick={handleBulkPromote} disabled={!yearToPromote}>
+                                Promote All Students in Selected Year
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Student Detail View Dialog */}
+                <Dialog open={!!viewingStudent} onOpenChange={() => { setViewingStudent(null); setNewProfilePhotoFile(null); }}> {/* Clear photo file on close */}
+                    <DialogContent className="sm:max-w-[500px]">
+                        <DialogHeader>
+                            <DialogTitle>Student Details</DialogTitle>
+                        </DialogHeader>
+                        {viewingStudent && (
+                            <div className="grid gap-4 py-4">
+                                {/* Profile Photo Display */}
+                                <div className="flex flex-col items-center mb-4">
+                                    {viewingStudent.photo_url ? (
+                                        <img
+                                            src={supabase.storage.from('avatars').getPublicUrl(viewingStudent.photo_url).data.publicUrl} // Assuming 'avatars' bucket
+                                            alt="Profile Photo"
+                                            className="w-32 h-32 rounded-full object-cover border-2 border-gray-200 mb-2"
+                                        />
+                                    ) : (
+                                        <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 mb-2">
+                                            <User className="w-16 h-16" />
+                                        </div>
+                                    )}
+                                    <span className="text-sm text-gray-500">Profile Photo</span>
+                                </div>
+
+                                {/* Photo Upload Option */}
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="photo-upload" className="text-right">
+                                        Update Photo
+                                    </Label>
+                                    <Input
+                                        id="photo-upload"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleProfilePhotoChange}
+                                        className="col-span-3"
+                                    />
+                                </div>
+                                {newProfilePhotoFile && (
+                                    <Button onClick={uploadProfilePhoto} className="w-full">
+                                        Upload New Photo
+                                    </Button>
+                                )}
+
+                                {/* Student Details */}
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                                    <div className="font-semibold">H.T No.:</div>
+                                    <div>{viewingStudent.ht_no}</div>
+
+                                    <div className="font-semibold">Name:</div>
+                                    <div>{viewingStudent.student_name}</div>
+
+                                    <div className="font-semibold">Email:</div>
+                                    <div>{viewingStudent.email || 'N/A'}</div>
+
+                                    <div className="font-semibold">Year:</div>
+                                    <div>{viewingStudent.year}</div>
+
+                                    <div className="font-semibold">Status:</div>
+                                    <div>{viewingStudent.status}</div>
+
+                                    <div className="font-semibold">Phone:</div>
+                                    <div>{viewingStudent.phone || 'N/A'}</div>
+
+                                    <div className="font-semibold">Address:</div>
+                                    <div>{viewingStudent.address || 'N/A'}</div>
+
+                                    <div className="font-semibold">Emergency No.:</div>
+                                    <div>{viewingStudent.emergency_no || 'N/A'}</div>
+                                </div>
+                                <Button onClick={() => {
+                                    setEditingStudent(viewingStudent); // Set the student for editing
+                                    setViewingStudent(null); // Close view modal
+                                }}>
+                                    Edit Student
+                                </Button>
                             </div>
                         )}
                     </DialogContent>
