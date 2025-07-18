@@ -7,9 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Check, X, Upload, Clock, FileText, Search, MoreVertical, User } from 'lucide-react'; // Added MoreVertical and User icons
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Added Select components
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'; // Added DropdownMenu components
+// Removed Check and X icons as they are no longer used for student approval/rejection
+import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Upload, Clock, FileText, Search, MoreVertical, User } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,7 +27,7 @@ interface PendingStudent {
     phone?: string;
     address?: string;
     emergency_no?: string;
-    photo_url?: string; // Added photo_url for student profile
+    photo_url?: string; // Stored path or public URL
     email?: string;
 }
 
@@ -127,7 +128,16 @@ const AdminDashboard = () => {
 
             if (error) throw error;
 
-            setAllStudents(data);
+            // When loading all students, also get their public photo URLs if available
+            const studentsWithPublicUrls = await Promise.all(data.map(async (student: PendingStudent) => {
+                if (student.photo_url) {
+                    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(student.photo_url);
+                    return { ...student, photo_url: publicUrlData.publicUrl || student.photo_url };
+                }
+                return student;
+            }));
+
+            setAllStudents(studentsWithPublicUrls);
         } catch (error: any) {
             console.error('Error loading students:', error);
             toast({ title: 'Error loading students', description: error.message || 'Please try again later.', variant: 'destructive' });
@@ -379,39 +389,40 @@ const AdminDashboard = () => {
         );
     }
 
-    // Student Management Functions
-    const approveStudent = async (studentId: string) => {
-        try {
-            const { error } = await (supabase as any)
-                .from('user_profiles')
-                .update({ status: 'approved' })
-                .eq('id', studentId);
-            if (!error) {
-                toast({ title: "Student approved successfully" });
-            } else {
-                toast({ title: 'Error approving student', description: error.message, variant: 'destructive' });
-            }
-        } catch (error: any) {
-            console.error('Error approving student:', error);
-            toast({ title: 'Error approving student', description: error.message || 'Please try again later.', variant: 'destructive' });
-        }
-    };
-    const rejectStudent = async (studentId: string) => {
-        try {
-            const { error } = await (supabase as any)
-                .from('user_profiles')
-                .update({ status: 'rejected' })
-                .eq('id', studentId);
-            if (!error) {
-                toast({ title: "Student rejected" });
-            } else {
-                toast({ title: 'Error rejecting student', description: error.message, variant: 'destructive' });
-            }
-        } catch (error: any) {
-            console.error('Error rejecting student:', error);
-            toast({ title: 'Error rejecting student', description: error.message || 'Please try again later.', variant: 'destructive' });
-        }
-    };
+    // Removed approveStudent and rejectStudent functions as they are no longer needed
+    // const approveStudent = async (studentId: string) => {
+    //     try {
+    //         const { error } = await (supabase as any)
+    //             .from('user_profiles')
+    //             .update({ status: 'approved' })
+    //             .eq('id', studentId);
+    //         if (!error) {
+    //             toast({ title: "Student approved successfully" });
+    //         } else {
+    //             toast({ title: 'Error approving student', description: error.message, variant: 'destructive' });
+    //         }
+    //     } catch (error: any) {
+    //         console.error('Error approving student:', error);
+    //         toast({ title: 'Error approving student', description: error.message || 'Please try again later.', variant: 'destructive' });
+    //     }
+    // };
+    // const rejectStudent = async (studentId: string) => {
+    //     try {
+    //         const { error } = await (supabase as any)
+    //             .from('user_profiles')
+    //             .update({ status: 'rejected' })
+    //             .eq('id', studentId);
+    //         if (!error) {
+    //             toast({ title: "Student rejected" });
+    //         } else {
+    //             toast({ title: 'Error rejecting student', description: error.message, variant: 'destructive' });
+    //         }
+    //     } catch (error: any) {
+    //         console.error('Error rejecting student:', error);
+    //         toast({ title: 'Error rejecting student', description: error.message || 'Please try again later.', variant: 'destructive' });
+    //     }
+    // };
+
     // ✅ Promote Student (Function from earlier code)
     const promoteStudent = async (studentId: string, currentYear: number | string) => {
         const numericYear = parseInt(currentYear as string);
@@ -720,7 +731,7 @@ const AdminDashboard = () => {
             setNewProfilePhotoFile(null); // Clear selected file
             loadAllStudents(); // Reload students to show updated photo
             // Update viewingStudent state to reflect the new photo_url immediately
-            setViewingStudent(prev => prev ? { ...prev, photo_url: filePath } : null);
+            setViewingStudent(prev => prev ? { ...prev, photo_url: supabase.storage.from('avatars').getPublicUrl(filePath).data.publicUrl } : null);
 
         } catch (error: any) {
             console.error('Error uploading profile photo:', error);
@@ -791,6 +802,16 @@ const AdminDashboard = () => {
     const handleResultsFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         setResultFile(file);
+    };
+
+    // New handler for opening student details to fetch public URL
+    const handleViewStudentDetails = async (student: PendingStudent) => {
+        let studentToView = { ...student };
+        if (student.photo_url && !student.photo_url.startsWith('http')) { // Check if it's a relative path
+            const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(student.photo_url);
+            studentToView.photo_url = publicUrlData.publicUrl || student.photo_url;
+        }
+        setViewingStudent(studentToView);
     };
 
     return (
@@ -957,17 +978,15 @@ const AdminDashboard = () => {
                                                         <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
                                                         <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
                                                         <th className="border border-gray-200 px-4 py-2 text-left">Status</th>
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                        {/* Removed Actions column header */}
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {allStudents.map((student) => (
-                                                        <tr key={student.id}>
+                                                        <tr key={student.id} onClick={() => handleViewStudentDetails(student)} className="cursor-pointer hover:bg-gray-100">
                                                             <td className="border border-gray-200 px-4 py-2">{student.ht_no}</td>
                                                             <td className="border border-gray-200 px-4 py-2">
-                                                                <Button variant="link" onClick={() => setViewingStudent(student)} className="p-0 h-auto">
-                                                                    {student.student_name}
-                                                                </Button>
+                                                                {student.student_name}
                                                             </td>
                                                             <td className="border border-gray-200 px-4 py-2">{student.year}</td>
                                                             <td className="border border-gray-200 px-4 py-2">
@@ -977,31 +996,11 @@ const AdminDashboard = () => {
                                                                         : student.status === 'approved'
                                                                             ? 'bg-green-100 text-green-800'
                                                                             : 'bg-red-100 text-red-800'
-                                                                    }`}>
+                                                                }`}>
                                                                     {student.status}
                                                                 </span>
                                                             </td>
-                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                <div className="flex space-x-2">
-                                                                    {student.status === 'pending' && (
-                                                                        <>
-                                                                            <Button size="sm" onClick={() => approveStudent(student.id)} className="bg-green-600 hover:bg-green-700">
-                                                                                <Check className="w-4 h-4" />
-                                                                            </Button>
-                                                                            <Button size="sm" variant="destructive" onClick={() => rejectStudent(student.id)}>
-                                                                                <X className="w-4 h-4" />
-                                                                            </Button>
-                                                                        </>
-                                                                    )}
-                                                                    {/* Added Promote button */}
-                                                                    <Button size="sm" variant="outline" onClick={() => promoteStudent(student.id, student.year)}>
-                                                                        Promote
-                                                                    </Button>
-                                                                    <Button size="sm" variant="outline" onClick={() => setEditingStudent(student)}>
-                                                                        Edit
-                                                                    </Button>
-                                                                </div>
-                                                            </td>
+                                                            {/* Removed Actions column data */}
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -1074,10 +1073,11 @@ const AdminDashboard = () => {
                                                                             </Button>
                                                                         </a>
                                                                     )}
+                                                                    {/* Removed status-related buttons as 'status' column is not in 'certificates' table */}
                                                                     <Button
                                                                         size="sm"
                                                                         variant="destructive"
-                                                                        onClick={() => deleteCertification(cert.id, cert.certificate_url)}
+                                                                        onClick={() => deleteCertification(cert.id, cert.certificate_url)} // Pass correct URL column
                                                                     >
                                                                         <Trash2 className="w-4 h-4" />
                                                                     </Button>
@@ -1610,7 +1610,7 @@ const AdminDashboard = () => {
                                 <div className="flex flex-col items-center mb-4">
                                     {viewingStudent.photo_url ? (
                                         <img
-                                            src={supabase.storage.from('avatars').getPublicUrl(viewingStudent.photo_url).data.publicUrl} // Assuming 'avatars' bucket
+                                            src={viewingStudent.photo_url} // Now directly use the photo_url as it's already a public URL
                                             alt="Profile Photo"
                                             className="w-32 h-32 rounded-full object-cover border-2 border-gray-200 mb-2"
                                         />
@@ -1672,6 +1672,10 @@ const AdminDashboard = () => {
                                     setViewingStudent(null); // Close view modal
                                 }}>
                                     Edit Student
+                                </Button>
+                                {/* Removed Approve/Reject buttons */}
+                                <Button size="sm" variant="outline" onClick={() => promoteStudent(viewingStudent.id, viewingStudent.year)} className="mt-2">
+                                    Promote Student
                                 </Button>
                             </div>
                         )}
