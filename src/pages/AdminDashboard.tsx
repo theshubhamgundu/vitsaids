@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-// Removed Check and X icons as they are no longer used for student approval/rejection
 import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Upload, Clock, FileText, Search, MoreVertical, User } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -98,6 +97,7 @@ const AdminDashboard = () => {
     const [viewingStudent, setViewingStudent] = useState<PendingStudent | null>(null); // New state for viewing details
     const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all'); // New state for year filter
     const [newProfilePhotoFile, setNewProfilePhotoFile] = useState<File | null>(null); // State for new photo upload
+    const [isPhotoLoading, setIsPhotoLoading] = useState(false); // New state for photo loading
 
     // Bulk Promote Students States
     const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false); // New state for modal visibility
@@ -237,21 +237,19 @@ const AdminDashboard = () => {
         }
     };
 
-    // ✅ Certificate Loading Function (Updated)
     const loadCertifications = async () => {
         try {
             const { data, error } = await (supabase as any)
-                .from('certificates') // <--- CHANGED FROM 'certifications' to 'certificates'
+                .from('certificates')
                 .select(`
                     *,
-                    user_profiles!inner(student_name, id, ht_no) // Need 'id' for user_profile, and 'ht_no' for the profile
+                    user_profiles!inner(student_name, id, ht_no)
                 `)
                 .order('uploaded_at', { ascending: false });
-            // Changed from 'created_at' to 'uploaded_at'
 
             if (!error && data) {
                 setCertifications(data);
-                console.log("Certificates loaded:", data); // Add this for debugging
+                console.log("Certificates loaded:", data);
             } else {
                 console.error('Error loading certificates:', error);
                 toast({ title: 'Error loading certificates', description: error?.message || 'Unknown error', variant: 'destructive' });
@@ -262,7 +260,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // ✅ Admin: Search Certificates (Updated to use 'certificates' table)
     const fetchStudentCertificates = async () => {
         if (!certificateSearchHTNO) {
             toast({ title: 'Enter HT No. to search' });
@@ -271,12 +268,12 @@ const AdminDashboard = () => {
         }
         try {
             const { data, error } = await supabase
-                .from('certificates') // Changed from 'student_certificates'
+                .from('certificates')
                 .select(`
                     *,
                     user_profiles!inner(student_name, ht_no)
                 `)
-                .eq('ht_no', certificateSearchHTNO); // Use ht_no from 'certificates'
+                .eq('ht_no', certificateSearchHTNO);
 
             if (error) {
                 toast({ title: 'Error fetching certificates', description: error.message, variant: 'destructive' });
@@ -342,9 +339,9 @@ const AdminDashboard = () => {
                 .channel('gallery-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery' }, loadGallery)
                 .subscribe();
-            const certificatesChannel = supabase // Changed channel name
+            const certificatesChannel = supabase
                 .channel('certificates-changes')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, loadCertifications) // Changed table
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, loadCertifications)
                 .subscribe();
             return () => {
                 supabase.removeChannel(studentsChannel);
@@ -352,10 +349,10 @@ const AdminDashboard = () => {
                 supabase.removeChannel(facultyChannel);
                 supabase.removeChannel(placementsChannel);
                 supabase.removeChannel(galleryChannel);
-                supabase.removeChannel(certificatesChannel); // Removed previous certifications channel if it existed
+                supabase.removeChannel(certificatesChannel);
             };
         }
-    }, [userProfile, selectedYearFilter]); // Add selectedYearFilter to dependencies
+    }, [userProfile, selectedYearFilter]);
 
     // Show loading while checking authentication
     if (loading || !userProfile) {
@@ -389,48 +386,13 @@ const AdminDashboard = () => {
         );
     }
 
-    // Removed approveStudent and rejectStudent functions as they are no longer needed
-    // const approveStudent = async (studentId: string) => {
-    //     try {
-    //         const { error } = await (supabase as any)
-    //             .from('user_profiles')
-    //             .update({ status: 'approved' })
-    //             .eq('id', studentId);
-    //         if (!error) {
-    //             toast({ title: "Student approved successfully" });
-    //         } else {
-    //             toast({ title: 'Error approving student', description: error.message, variant: 'destructive' });
-    //         }
-    //     } catch (error: any) {
-    //         console.error('Error approving student:', error);
-    //         toast({ title: 'Error approving student', description: error.message || 'Please try again later.', variant: 'destructive' });
-    //     }
-    // };
-    // const rejectStudent = async (studentId: string) => {
-    //     try {
-    //         const { error } = await (supabase as any)
-    //             .from('user_profiles')
-    //             .update({ status: 'rejected' })
-    //             .eq('id', studentId);
-    //         if (!error) {
-    //             toast({ title: "Student rejected" });
-    //         } else {
-    //             toast({ title: 'Error rejecting student', description: error.message, variant: 'destructive' });
-    //         }
-    //     } catch (error: any) {
-    //         console.error('Error rejecting student:', error);
-    //         toast({ title: 'Error rejecting student', description: error.message || 'Please try again later.', variant: 'destructive' });
-    //     }
-    // };
-
-    // ✅ Promote Student (Function from earlier code)
     const promoteStudent = async (studentId: string, currentYear: number | string) => {
         const numericYear = parseInt(currentYear as string);
         if (isNaN(numericYear)) {
             toast({ title: 'Error', description: 'Invalid year format for promotion', variant: 'destructive' });
             return;
         }
-        if (numericYear >= 4) { // Assuming 4 is the final year
+        if (numericYear >= 4) {
             toast({ title: 'Notice', description: 'Student is already in final year or graduated.' });
             return;
         }
@@ -441,7 +403,7 @@ const AdminDashboard = () => {
             const { error } = await supabase.from('user_profiles').update({ year: nextYear }).eq('id', studentId);
             if (!error) {
                 toast({ title: `Student promoted to year ${nextYear}` });
-                loadAllStudents(); // Reload students to reflect the change
+                loadAllStudents();
             }
             else toast({ title: 'Promotion failed', description: error.message, variant: 'destructive' });
         } catch (error: any) {
@@ -450,7 +412,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // New: Handle Bulk Promote Students
     const handleBulkPromote = async () => {
         if (!yearToPromote) {
             toast({ title: 'Error', description: 'Please select a year to promote.', variant: 'destructive' });
@@ -465,8 +426,8 @@ const AdminDashboard = () => {
 
         if (currentYearNum >= 4) {
             toast({ title: 'Notice', description: 'Students in 4th Year cannot be promoted further.', variant: 'info' });
-            setIsPromoteModalOpen(false); // Close modal
-            setYearToPromote(''); // Reset selection
+            setIsPromoteModalOpen(false);
+            setYearToPromote('');
             return;
         }
 
@@ -478,19 +439,18 @@ const AdminDashboard = () => {
         }
 
         try {
-            // Update all students whose current year matches yearToPromote
             const { error } = await supabase
                 .from('user_profiles')
                 .update({ year: nextYear })
                 .eq('year', currentYearNum)
-                .eq('role', 'student'); // Ensure only students are promoted
+                .eq('role', 'student');
 
             if (!error) {
                 toast({ title: `Successfully promoted all students from year ${currentYearNum} to ${nextYear}.` });
-                loadAllStudents(); // Reload all students to reflect changes
-                loadStats(); // Reload stats if needed (e.g., if total students count changes due to 'graduated' status in your design)
-                setIsPromoteModalOpen(false); // Close modal
-                setYearToPromote(''); // Reset selection
+                loadAllStudents();
+                loadStats();
+                setIsPromoteModalOpen(false);
+                setYearToPromote('');
             } else {
                 toast({ title: 'Bulk promotion failed', description: error.message, variant: 'destructive' });
             }
@@ -500,7 +460,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // Event Management Functions
     const addEvent = async (newEvent: Omit<Event, 'id'>) => {
         try {
             const { error } = await (supabase as any)
@@ -524,7 +483,7 @@ const AdminDashboard = () => {
                 .eq('id', eventId);
             if (!error) {
                 toast({ title: "Event deleted successfully" });
-                loadEvents(); // Reload events after deletion
+                loadEvents();
             } else {
                 toast({ title: 'Error deleting event', description: error.message, variant: 'destructive' });
             }
@@ -534,7 +493,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // Faculty Management Functions
     const addFaculty = async (newFaculty: Omit<Faculty, 'id'>) => {
         try {
             const { error } = await (supabase as any)
@@ -559,7 +517,7 @@ const AdminDashboard = () => {
                 .eq('id', facultyId);
             if (!error) {
                 toast({ title: "Faculty member removed successfully" });
-                loadFaculty(); // Reload faculty after deletion
+                loadFaculty();
             } else {
                 toast({ title: 'Error deleting faculty member', description: error.message, variant: 'destructive' });
             }
@@ -569,7 +527,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // Placement Management Functions
     const addPlacement = async (newPlacement: Omit<Placement, 'id'>) => {
         try {
             const { error } = await (supabase as any)
@@ -593,7 +550,7 @@ const AdminDashboard = () => {
                 .eq('id', placementId);
             if (!error) {
                 toast({ title: "Placement record deleted successfully" });
-                loadPlacements(); // Reload placements after deletion
+                loadPlacements();
             } else {
                 toast({ title: 'Error deleting placement', description: error.message, variant: 'destructive' });
             }
@@ -603,7 +560,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // Gallery Management Functions
     const addGalleryItem = async (newItem: { title: string; description?: string; type: string; url: string }) => {
         try {
             const { error } = await (supabase as any)
@@ -628,7 +584,7 @@ const AdminDashboard = () => {
                 .eq('id', itemId);
             if (!error) {
                 toast({ title: "Gallery item deleted successfully" });
-                loadGallery(); // Reload gallery after deletion
+                loadGallery();
             } else {
                 toast({ title: 'Error deleting gallery item', description: error.message, variant: 'destructive' });
             }
@@ -638,13 +594,9 @@ const AdminDashboard = () => {
         }
     };
 
-    // ✅ Certification Management Functions (Updated to work with 'certificates' table)
     const deleteCertification = async (certId: string, certificateUrl: string) => {
         try {
-            // Delete file from storage if exists
             if (certificateUrl) {
-                // Assuming your certificates are stored in a bucket named 'certificates'
-                // PLEASE VERIFY THIS BUCKET NAME IN YOUR SUPABASE STORAGE
                 const { error: storageError } = await supabase.storage.from('certificates').remove([certificateUrl]);
                 if (storageError) {
                     console.warn('Error deleting certificate file from storage:', storageError);
@@ -652,15 +604,14 @@ const AdminDashboard = () => {
                 }
             }
 
-            // Delete record from database
             const { error } = await (supabase as any)
-                .from('certificates') // Changed from 'certifications'
+                .from('certificates')
                 .delete()
                 .eq('id', certId);
 
             if (!error) {
                 toast({ title: "Certificate deleted successfully" });
-                loadCertifications(); // Reload certificates after deletion
+                loadCertifications();
             } else {
                 toast({ title: 'Error deleting certificate', description: error.message, variant: 'destructive' });
             }
@@ -670,7 +621,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // Student Edit Function
     const updateStudent = async (studentData: Partial<PendingStudent>) => {
         try {
             const { error } = await (supabase as any)
@@ -680,7 +630,7 @@ const AdminDashboard = () => {
             if (!error) {
                 toast({ title: "Student details updated successfully" });
                 setEditingStudent(null);
-                loadAllStudents(); // Reload all students to reflect changes
+                loadAllStudents();
             } else {
                 toast({ title: 'Error updating student', description: error.message, variant: 'destructive' });
             }
@@ -690,7 +640,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // New: Handle Profile Photo Upload
     const handleProfilePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         setNewProfilePhotoFile(file || null);
@@ -702,25 +651,26 @@ const AdminDashboard = () => {
             return;
         }
 
+        setIsPhotoLoading(true); // Start loading
+
         const fileExtension = newProfilePhotoFile.name.split('.').pop();
-        const fileName = `${viewingStudent.id}-${Date.now()}.${fileExtension}`; // Unique filename
-        const filePath = `${fileName}`; // Path in the bucket
+        const fileName = `${viewingStudent.id}-${Date.now()}.${fileExtension}`;
+        const filePath = `${fileName}`;
 
         try {
             const { error: uploadError } = await supabase.storage
-                .from('avatars') // Assuming your student profile photos are in an 'avatars' bucket
+                .from('avatars')
                 .upload(filePath, newProfilePhotoFile, {
-                    upsert: true, // Overwrite if exists (useful if re-uploading)
+                    upsert: true,
                 });
 
             if (uploadError) {
                 throw uploadError;
             }
 
-            // Update user_profiles table with the new photo URL
             const { error: updateError } = await supabase
                 .from('user_profiles')
-                .update({ photo_url: filePath }) // Store the path, not the full public URL
+                .update({ photo_url: filePath })
                 .eq('id', viewingStudent.id);
 
             if (updateError) {
@@ -728,19 +678,18 @@ const AdminDashboard = () => {
             }
 
             toast({ title: '✅ Profile photo updated successfully' });
-            setNewProfilePhotoFile(null); // Clear selected file
-            loadAllStudents(); // Reload students to show updated photo
-            // Update viewingStudent state to reflect the new photo_url immediately
+            setNewProfilePhotoFile(null);
+            loadAllStudents();
             setViewingStudent(prev => prev ? { ...prev, photo_url: supabase.storage.from('avatars').getPublicUrl(filePath).data.publicUrl } : null);
 
         } catch (error: any) {
             console.error('Error uploading profile photo:', error);
             toast({ title: 'Error uploading photo', description: error.message || 'Please try again.', variant: 'destructive' });
+        } finally {
+            setIsPhotoLoading(false); // End loading
         }
     };
 
-
-    // ✅ Results Upload Function (Consolidated here)
     const uploadResult = async () => {
         if (!resultFile || !resultTitle) {
             toast({ title: 'Error', description: 'Please provide a title and choose a file', variant: 'destructive' });
@@ -748,7 +697,6 @@ const AdminDashboard = () => {
         }
         const fileName = `${Date.now()}-${resultFile.name}`;
         try {
-            // Assuming your results are stored in a bucket named 'results'
             const { error: uploadError } = await supabase.storage.from('results').upload(fileName, resultFile, { upsert: true });
             if (uploadError) {
                 toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
@@ -768,7 +716,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // ✅ Notifications Function (Consolidated here)
     const postNotification = async () => {
         if (!notificationTitle || !notificationMessage) {
             toast({ title: 'Fill both title and message', variant: 'destructive' });
@@ -789,13 +736,10 @@ const AdminDashboard = () => {
         }
     };
 
-    // File upload handlers for attendance and results (client-side only for now)
     const handleAttendanceUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
             toast({ title: "Attendance sheet selected", description: `Ready to process: ${file.name}` });
-            // Here you would typically process the file, e.g., send to a serverless function
-            // For now, it's just a placeholder.
         }
     };
 
@@ -804,14 +748,15 @@ const AdminDashboard = () => {
         setResultFile(file);
     };
 
-    // New handler for opening student details to fetch public URL
     const handleViewStudentDetails = async (student: PendingStudent) => {
+        setIsPhotoLoading(true); // Start loading for the displayed photo
         let studentToView = { ...student };
-        if (student.photo_url && !student.photo_url.startsWith('http')) { // Check if it's a relative path
+        if (student.photo_url && !student.photo_url.startsWith('http')) {
             const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(student.photo_url);
             studentToView.photo_url = publicUrlData.publicUrl || student.photo_url;
         }
         setViewingStudent(studentToView);
+        setIsPhotoLoading(false); // End loading
     };
 
     return (
@@ -933,7 +878,6 @@ const AdminDashboard = () => {
                                     <Users className="w-5 h-5" />
                                     <span>Student Management ({allStudents.length})</span>
                                     <div className="ml-auto flex items-center space-x-2">
-                                        {/* Promote Students Dropdown Menu */}
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <Button variant="outline" size="sm" className="h-8 w-8 p-0">
@@ -951,7 +895,6 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {/* Filter by Year Dropdown */}
                                 <div className="mb-4 flex items-center space-x-2">
                                     <Label htmlFor="year-filter" className="sr-only">Filter by Year</Label>
                                     <Select value={selectedYearFilter} onValueChange={(value) => setSelectedYearFilter(value)}>
@@ -977,8 +920,6 @@ const AdminDashboard = () => {
                                                         <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
                                                         <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
                                                         <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Status</th>
-                                                        {/* Removed Actions column header */}
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -989,18 +930,6 @@ const AdminDashboard = () => {
                                                                 {student.student_name}
                                                             </td>
                                                             <td className="border border-gray-200 px-4 py-2">{student.year}</td>
-                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                                                    student.status === 'pending'
-                                                                        ? 'bg-yellow-100 text-yellow-800'
-                                                                        : student.status === 'approved'
-                                                                            ? 'bg-green-100 text-green-800'
-                                                                            : 'bg-red-100 text-red-800'
-                                                                }`}>
-                                                                    {student.status}
-                                                                </span>
-                                                            </td>
-                                                            {/* Removed Actions column data */}
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -1021,7 +950,7 @@ const AdminDashboard = () => {
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
                                     <BookOpen className="w-5 h-5" />
-                                    <span>Student Certificates ({certifications.length})</span> {/* Updated title */}
+                                    <span>Student Certificates ({certifications.length})</span>
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
@@ -1073,11 +1002,10 @@ const AdminDashboard = () => {
                                                                             </Button>
                                                                         </a>
                                                                     )}
-                                                                    {/* Removed status-related buttons as 'status' column is not in 'certificates' table */}
                                                                     <Button
                                                                         size="sm"
                                                                         variant="destructive"
-                                                                        onClick={() => deleteCertification(cert.id, cert.certificate_url)} // Pass correct URL column
+                                                                        onClick={() => deleteCertification(cert.id, cert.certificate_url)}
                                                                     >
                                                                         <Trash2 className="w-4 h-4" />
                                                                     </Button>
@@ -1098,8 +1026,8 @@ const AdminDashboard = () => {
                                                         <tr className="bg-gray-50">
                                                             <th className="border border-gray-200 px-4 py-2 text-left">Student</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
-                                                            <th className="border border-gray-200 px-4 py-2 text-left">Certificate Name</th> {/* Updated header */}
-                                                            <th className="border border-gray-200 px-4 py-2 text-left">Uploaded At</th> {/* Updated header */}
+                                                            <th className="border border-gray-200 px-4 py-2 text-left">Certificate Name</th>
+                                                            <th className="border border-gray-200 px-4 py-2 text-left">Uploaded At</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
                                                         </tr>
                                                     </thead>
@@ -1112,15 +1040,15 @@ const AdminDashboard = () => {
                                                                 <td className="border border-gray-200 px-4 py-2">
                                                                     {cert.ht_no}
                                                                 </td>
-                                                                <td className="border border-gray-200 px-4 py-2">{cert.certificate_name}</td> {/* Updated data access */}
+                                                                <td className="border border-gray-200 px-4 py-2">{cert.certificate_name}</td>
                                                                 <td className="border border-gray-200 px-4 py-2">
-                                                                    {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'} {/* Updated data access and formatting */}
+                                                                    {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'}
                                                                 </td>
                                                                 <td className="border border-gray-200 px-4 py-2">
                                                                     <div className="flex space-x-2">
                                                                         {cert.certificate_url && (
                                                                             <a
-                                                                                href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl} // Updated bucket name for URL
+                                                                                href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
                                                                                 target="_blank"
                                                                                 rel="noopener noreferrer"
                                                                             >
@@ -1129,11 +1057,10 @@ const AdminDashboard = () => {
                                                                                 </Button>
                                                                             </a>
                                                                         )}
-                                                                        {/* Removed status-related buttons as 'status' column is not in 'certificates' table */}
                                                                         <Button
                                                                             size="sm"
                                                                             variant="destructive"
-                                                                            onClick={() => deleteCertification(cert.id, cert.certificate_url)} // Pass correct URL column
+                                                                            onClick={() => deleteCertification(cert.id, cert.certificate_url)}
                                                                         >
                                                                             <Trash2 className="w-4 h-4" />
                                                                         </Button>
@@ -1587,7 +1514,6 @@ const AdminDashboard = () => {
                                         <SelectItem value="1">1st Year</SelectItem>
                                         <SelectItem value="2">2nd Year</SelectItem>
                                         <SelectItem value="3">3rd Year</SelectItem>
-                                        {/* Students in 4th year typically don't get promoted further */}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -1599,7 +1525,7 @@ const AdminDashboard = () => {
                 </Dialog>
 
                 {/* Student Detail View Dialog */}
-                <Dialog open={!!viewingStudent} onOpenChange={() => { setViewingStudent(null); setNewProfilePhotoFile(null); }}> {/* Clear photo file on close */}
+                <Dialog open={!!viewingStudent} onOpenChange={() => { setViewingStudent(null); setNewProfilePhotoFile(null); }}>
                     <DialogContent className="sm:max-w-[500px]">
                         <DialogHeader>
                             <DialogTitle>Student Details</DialogTitle>
@@ -1607,23 +1533,29 @@ const AdminDashboard = () => {
                         {viewingStudent && (
                             <div className="grid gap-4 py-4">
                                 {/* Profile Photo Display */}
-                                <div className="flex flex-col items-center mb-4">
-                                    {viewingStudent.photo_url ? (
-                                        <img
-                                            src={viewingStudent.photo_url} // Now directly use the photo_url as it's already a public URL
-                                            alt="Profile Photo"
-                                            className="w-32 h-32 rounded-full object-cover border-2 border-gray-200 mb-2"
-                                        />
-                                    ) : (
-                                        <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 mb-2">
-                                            <User className="w-16 h-16" />
+                                <div className="flex flex-col items-center mb-4 space-y-2"> {/* Adjusted spacing */}
+                                    {isPhotoLoading ? (
+                                        <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                                         </div>
+                                    ) : (
+                                        viewingStudent.photo_url ? (
+                                            <img
+                                                src={viewingStudent.photo_url}
+                                                alt="Profile Photo"
+                                                className="w-32 h-32 rounded-full object-cover border-2 border-gray-200"
+                                            />
+                                        ) : (
+                                            <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                                                <User className="w-16 h-16" />
+                                            </div>
+                                        )
                                     )}
                                     <span className="text-sm text-gray-500">Profile Photo</span>
                                 </div>
 
                                 {/* Photo Upload Option */}
-                                <div className="grid grid-cols-4 items-center gap-4">
+                                <div className="grid grid-cols-4 items-center gap-2"> {/* Adjusted spacing */}
                                     <Label htmlFor="photo-upload" className="text-right">
                                         Update Photo
                                     </Label>
@@ -1636,13 +1568,13 @@ const AdminDashboard = () => {
                                     />
                                 </div>
                                 {newProfilePhotoFile && (
-                                    <Button onClick={uploadProfilePhoto} className="w-full">
-                                        Upload New Photo
+                                    <Button onClick={uploadProfilePhoto} className="w-full" disabled={isPhotoLoading}>
+                                        {isPhotoLoading ? 'Uploading...' : 'Upload New Photo'}
                                     </Button>
                                 )}
 
                                 {/* Student Details */}
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4"> {/* Adjusted spacing */}
                                     <div className="font-semibold">H.T No.:</div>
                                     <div>{viewingStudent.ht_no}</div>
 
@@ -1668,15 +1600,12 @@ const AdminDashboard = () => {
                                     <div>{viewingStudent.emergency_no || 'N/A'}</div>
                                 </div>
                                 <Button onClick={() => {
-                                    setEditingStudent(viewingStudent); // Set the student for editing
-                                    setViewingStudent(null); // Close view modal
+                                    setEditingStudent(viewingStudent);
+                                    setViewingStudent(null);
                                 }}>
                                     Edit Student
                                 </Button>
-                                {/* Removed Approve/Reject buttons */}
-                                <Button size="sm" variant="outline" onClick={() => promoteStudent(viewingStudent.id, viewingStudent.year)} className="mt-2">
-                                    Promote Student
-                                </Button>
+                                {/* Removed individual Promote Student button */}
                             </div>
                         )}
                     </DialogContent>
