@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Users, UserCheck, Menu, X } from 'lucide-react';
 import LoginModal from './LoginModal';
 import { useAuth } from '@/contexts/AuthContext';
+import AchievementsModal from './AchievementsModal';
 
 const Header = () => {
   const [showStudentLogin, setShowStudentLogin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [showCreateProfile, setShowCreateProfile] = useState(false);
+  const [showAchievementsModal, setShowAchievementsModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
@@ -23,6 +24,12 @@ const Header = () => {
   ];
 
   const scrollToSection = (href: string) => {
+    if (href === '#achievements') {
+      setShowAchievementsModal(true);
+      setMobileMenuOpen(false);
+      return;
+    }
+
     const element = document.querySelector(href);
     if (element) element.scrollIntoView({ behavior: 'smooth' });
     setMobileMenuOpen(false);
@@ -137,6 +144,11 @@ const Header = () => {
         userType="admin"
       />
 
+      {/* Achievements Modal */}
+      <AchievementsModal
+        open={showAchievementsModal}
+        onClose={() => setShowAchievementsModal(false)}
+      />
     </>
   );
 };
