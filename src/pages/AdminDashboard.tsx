@@ -35,8 +35,8 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
-// GitHub utilities
-import { uploadFileToGithub, deleteFileFromGithub, fetchAndParseTsFile } from '@/lib/github-utils';
+// GitHub utilities - REMOVED uploadFileToGithub as requested
+import { deleteFileFromGithub, fetchAndParseTsFile } from '@/lib/github-utils';
 
 // --- NEW IMPORTS FOR UPLOAD FORMS ---
 import GalleryUploadForm from '@/components/GalleryUploadForm';
@@ -178,7 +178,7 @@ const AdminDashboard = () => {
     const [resultTitle, setResultTitle] = useState('');
     const [resultFile, setResultFile] = useState<File | null>(null);
 
-    // Notifications State (Supabase backed) - FIX APPLIED HERE
+    // Notifications State (Supabase backed)
     const [notificationTitle, setNotificationTitle] = useState('');
     const [notificationMessage, setNotificationMessage] = useState(''); // Corrected setter name
 
@@ -195,6 +195,15 @@ const AdminDashboard = () => {
     );
 
     // --- Generic GitHub Data Persistence Function ---
+    // IMPORTANT: Since 'updateGithubContentFile' and 'uploadFileToGithub' (for content updates)
+    // are now explicitly removed/not imported, the logic here for `persistGitHubData`
+    // will need to rely on a different function from `github-utils` that handles
+    // updating existing file content. If such a function doesn't exist, this `persistGitHubData`
+    // function will need to be re-evaluated or adapted, or the functionality moved entirely
+    // to the individual `*UploadForm` components (if they now handle direct file content commits).
+    // For now, I'm making a placeholder call to a theoretical `updateGithubFileContent`
+    // assuming it exists or needs to be implemented in `github-utils.ts`.
+    // If you intend for `deleteFileFromGithub` to also handle updates, that's not its typical role.
     const persistGitHubData = useCallback(async <T extends { id: string }>(
         dataArray: T[],
         filePath: string,
@@ -204,20 +213,38 @@ const AdminDashboard = () => {
         setIsUpdating(true);
         try {
             const formattedContent = `export const ${variableName} = ${JSON.stringify(dataArray, null, 2)};\n`;
-            // Assuming uploadFileToGithub can handle content updates by overwriting (upsert)
-            // If your github-utils requires a separate 'update' function with SHA, this line needs adjustment.
-            // Based on previous discussions, 'uploadFileToGithub' was configured for this purpose.
-            const success = await uploadFileToGithub(filePath, new TextEncoder().encode(formattedContent), commitMessage, true);
 
-            if (!success) {
-                toast({ title: 'Error', description: 'Failed to sync changes to GitHub. Please refresh.', variant: 'destructive' });
-                // Re-load data to ensure consistency with remote
-                if (variableName === 'events') loadEvents();
-                if (variableName === 'faculty') loadFaculty();
-                if (variableName === 'galleryItems') loadGallery();
-                if (variableName === 'placements') loadPlacements();
-            }
-            return success;
+            // Placeholder for content update.
+            // You MUST ensure your '@/lib/github-utils' has a function like `updateGithubFileContent`
+            // that takes `filePath`, `content`, `commitMessage`, and optionally `sha` (for updates).
+            // If the original `updateGithubContentFile` was what you relied on, and it's missing,
+            // this is a critical gap that needs to be filled in `github-utils.ts`.
+            // For example, it might involve fetching the file's current SHA, then calling a low-level
+            // GitHub API update.
+            // For the sake of making the dashboard compile, I'm adding a warning and returning false.
+            // This function WILL NOT work correctly for content updates without a proper utility.
+            console.error("CRITICAL: updateGithubContentFile functionality is missing. Please ensure '@/lib/github-utils' provides a method to update file content.");
+            toast({ title: 'Configuration Error', description: 'GitHub file update utility is missing. Contact developer.', variant: 'destructive' });
+            return false; // Indicate failure until proper utility is provided.
+
+            // Example of what might be needed in github-utils if `updateGithubContentFile` was removed:
+            // import { Octokit } from '@octokit/rest';
+            // const octokit = new Octokit({ auth: process.env.NEXT_PUBLIC_GITHUB_TOKEN });
+            // async function updateFileInGithub(filePath, content, message, sha) {
+            //   try {
+            //     await octokit.repos.updateFile({
+            //       owner: process.env.NEXT_PUBLIC_GITHUB_OWNER,
+            //       repo: process.env.NEXT_PUBLIC_GITHUB_REPO,
+            //       path: filePath,
+            //       message,
+            //       content: Buffer.from(content).toString('base64'),
+            //       sha, // Crucial for updating existing files
+            //     });
+            //     return true;
+            //   } catch (error) { return false; }
+            // }
+            // You would then fetch SHA before calling this.
+
         } catch (error: any) {
             console.error(`Error persisting ${variableName} data to GitHub:`, error);
             toast({ title: 'Persistence Error', description: `Failed to save changes: ${error.message}`, variant: 'destructive' });
@@ -225,7 +252,7 @@ const AdminDashboard = () => {
         } finally {
             setIsUpdating(false);
         }
-    }, [toast, loadEvents, loadFaculty, loadGallery, loadPlacements, uploadFileToGithub]);
+    }, [toast, loadEvents, loadFaculty, loadGallery, loadPlacements]);
 
     // --- Data Loading Functions ---
 
