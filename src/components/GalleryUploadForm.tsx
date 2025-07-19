@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { GalleryItem } from '@/lib/types';
-import { uploadToGitHub } from '@/lib/githubUploader';
 import { toast } from 'sonner';
 
 const GalleryUploadForm = () => {
@@ -15,25 +13,23 @@ const GalleryUploadForm = () => {
       return;
     }
 
-    const imagePath = `public/gallery/${imageFile.name}`;
-    const metadataPath = `data/gallery.json`;
-
-    const newItem: GalleryItem = {
-      title,
-      description,
-      image: imageFile.name,
-      uploadedAt: new Date().toISOString(),
-    };
+    const formData = new FormData();
+    formData.append('type', 'gallery');
+    formData.append('title', title);
+    formData.append('description', description);
+    formData.append('image', imageFile);
 
     setIsUploading(true);
 
     try {
-      await uploadToGitHub({
-        file: imageFile,
-        imagePath,
-        metadataPath,
-        newItem,
+      const res = await fetch('/api/upload-content', {
+        method: 'POST',
+        body: formData,
       });
+
+      if (!res.ok) {
+        throw new Error('Upload failed');
+      }
 
       toast.success('Gallery item uploaded!');
       setTitle('');
