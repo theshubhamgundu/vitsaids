@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,16 +31,14 @@ import {
     sortableKeyboardCoordinates,
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { useSortable } from '@dnd-kit/sortable'; // CORRECTED SYNTAX HERE
+import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
 // GitHub utilities
-// ALERT: As discussed, fetchAndParseTsFile and deleteFileFromGithub are not exported by your provided github-utils.ts
-// The functions relying on them (loadEvents, loadFaculty, loadPlacements, loadGallery, handleDelete*, persistGitHubData)
-// will currently either log errors/warnings or be no-ops for GitHub interactions.
-// This import statement is correct based on what your github-utils.ts *actually exports*.
-import { uploadToGitHubRepo } from '@/lib/github-utils';
+// IMPORTANT: fetchAndParseTsFile, deleteFileFromGithub, updateGithubContentFile are NOT exported by your provided github-utils.ts
+// You MUST implement these functions in '@/lib/github-utils' for GitHub-backed features to work.
+import { uploadToGitHubRepo } from '@/lib/github-utils'; // This is the only one you exported earlier.
 
 
 // --- NEW IMPORTS FOR UPLOAD FORMS ---
@@ -48,6 +46,7 @@ import GalleryUploadForm from '@/components/GalleryUploadForm';
 import EventsUploadForm from '@/components/EventsUploadForm';
 import FacultyUploadForm from '@/components/FacultyUploadForm';
 import PlacementsUploadForm from '@/components/PlacementsUploadForm';
+// Verify: Make sure none of these form components import AdminDashboard back (to avoid circular dependencies)
 // --- END NEW IMPORTS ---
 
 
@@ -117,6 +116,7 @@ interface CertificateItem {
     };
 }
 
+// CRITICAL FIX: Moved SortableItem component definition above AdminDashboard to prevent ReferenceError
 // Reusable Sortable Item Component for DND-Kit
 const SortableItem = ({ id, children }: { id: string; children: React.ReactNode }) => {
     const {
@@ -185,7 +185,7 @@ const AdminDashboard = () => {
 
     // Notifications State (Supabase backed)
     const [notificationTitle, setNotificationTitle] = useState('');
-    const [notificationMessage, setNotificationMessage] = useState(''); // Corrected setter name
+    const [notificationMessage, setNotificationMessage] = useState('');
 
     // Certificate Search State (Supabase backed)
     const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
@@ -200,7 +200,7 @@ const AdminDashboard = () => {
     );
 
     // --- Generic GitHub Data Persistence Function ---
-    // ALERT: This function will now ONLY simulate success or fail, as your `github-utils.ts`
+    // IMPORTANT: This function will only simulate success or fail, as your `github-utils.ts`
     // doesn't export the `updateGithubContentFile` or `deleteFileFromGithub` directly.
     // If you need actual GitHub persistence for reordering/deleting, you MUST implement
     // corresponding `update` and `delete` functions in `github-utils.ts`
@@ -213,25 +213,11 @@ const AdminDashboard = () => {
     ) => {
         setIsUpdating(true);
         try {
-            const formattedContent = `export const ${variableName} = ${JSON.stringify(dataArray, null, 2)};\n`;
-
-            // IMPORTANT: Since `uploadToGitHubRepo` is for 'uploading' a file
-            // (likely new files or overwriting by default), and `deleteFileFromGithub`
-            // and `fetchAndParseTsFile` are no longer imported/exist,
-            // this `persistGitHubData` function currently lacks the means to
-            // truly update existing content files on GitHub.
-            // For now, I'm making it return `true` to allow the optimistic UI update
-            // to persist, but be aware this does NOT perform an actual GitHub content update
-            // with your current `github-utils.ts` export.
-            // You will need to extend `github-utils.ts` with explicit `update` and `fetch` content functions.
-            console.warn(`WARNING: persistGitHubData is currently a NO-OP for actual GitHub file content updates/deletions from AdminDashboard.tsx. 
-                Your github-utils.ts only exports 'uploadToGitHubRepo'. 
-                Implement 'updateFileContentInGithub' and 'fetchFileContentFromGithub' for full functionality.`);
-            
-            // Simulating success for now, as real implementation is missing.
-            // If you need actual GitHub updates, add relevant functions to github-utils.ts
-            // and replace this `return true;` with calls to them.
-            return true; 
+            // For now, this is a NO-OP. Actual GitHub API interaction needs to be implemented.
+            console.warn(`WARNING: persistGitHubData is currently a NO-OP for actual GitHub file content updates/deletions from AdminDashboard.tsx.
+                You need to implement 'updateFileContentInGithub' and 'fetchFileContentFromGithub' in your github-utils.ts.`);
+            toast({ title: 'Persistence Not Implemented', description: 'GitHub file operations are not yet enabled. Changes are not saved.', variant: 'destructive' });
+            return false; // Indicate failure to revert optimistic UI updates
         } catch (error: any) {
             console.error(`Error simulating persistence of ${variableName} data to GitHub:`, error);
             toast({ title: 'Persistence Error', description: `Failed to save changes: ${error.message}`, variant: 'destructive' });
@@ -239,12 +225,11 @@ const AdminDashboard = () => {
         } finally {
             setIsUpdating(false);
         }
-    }, [toast, loadEvents, loadFaculty, loadGallery, loadPlacements]); // Note: `uploadToGitHubRepo` is removed from dependencies.
+    }, [toast]);
 
     // --- Data Loading Functions ---
-    // ALERT: `fetchAndParseTsFile` is also NOT exported from your `github-utils.ts`.
-    // The `loadEvents`, `loadFaculty`, `loadPlacements`, `loadGallery`, and `loadStats`
-    // functions currently rely on this missing utility to fetch data.
+    // IMPORTANT: `fetchAndParseTsFile` is also NOT exported from your `github-utils.ts`.
+    // These functions currently rely on this missing utility to fetch data.
     // They will need to be updated to use a functional `fetch` utility from `github-utils.ts`
     // or their data loading mechanism needs to change.
     // For now, I'm adding `console.error` and returning empty arrays/default stats.
@@ -279,15 +264,15 @@ const AdminDashboard = () => {
     const loadEvents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // ALERT: fetchAndParseTsFile is missing from github-utils.ts. This will fail.
-            console.error("CRITICAL: fetchAndParseTsFile is missing. Cannot load events data from GitHub.");
-            // const data = await fetchAndParseTsFile('public/events/events.ts', 'events');
+            // CRITICAL: fetchAndParseTsFile is missing from github-utils.ts. This will fail.
+            console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load events data from GitHub.");
+            // const data = await fetchAndParseTsFile('public/events/events.ts', 'events'); // COMMENTED OUT: Not implemented
             const data: Event[] = []; // Default to empty array to prevent crash
             setEvents(data);
             setStats(prev => ({ ...prev, activeEvents: data.length || 0 }));
         } catch (error: any) {
             console.error('Error loading events:', error);
-            toast({ title: 'Error loading events', description: error.message || 'Please try again later.', variant: 'destructive' });
+            toast({ title: 'Error loading events', description: error.message || 'Please implement GitHub fetch.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -296,15 +281,15 @@ const AdminDashboard = () => {
     const loadFaculty = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // ALERT: fetchAndParseTsFile is missing from github-utils.ts. This will fail.
-            console.error("CRITICAL: fetchAndParseTsFile is missing. Cannot load faculty data from GitHub.");
-            // const data = await fetchAndParseTsFile('public/faculty/faculty.ts', 'faculty');
+            // CRITICAL: fetchAndParseTsFile is missing from github-utils.ts. This will fail.
+            console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load faculty data from GitHub.");
+            // const data = await fetchAndParseTsFile('public/faculty/faculty.ts', 'faculty'); // COMMENTED OUT: Not implemented
             const data: Faculty[] = []; // Default to empty array
             setFaculty(data);
             setStats(prev => ({ ...prev, facultyMembers: data.length || 0 }));
         } catch (error: any) {
             console.error('Error loading faculty:', error);
-            toast({ title: 'Error loading faculty', description: error.message || 'Please try again later.', variant: 'destructive' });
+            toast({ title: 'Error loading faculty', description: error.message || 'Please implement GitHub fetch.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -313,15 +298,15 @@ const AdminDashboard = () => {
     const loadPlacements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // ALERT: fetchAndParseTsFile is missing from github-utils.ts. This will fail.
-            console.error("CRITICAL: fetchAndParseTsFile is missing. Cannot load placements data from GitHub.");
-            // const data = await fetchAndParseTsFile('public/placements/placements.ts', 'placements');
+            // CRITICAL: fetchAndParseTsFile is missing from github-utils.ts. This will fail.
+            console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load placements data from GitHub.");
+            // const data = await fetchAndParseTsFile('public/placements/placements.ts', 'placements'); // COMMENTED OUT: Not implemented
             const data: Placement[] = []; // Default to empty array
             setPlacements(data);
             setStats(prev => ({ ...prev, placements: data.length || 0 }));
         } catch (error: any) {
             console.error('Error loading placements:', error);
-            toast({ title: 'Error loading placements', description: error.message || 'Please try again later.', variant: 'destructive' });
+            toast({ title: 'Error loading placements', description: error.message || 'Please implement GitHub fetch.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -330,14 +315,14 @@ const AdminDashboard = () => {
     const loadGallery = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // ALERT: fetchAndParseTsFile is missing from github-utils.ts. This will fail.
-            console.error("CRITICAL: fetchAndParseTsFile is missing. Cannot load gallery data from GitHub.");
-            // const data = await fetchAndParseTsFile('public/gallery/gallery.ts', 'galleryItems');
+            // CRITICAL: fetchAndParseTsFile is missing from github-utils.ts. This will fail.
+            console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load gallery data from GitHub.");
+            // const data = await fetchAndParseTsFile('public/gallery/gallery.ts', 'galleryItems'); // COMMENTED OUT: Not implemented
             const data: GalleryItem[] = []; // Default to empty array
             setGallery(data);
         } catch (error: any) {
             console.error('Error loading gallery:', error);
-            toast({ title: 'Error loading gallery', description: error.message || 'Please try again later.', variant: 'destructive' });
+            toast({ title: 'Error loading gallery', description: error.message || 'Please implement GitHub fetch.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -366,32 +351,26 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
+    // Fixed: loadStats now relies on already loaded state or fetches directly from Supabase for student count
     const loadStats = useCallback(async () => {
         try {
             const { count: studentsCount, error: studentsError } = await supabase.from('user_profiles').select('id', { count: 'exact' }).eq('role', 'student');
             if (studentsError) throw studentsError;
 
-            // ALERT: fetchAndParseTsFile is missing. These calls will internally log errors/return empty data.
-            // The counts for events, faculty, placements will currently be 0 unless real fetch is implemented.
-            await Promise.all([
-                loadEvents(),
-                loadFaculty(),
-                loadPlacements()
-            ]);
-
+            // These counts will reflect the state from loadEvents/Faculty/Placements
+            // If those fail due to missing GitHub utilities, these will be 0.
             setStats({
                 totalStudents: studentsCount || 0,
-                activeEvents: events.length || 0, // Will be 0 if loadEvents failed to fetch
-                facultyMembers: faculty.length || 0, // Will be 0 if loadFaculty failed to fetch
-                placements: placements.length || 0 // Will be 0 if loadPlacements failed to fetch
+                activeEvents: events.length || 0,
+                facultyMembers: faculty.length || 0,
+                placements: placements.length || 0
             });
 
         } catch (error: any) {
             console.error('Error loading stats:', error);
             toast({ title: 'Error loading dashboard stats', description: error.message || 'Please try again later.', variant: 'destructive' });
         }
-    }, [toast, loadEvents, loadFaculty, loadPlacements, events, faculty, placements]);
-
+    }, [toast, events.length, faculty.length, placements.length]); // Dependencies adjusted
 
     useEffect(() => {
         if (!loading && userProfile?.role === 'admin') {
@@ -401,7 +380,7 @@ const AdminDashboard = () => {
             loadPlacements();
             loadGallery();
             loadCertifications();
-            loadStats();
+            loadStats(); // Call after other loads, as it depends on their state
 
             // Supabase Subscriptions (for students & certificates)
             const studentsChannel = supabase
@@ -623,8 +602,8 @@ const AdminDashboard = () => {
         event: DragEndEvent,
         dataArray: T[],
         setDataArray: React.Dispatch<React.SetStateAction<T[]>>,
-        filePath: string,
-        variableName: string
+        filePath: string, // e.g., 'public/events/events.ts'
+        variableName: string // e.g., 'events'
     ) => {
         const { active, over } = event;
 
@@ -635,12 +614,14 @@ const AdminDashboard = () => {
             if (oldIndex !== -1 && newIndex !== -1) {
                 const newOrderedArray = arrayMove(dataArray, oldIndex, newIndex);
                 setDataArray(newOrderedArray); // Optimistic UI update
+
                 // This call will currently be a NO-OP due to missing GitHub update utility
                 const success = await persistGitHubData(newOrderedArray, filePath, variableName, `Reordered ${variableName}`);
                 if (!success) {
                     setDataArray(dataArray); // Revert if API call fails
+                    toast({ title: 'Reorder Failed', description: 'Changes could not be saved to GitHub. Please implement persistGitHubData fully.', variant: 'destructive' });
                 } else {
-                    toast({ title: 'Reordered successfully', description: `Items in ${variableName} have been reordered.` });
+                    toast({ title: 'Reordered successfully', description: `Items in ${variableName} have been reordered (simulated).` });
                 }
             }
         }
@@ -655,9 +636,9 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (eventToDelete.image) {
-                // ALERT: deleteFileFromGithub is missing from github-utils.ts. This will fail.
-                console.error("CRITICAL: deleteFileFromGithub is missing. Cannot delete event image from GitHub.");
-                // await deleteFileFromGithub(pathInRepo, `Delete event image: ${eventToDelete.title}`);
+                // CRITICAL: deleteFileFromGithub is missing from github-utils.ts. This will fail.
+                console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete event image from GitHub.");
+                // await deleteFileFromGithub(pathInRepo, `Delete event image: ${eventToDelete.title}`); // COMMENTED OUT: Not implemented
             }
 
             const updatedEvents = events.filter(event => event.id !== eventToDelete.id);
@@ -666,10 +647,10 @@ const AdminDashboard = () => {
             // This call will currently be a NO-OP due to missing GitHub update utility
             const success = await persistGitHubData(updatedEvents, 'public/events/events.ts', 'events', `Delete event: ${eventToDelete.title}`);
             if (!success) {
-                setEvents(events);
+                setEvents(events); // Revert if API call fails
                 toast({ title: 'Error', description: 'Failed to delete event details from GitHub. Please refresh.', variant: 'destructive' });
             } else {
-                toast({ title: 'Event deleted successfully' });
+                toast({ title: 'Event deleted successfully (simulated)' });
                 loadStats();
             }
         } catch (error: any) {
@@ -689,9 +670,9 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (facultyToDelete.image) {
-                // ALERT: deleteFileFromGithub is missing from github-utils.ts. This will fail.
-                console.error("CRITICAL: deleteFileFromGithub is missing. Cannot delete faculty image from GitHub.");
-                // await deleteFileFromGithub(pathInRepo, `Delete faculty image: ${facultyToDelete.name}`);
+                // CRITICAL: deleteFileFromGithub is missing from github-utils.ts. This will fail.
+                console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete faculty image from GitHub.");
+                // await deleteFileFromGithub(pathInRepo, `Delete faculty image: ${facultyToDelete.name}`); // COMMENTED OUT: Not implemented
             }
 
             const updatedFaculty = faculty.filter(member => member.id !== facultyToDelete.id);
@@ -700,10 +681,10 @@ const AdminDashboard = () => {
             // This call will currently be a NO-OP due to missing GitHub update utility
             const success = await persistGitHubData(updatedFaculty, 'public/faculty/faculty.ts', 'faculty', `Delete faculty: ${facultyToDelete.name}`);
             if (!success) {
-                setFaculty(faculty);
+                setFaculty(faculty); // Revert if API call fails
                 toast({ title: 'Error', description: 'Failed to delete faculty details from GitHub. Please refresh.', variant: 'destructive' });
             } else {
-                toast({ title: 'Faculty member deleted successfully' });
+                toast({ title: 'Faculty member deleted successfully (simulated)' });
                 loadStats();
             }
         } catch (error: any) {
@@ -723,9 +704,9 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (itemToDelete.image) {
-                // ALERT: deleteFileFromGithub is missing from github-utils.ts. This will fail.
-                console.error("CRITICAL: deleteFileFromGithub is missing. Cannot delete gallery image from GitHub.");
-                // await deleteFileFromGithub(pathInRepo, `Delete gallery image: ${itemToDelete.title}`);
+                // CRITICAL: deleteFileFromGithub is missing from github-utils.ts. This will fail.
+                console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete gallery image from GitHub.");
+                // await deleteFileFromGithub(pathInRepo, `Delete gallery image: ${itemToDelete.title}`); // COMMENTED OUT: Not implemented
             }
 
             const updatedGallery = gallery.filter(item => item.id !== itemToDelete.id);
@@ -734,10 +715,10 @@ const AdminDashboard = () => {
             // This call will currently be a NO-OP due to missing GitHub update utility
             const success = await persistGitHubData(updatedGallery, 'public/gallery/gallery.ts', 'galleryItems', `Delete gallery item: ${itemToDelete.title}`);
             if (!success) {
-                setGallery(gallery);
+                setGallery(gallery); // Revert if API call fails
                 toast({ title: 'Error', description: 'Failed to delete gallery item from GitHub. Please refresh.', variant: 'destructive' });
             } else {
-                toast({ title: 'Gallery item deleted successfully' });
+                toast({ title: 'Gallery item deleted successfully (simulated)' });
             }
         } catch (error: any) {
             console.error('Error deleting gallery item:', error);
@@ -756,9 +737,9 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (itemToDelete.image) {
-                // ALERT: deleteFileFromGithub is missing from github-utils.ts. This will fail.
-                console.error("CRITICAL: deleteFileFromGithub is missing. Cannot delete placement image from GitHub.");
-                // await deleteFileFromGithub(pathInRepo, `Delete placement image: ${itemToDelete.student_name}`);
+                // CRITICAL: deleteFileFromGithub is missing from github-utils.ts. This will fail.
+                console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete placement image from GitHub.");
+                // await deleteFileFromGithub(pathInRepo, `Delete placement image: ${itemToDelete.student_name}`); // COMMENTED OUT: Not implemented
             }
 
             const updatedPlacements = placements.filter(item => item.id !== itemToDelete.id);
@@ -767,10 +748,10 @@ const AdminDashboard = () => {
             // This call will currently be a NO-OP due to missing GitHub update utility
             const success = await persistGitHubData(updatedPlacements, 'public/placements/placements.ts', 'placements', `Delete placement: ${itemToDelete.student_name}`);
             if (!success) {
-                setPlacements(placements);
+                setPlacements(placements); // Revert if API call fails
                 toast({ title: 'Error', description: 'Failed to delete placement record from GitHub. Please refresh.', variant: 'destructive' });
             } else {
-                toast({ title: 'Placement record deleted successfully' });
+                toast({ title: 'Placement record deleted successfully (simulated)' });
                 loadStats();
             }
         } catch (error: any) {
@@ -913,6 +894,19 @@ const AdminDashboard = () => {
         setResultFile(file);
     };
 
+    // Recommendation: Use constants for tab keys
+    const TAB_VALUES = {
+        STUDENTS: 'students',
+        CERTIFICATIONS: 'certifications',
+        EVENTS: 'events',
+        FACULTY: 'faculty',
+        PLACEMENTS: 'placements',
+        ATTENDANCE: 'attendance',
+        RESULTS: 'results',
+        TIMETABLE: 'timetable',
+        GALLERY: 'gallery',
+    };
+
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -986,48 +980,48 @@ const AdminDashboard = () => {
                     </Card>
                 </div>
 
-                <Tabs defaultValue="students" className="space-y-6">
+                <Tabs defaultValue={TAB_VALUES.STUDENTS} className="space-y-6">
                     <TabsList className="grid w-full grid-cols-3 lg:grid-cols-9 gap-1">
-                        <TabsTrigger value="students" className="flex items-center space-x-1 text-xs lg:text-sm">
+                        <TabsTrigger value={TAB_VALUES.STUDENTS} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <Users className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Students</span>
                         </TabsTrigger>
-                        <TabsTrigger value="certifications" className="flex items-center space-x-1 text-xs lg:text-sm">
+                        <TabsTrigger value={TAB_VALUES.CERTIFICATIONS} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <BookOpen className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Certs</span>
                         </TabsTrigger>
-                        <TabsTrigger value="events" className="flex items-center space-x-1 text-xs lg:text-sm">
+                        <TabsTrigger value={TAB_VALUES.EVENTS} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <Calendar className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Events</span>
                         </TabsTrigger>
-                        <TabsTrigger value="faculty" className="flex items-center space-x-1 text-xs lg:text-sm">
+                        <TabsTrigger value={TAB_VALUES.FACULTY} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <GraduationCap className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Faculty</span>
                         </TabsTrigger>
-                        <TabsTrigger value="placements" className="flex items-center space-x-1 text-xs lg:text-sm">
+                        <TabsTrigger value={TAB_VALUES.PLACEMENTS} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <Trophy className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Placements</span>
                         </TabsTrigger>
-                        <TabsTrigger value="attendance" className="flex items-center space-x-1 text-xs lg:text-sm">
+                        <TabsTrigger value={TAB_VALUES.ATTENDANCE} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <Clock className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Attendance</span>
                         </TabsTrigger>
-                        <TabsTrigger value="results" className="flex items-center space-x-1 text-xs lg:text-sm">
+                        <TabsTrigger value={TAB_VALUES.RESULTS} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <FileText className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Results</span>
                         </TabsTrigger>
-                        <TabsTrigger value="timetable" className="flex items-center space-x-1 text-xs lg:text-sm">
+                        <TabsTrigger value={TAB_VALUES.TIMETABLE} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <BarChart3 className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Timetable</span>
                         </TabsTrigger>
-                        <TabsTrigger value="gallery" className="flex items-center space-x-1 text-xs lg:text-sm">
+                        <TabsTrigger value={TAB_VALUES.GALLERY} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <Image className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Gallery</span>
                         </TabsTrigger>
                     </TabsList>
 
                     {/* Students Tab Content (Supabase Backed) */}
-                    <TabsContent value="students">
+                    <TabsContent value={TAB_VALUES.STUDENTS}>
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1102,7 +1096,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Certifications Tab Content (Supabase Backed) */}
-                    <TabsContent value="certifications">
+                    <TabsContent value={TAB_VALUES.CERTIFICATIONS}>
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1149,15 +1143,19 @@ const AdminDashboard = () => {
                                                             <td className="border border-gray-200 px-4 py-2">
                                                                 <div className="flex space-x-2">
                                                                     {cert.certificate_url && (
-                                                                        <a
-                                                                            href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
+                                                                        <Button
+                                                                            asChild // Recommendation: use asChild for a inside Button
+                                                                            size="sm"
+                                                                            variant="outline"
                                                                         >
-                                                                            <Button size="sm" variant="outline">
+                                                                            <a
+                                                                                href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                            >
                                                                                 View
-                                                                            </Button>
-                                                                        </a>
+                                                                            </a>
+                                                                        </Button>
                                                                     )}
                                                                     <Button
                                                                         size="sm"
@@ -1204,15 +1202,19 @@ const AdminDashboard = () => {
                                                                 <td className="border border-gray-200 px-4 py-2">
                                                                     <div className="flex space-x-2">
                                                                         {cert.certificate_url && (
-                                                                            <a
-                                                                                href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
+                                                                            <Button
+                                                                                asChild // Recommendation: use asChild for a inside Button
+                                                                                size="sm"
+                                                                                variant="outline"
                                                                             >
-                                                                                <Button size="sm" variant="outline">
+                                                                                <a
+                                                                                    href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                >
                                                                                     View
-                                                                                </Button>
-                                                                            </a>
+                                                                                </a>
+                                                                            </Button>
                                                                         )}
                                                                         <Button
                                                                             size="sm"
@@ -1240,7 +1242,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Events Tab Content (GitHub Backed) */}
-                    <TabsContent value="events" className="p-4">
+                    <TabsContent value={TAB_VALUES.EVENTS} className="p-4">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1340,7 +1342,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Faculty Tab Content (GitHub Backed) */}
-                    <TabsContent value="faculty" className="p-4">
+                    <TabsContent value={TAB_VALUES.FACULTY} className="p-4">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1440,7 +1442,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Placements Tab Content (GitHub Backed) */}
-                    <TabsContent value="placements" className="p-4">
+                    <TabsContent value={TAB_VALUES.PLACEMENTS} className="p-4">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1540,7 +1542,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Attendance Tab Content (Supabase/Internal logic) */}
-                    <TabsContent value="attendance">
+                    <TabsContent value={TAB_VALUES.ATTENDANCE}>
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1564,7 +1566,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Results Tab Content (Supabase Backed) */}
-                    <TabsContent value="results">
+                    <TabsContent value={TAB_VALUES.RESULTS}>
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1591,7 +1593,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Timetable Tab Content (External component) */}
-                    <TabsContent value="timetable">
+                    <TabsContent value={TAB_VALUES.TIMETABLE}>
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1600,13 +1602,16 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <TimetableManager />
+                                {/* Added Suspense for TimetableManager */}
+                                <Suspense fallback={<div>Loading Timetable...</div>}>
+                                    <TimetableManager />
+                                </Suspense>
                             </CardContent>
                         </Card>
                     </TabsContent>
 
                     {/* Gallery Tab Content (GitHub Backed) */}
-                    <TabsContent value="gallery" className="p-4">
+                    <TabsContent value={TAB_VALUES.GALLERY} className="p-4">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
