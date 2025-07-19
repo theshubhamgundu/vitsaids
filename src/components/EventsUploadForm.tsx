@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { uploadImageAndAppendData } from '@/lib/githubUploader';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -29,23 +28,31 @@ const EventsUploadForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!form.image) return toast({ title: 'Upload image required' });
+    if (!form.image) {
+      toast({ title: 'Upload image required', variant: 'destructive' });
+      return;
+    }
 
-    const metadata = {
-      title: form.title,
-      date: form.date,
-      location: form.location,
-      description: form.description,
-    };
+    const body = new FormData();
+    body.append('imageFile', form.image);
+    body.append('githubPath', 'public/events');
+    body.append('jsonPath', 'src/data/events.json');
+    body.append(
+      'metadata',
+      JSON.stringify({
+        title: form.title,
+        date: form.date,
+        location: form.location,
+        description: form.description,
+      })
+    );
 
-    const success = await uploadImageAndAppendData({
-      imageFile: form.image,
-      githubPath: 'public/events',
-      jsonPath: 'src/data/events.json',
-      metadata,
+    const res = await fetch('/api/upload-content', {
+      method: 'POST',
+      body,
     });
 
-    if (success) {
+    if (res.ok) {
       toast({ title: 'Event uploaded successfully!' });
       setForm({ title: '', date: '', location: '', description: '', image: null });
     } else {
