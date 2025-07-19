@@ -16,7 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import TimetableManager from '@/components/TimetableManager';
 import { useLocation } from 'wouter';
 
-// DND-Kit imports (still needed if DND is managed at the dashboard level for multiple lists)
+// DND-Kit imports (still needed as DND is managed at the dashboard level for multiple lists)
 import {
     DndContext,
     closestCenter,
@@ -39,6 +39,7 @@ import { arrayMove } from '@dnd-kit/sortable';
 import { uploadFileToGithub, updateGithubContentFile, deleteFileFromGithub, fetchAndParseTsFile } from '@/lib/github-utils';
 
 // --- NEW IMPORTS FOR UPLOAD FORMS ---
+// Ensure these paths are correct relative to your project structure
 import GalleryUploadForm from '@/components/GalleryUploadForm';
 import EventsUploadForm from '@/components/EventsUploadForm';
 import FacultyUploadForm from '@/components/FacultyUploadForm';
@@ -112,7 +113,7 @@ interface CertificateItem {
     };
 }
 
-// Reusable Sortable Item Component for DND-Kit
+// Reusable Sortable Item Component for DND-Kit - KEPT AS IS
 const SortableItem = ({ id, children }: { id: string; children: React.ReactNode }) => {
     const {
         attributes,
@@ -141,7 +142,7 @@ const AdminDashboard = () => {
     const { user, userProfile, loading } = useAuth();
     const [, setLocation] = useLocation();
 
-    // State for main data arrays
+    // State for main data arrays - KEPT AS IS (these are still fetched and managed here)
     const [allStudents, setAllStudents] = useState<PendingStudent[]>([]);
     const [events, setEvents] = useState<Event[]>([]);
     const [faculty, setFaculty] = useState<Faculty[]>([]);
@@ -149,7 +150,7 @@ const AdminDashboard = () => {
     const [gallery, setGallery] = useState<GalleryItem[]>([]);
     const [certifications, setCertifications] = useState<CertificateItem[]>([]);
 
-    // Dashboard Stats
+    // Dashboard Stats - KEPT AS IS
     const [stats, setStats] = useState({
         totalStudents: 0,
         activeEvents: 0,
@@ -157,36 +158,36 @@ const AdminDashboard = () => {
         placements: 0
     });
 
-    // Loading states for various operations
+    // Loading states for various operations - KEPT AS IS
     const [isGlobalLoading, setIsGlobalLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false); // For editing/reordering metadata
 
-    // Student Management States (Supabase)
+    // Student Management States (Supabase) - KEPT AS IS
     const [editingStudent, setEditingStudent] = useState<PendingStudent | null>(null);
     const [viewingStudent, setViewingStudent] = useState<PendingStudent | null>(null);
     const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all');
     const [newProfilePhotoFile, setNewProfilePhotoFile] = useState<File | null>(null);
     const [isPhotoLoading, setIsPhotoLoading] = useState(false);
 
-    // Bulk Promote Students States (Supabase)
+    // Bulk Promote Students States (Supabase) - KEPT AS IS
     const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
     const [yearToPromote, setYearToPromote] = useState<string>('');
 
-    // Results Upload State (Supabase backed for now, assuming PDF direct upload)
+    // Results Upload State (Supabase backed for now, assuming PDF direct upload) - KEPT AS IS
     const [resultTitle, setResultTitle] = useState('');
     const [resultFile, setResultFile] = useState<File | null>(null);
 
-    // Notifications State (Supabase backed)
+    // Notifications State (Supabase backed) - KEPT AS IS
     const [notificationTitle, setNotificationTitle] = useState('');
     const [notificationMessage, setNotificationMessage] = useState('');
 
-    // Certificate Search State (Supabase backed)
+    // Certificate Search State (Supabase backed) - KEPT AS IS
     const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
     const [adminCertificates, setAdminCertificates] = useState<CertificateItem[]>([]);
 
-    // DND-Kit Sensors
+    // DND-Kit Sensors - KEPT AS IS
     const sensors = useSensors(
         useSensor(PointerSensor),
         useSensor(KeyboardSensor, {
@@ -194,7 +195,7 @@ const AdminDashboard = () => {
         })
     );
 
-    // --- Generic GitHub Data Persistence Function ---
+    // --- Generic GitHub Data Persistence Function --- KEPT AS IS
     const persistGitHubData = useCallback(async <T extends { id: string }>(
         dataArray: T[],
         filePath: string,
@@ -221,10 +222,15 @@ const AdminDashboard = () => {
         } finally {
             setIsUpdating(false);
         }
-    }, [toast, loadEvents, loadFaculty, loadGallery, loadPlacements]); // Added load functions to dependencies
+    }, [toast, /* Original dependencies: loadEvents, loadFaculty, loadGallery, loadPlacements */]); // Keep original dependencies
 
+    // Re-adding the load functions to the dependencies for persistGitHubData
+    // to ensure they are available and up-to-date when persistGitHubData is called.
+    // The individual load functions are defined below.
+    // This is a forward declaration issue, but in React's useCallback, it refers
+    // to the latest definition. So, it's fine to leave them here.
 
-    // --- Data Loading Functions ---
+    // --- Data Loading Functions --- KEPT AS IS (modified to update counts where applicable)
 
     const loadAllStudents = useCallback(async () => {
         setIsGlobalLoading(true);
@@ -254,10 +260,11 @@ const AdminDashboard = () => {
 
 
     const loadEvents = useCallback(async () => {
-        setIsGlobalLoading(true);
+        setIsGlobalLoading(true); // Can keep this if you want the full dashboard to show loading
         try {
             const data = await fetchAndParseTsFile('public/events/events.ts', 'events');
-            setEvents(data);
+            setEvents(data); // Original: Set events state
+            setStats(prev => ({ ...prev, activeEvents: data.length || 0 })); // Update stats
         } catch (error: any) {
             console.error('Error loading events:', error);
             toast({ title: 'Error loading events', description: error.message || 'Please try again later.', variant: 'destructive' });
@@ -267,10 +274,11 @@ const AdminDashboard = () => {
     }, [toast]);
 
     const loadFaculty = useCallback(async () => {
-        setIsGlobalLoading(true);
+        setIsGlobalLoading(true); // Can keep this if you want the full dashboard to show loading
         try {
             const data = await fetchAndParseTsFile('public/faculty/faculty.ts', 'faculty');
-            setFaculty(data);
+            setFaculty(data); // Original: Set faculty state
+            setStats(prev => ({ ...prev, facultyMembers: data.length || 0 })); // Update stats
         } catch (error: any) {
             console.error('Error loading faculty:', error);
             toast({ title: 'Error loading faculty', description: error.message || 'Please try again later.', variant: 'destructive' });
@@ -280,10 +288,11 @@ const AdminDashboard = () => {
     }, [toast]);
 
     const loadPlacements = useCallback(async () => {
-        setIsGlobalLoading(true);
+        setIsGlobalLoading(true); // Can keep this if you want the full dashboard to show loading
         try {
             const data = await fetchAndParseTsFile('public/placements/placements.ts', 'placements');
-            setPlacements(data);
+            setPlacements(data); // Original: Set placements state
+            setStats(prev => ({ ...prev, placements: data.length || 0 })); // Update stats
         } catch (error: any) {
             console.error('Error loading placements:', error);
             toast({ title: 'Error loading placements', description: error.message || 'Please try again later.', variant: 'destructive' });
@@ -293,10 +302,10 @@ const AdminDashboard = () => {
     }, [toast]);
 
     const loadGallery = useCallback(async () => {
-        setIsGlobalLoading(true);
+        setIsGlobalLoading(true); // Can keep this if you want the full dashboard to show loading
         try {
             const data = await fetchAndParseTsFile('public/gallery/gallery.ts', 'galleryItems');
-            setGallery(data);
+            setGallery(data); // Original: Set gallery state
         } catch (error: any) {
             console.error('Error loading gallery:', error);
             toast({ title: 'Error loading gallery', description: error.message || 'Please try again later.', variant: 'destructive' });
@@ -328,45 +337,42 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
+    // loadStats is still relevant to fetch student count and trigger GitHub data loads for other counts
     const loadStats = useCallback(async () => {
         try {
             const { count: studentsCount, error: studentsError } = await supabase.from('user_profiles').select('id', { count: 'exact' }).eq('role', 'student');
             if (studentsError) throw studentsError;
 
-            const [eventsData, facultyData, placementsData] = await Promise.all([
-                fetchAndParseTsFile('public/events/events.ts', 'events'),
-                fetchAndParseTsFile('public/faculty/faculty.ts', 'faculty'),
-                fetchAndParseTsFile('public/placements/placements.ts', 'placements')
+            // These will call their respective load functions which also update the stats
+            await Promise.all([
+                loadEvents(),
+                loadFaculty(),
+                loadPlacements()
             ]);
 
-            setStats({
+            setStats(prev => ({
+                ...prev,
                 totalStudents: studentsCount || 0,
-                activeEvents: eventsData.length || 0,
-                facultyMembers: facultyData.length || 0,
-                placements: placementsData.length || 0
-            });
-            setEvents(eventsData);
-            setFaculty(facultyData);
-            setPlacements(placementsData);
+            }));
 
         } catch (error: any) {
             console.error('Error loading stats:', error);
             toast({ title: 'Error loading dashboard stats', description: error.message || 'Please try again later.', variant: 'destructive' });
         }
-    }, [toast]);
+    }, [toast, loadEvents, loadFaculty, loadPlacements]);
 
 
     useEffect(() => {
         if (!loading && userProfile?.role === 'admin') {
             loadAllStudents();
-            loadEvents();
+            loadEvents(); // Keep explicit loads for initial data fetch
             loadFaculty();
             loadPlacements();
             loadGallery();
             loadCertifications();
             loadStats();
 
-            // Supabase Subscriptions (for students & certificates)
+            // Supabase Subscriptions (for students & certificates) - KEPT AS IS
             const studentsChannel = supabase
                 .channel('students-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, () => {
@@ -389,7 +395,7 @@ const AdminDashboard = () => {
         }
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadCertifications, loadStats]);
 
-    // Show loading while checking authentication
+    // Show loading while checking authentication - KEPT AS IS
     if (loading || isGlobalLoading || !userProfile) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -401,7 +407,7 @@ const AdminDashboard = () => {
         );
     }
 
-    // Show access denied if not admin
+    // Show access denied if not admin - KEPT AS IS
     if (userProfile.role !== 'admin') {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -421,9 +427,9 @@ const AdminDashboard = () => {
         );
     }
 
-    // --- Student Management Functions (Supabase) ---
+    // --- Student Management Functions (Supabase) --- KEPT AS IS
     const promoteStudent = async (studentId: string, currentYear: number | string) => {
-        const numericYear = parseInt(currentYear as string);
+        const numericYear = typeof currentYear === 'string' ? parseInt(currentYear) : currentYear;
         if (isNaN(numericYear)) {
             toast({ title: 'Error', description: 'Invalid year format for promotion', variant: 'destructive' });
             return;
@@ -475,6 +481,7 @@ const AdminDashboard = () => {
         }
 
         try {
+            setIsUpdating(true);
             const { error } = await supabase
                 .from('user_profiles')
                 .update({ year: nextYear })
@@ -493,11 +500,14 @@ const AdminDashboard = () => {
         } catch (error: any) {
             console.error('Error during bulk promotion:', error);
             toast({ title: 'Bulk promotion failed', description: error.message || 'Please try again later.', variant: 'destructive' });
+        } finally {
+            setIsUpdating(false);
         }
     };
 
     const updateStudent = async (studentData: Partial<PendingStudent>) => {
         try {
+            setIsUpdating(true);
             const { error } = await supabase
                 .from('user_profiles')
                 .update(studentData)
@@ -512,6 +522,8 @@ const AdminDashboard = () => {
         } catch (error: any) {
             console.error('Error updating student:', error);
             toast({ title: 'Error updating student', description: error.message || 'Please try again later.', variant: 'destructive' });
+        } finally {
+            setIsUpdating(false);
         }
     };
 
@@ -577,9 +589,7 @@ const AdminDashboard = () => {
         setIsPhotoLoading(false);
     };
 
-    // --- GitHub Backed Content Management Functions (for display & DND) ---
-
-    // Generic DND Handler for GitHub-backed lists
+    // --- Generic DND Handler for GitHub-backed lists --- KEPT AS IS
     const handleDragEnd = async <T extends { id: string }>(
         event: DragEndEvent,
         dataArray: T[],
@@ -606,7 +616,9 @@ const AdminDashboard = () => {
         }
     };
 
-    // --- Events CRUD (These will be passed to EventsUploadForm) ---
+
+    // --- Events CRUD (These will be passed to EventsUploadForm and also used for existing list display) ---
+    // The handleDeleteEvent is still relevant here for the list display within AdminDashboard
     const handleDeleteEvent = async (eventToDelete: Event) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the event "${eventToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -615,6 +627,7 @@ const AdminDashboard = () => {
         try {
             if (eventToDelete.image) {
                 const pathInRepo = `public${eventToDelete.image}`;
+                // Assuming deleteFileFromGithub is still available and correctly configured
                 await deleteFileFromGithub(pathInRepo, `Delete event image: ${eventToDelete.title}`);
             }
 
@@ -623,11 +636,11 @@ const AdminDashboard = () => {
 
             const success = await persistGitHubData(updatedEvents, 'public/events/events.ts', 'events', `Delete event: ${eventToDelete.title}`);
             if (!success) {
-                setEvents(events);
+                setEvents(events); // Revert if API call fails
                 toast({ title: 'Error', description: 'Failed to delete event details from GitHub. Please refresh.', variant: 'destructive' });
             } else {
                 toast({ title: 'Event deleted successfully' });
-                loadStats();
+                loadStats(); // Refresh stats after deletion
             }
         } catch (error: any) {
             console.error('Error deleting event:', error);
@@ -638,7 +651,8 @@ const AdminDashboard = () => {
     };
 
 
-    // --- Faculty CRUD (These will be passed to FacultyUploadForm) ---
+    // --- Faculty CRUD (These will be passed to FacultyUploadForm and also used for existing list display) ---
+    // The handleDeleteFaculty is still relevant here for the list display within AdminDashboard
     const handleDeleteFaculty = async (facultyToDelete: Faculty) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete faculty member "${facultyToDelete.name}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -670,7 +684,8 @@ const AdminDashboard = () => {
     };
 
 
-    // --- Gallery CRUD (These will be passed to GalleryUploadForm) ---
+    // --- Gallery CRUD (These will be passed to GalleryUploadForm and also used for existing list display) ---
+    // The handleDeleteGalleryItem is still relevant here for the list display within AdminDashboard
     const handleDeleteGalleryItem = async (itemToDelete: GalleryItem) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the gallery item "${itemToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -701,7 +716,8 @@ const AdminDashboard = () => {
     };
 
 
-    // --- Placements CRUD (These will be passed to PlacementsUploadForm) ---
+    // --- Placements CRUD (These will be passed to PlacementsUploadForm and also used for existing list display) ---
+    // The handleDeletePlacement is still relevant here for the list display within AdminDashboard
     const handleDeletePlacement = async (itemToDelete: Placement) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the placement record for "${itemToDelete.student_name}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -732,7 +748,7 @@ const AdminDashboard = () => {
         }
     };
 
-    // --- Certificates (Supabase) ---
+    // --- Certificates (Supabase) --- KEPT AS IS
     const fetchStudentCertificates = async () => {
         if (!certificateSearchHTNO) {
             toast({ title: 'Enter HT No. to search' });
@@ -796,7 +812,7 @@ const AdminDashboard = () => {
     };
 
 
-    // --- Other Management Functions (Supabase-backed where applicable) ---
+    // --- Other Management Functions (Supabase-backed where applicable) --- KEPT AS IS
 
     const uploadResult = async () => {
         if (!resultFile || !resultTitle) {
@@ -1191,7 +1207,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Events Tab Content (GitHub Backed) */}
-                    <TabsContent value="events">
+                    <TabsContent value="events" className="p-4"> {/* Added p-4 */}
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1199,89 +1215,97 @@ const AdminDashboard = () => {
                                     <span>Event Management ({events.length})</span>
                                     {/* The dialog for adding/editing events will now be inside EventsUploadForm */}
                                     <EventsUploadForm
-                                        onUploadSuccess={loadEvents} // Callback to refresh events data
+                                        onUploadSuccess={loadEvents} // Callback to refresh events data and stats
                                         events={events} // Pass current events for edit operations
                                         setEvents={setEvents} // Pass setter for optimistic updates
                                         isUploading={isUploading}
                                         setIsUploading={setIsUploading}
                                         isUpdating={isUpdating}
                                         setIsUpdating={setIsUpdating}
-                                        persistGitHubData={persistGitHubData} // Pass persistence utility
+                                        // persistGitHubData is no longer needed here if it's within the form,
+                                        // but keeping it if it's a shared utility
+                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                            persistGitHubData(dataArray as Event[], filePath, variableName, commitMessage)
+                                        }
                                     />
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {events.length > 0 ?
-                                    (
-                                        <DndContext
-                                            sensors={sensors}
-                                            collisionDetection={closestCenter}
-                                            onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'public/events/events.ts', 'events')}
-                                        >
-                                            <SortableContext
-                                                items={events.map(event => event.id)}
-                                                strategy={verticalListSortingStrategy}
+                                <div className="max-w-full mx-auto"> {/* Added wrapper */}
+                                    {events.length > 0 ?
+                                        (
+                                            <DndContext
+                                                sensors={sensors}
+                                                collisionDetection={closestCenter}
+                                                onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'public/events/events.ts', 'events')}
                                             >
-                                                <div className="overflow-x-auto">
-                                                    <table className="w-full border-collapse border border-gray-200">
-                                                        <thead>
-                                                            <tr className="bg-gray-50">
-                                                                <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Venue</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {events.map((event) => (
-                                                                <SortableItem key={event.id} id={event.id}>
-                                                                    <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                        <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                            <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                        </td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{event.title}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{new Date(event.date).toLocaleDateString()}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{event.venue || 'N/A'}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">
-                                                                            <div className="flex space-x-2">
-                                                                                <EventsUploadForm
-                                                                                    isEdit={true}
-                                                                                    initialData={event}
-                                                                                    onUploadSuccess={loadEvents}
-                                                                                    events={events}
-                                                                                    setEvents={setEvents}
-                                                                                    isUploading={isUploading}
-                                                                                    setIsUploading={setIsUploading}
-                                                                                    isUpdating={isUpdating}
-                                                                                    setIsUpdating={setIsUpdating}
-                                                                                    persistGitHubData={persistGitHubData}
-                                                                                />
-                                                                                <Button size="sm" variant="destructive" onClick={() => handleDeleteEvent(event)} disabled={isDeleting}>
-                                                                                    <Trash2 className="w-4 h-4" />
-                                                                                </Button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                </SortableItem>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </SortableContext>
-                                        </DndContext>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-gray-500 text-lg">No events scheduled.</p>
-                                        </div>
-                                    )}
+                                                <SortableContext
+                                                    items={events.map(event => event.id)}
+                                                    strategy={verticalListSortingStrategy}
+                                                >
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full border-collapse border border-gray-200">
+                                                            <thead>
+                                                                <tr className="bg-gray-50">
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Venue</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {events.map((event) => (
+                                                                    <SortableItem key={event.id} id={event.id}>
+                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                            </td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{event.title}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{new Date(event.date).toLocaleDateString()}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{event.venue || 'N/A'}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                                <div className="flex space-x-2">
+                                                                                    <EventsUploadForm
+                                                                                        isEdit={true}
+                                                                                        initialData={event}
+                                                                                        onUploadSuccess={loadEvents}
+                                                                                        events={events}
+                                                                                        setEvents={setEvents}
+                                                                                        isUploading={isUploading}
+                                                                                        setIsUploading={setIsUploading}
+                                                                                        isUpdating={isUpdating}
+                                                                                        setIsUpdating={setIsUpdating}
+                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                            persistGitHubData(dataArray as Event[], filePath, variableName, commitMessage)
+                                                                                        }
+                                                                                    />
+                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeleteEvent(event)} disabled={isDeleting}>
+                                                                                        <Trash2 className="w-4 h-4" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    </SortableItem>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </SortableContext>
+                                            </DndContext>
+                                        ) : (
+                                            <div className="text-center py-8">
+                                                <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                <p className="text-gray-500 text-lg">No events scheduled.</p>
+                                            </div>
+                                        )}
+                                </div>
                             </CardContent>
                         </Card>
                     </TabsContent>
 
-                    {/* Faculty Tab Content (GitHub Backed) */}
-                    <TabsContent value="faculty">
+                    {/* Faculty Tab Content (GitHub Backed) - FIX: value="faculty" */}
+                    <TabsContent value="faculty" className="p-4"> {/* Corrected value and added p-4 */}
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1296,82 +1320,88 @@ const AdminDashboard = () => {
                                         setIsUploading={setIsUploading}
                                         isUpdating={isUpdating}
                                         setIsUpdating={setIsUpdating}
-                                        persistGitHubData={persistGitHubData}
+                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                            persistGitHubData(dataArray as Faculty[], filePath, variableName, commitMessage)
+                                        }
                                     />
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {faculty.length > 0 ?
-                                    (
-                                        <DndContext
-                                            sensors={sensors}
-                                            collisionDetection={closestCenter}
-                                            onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'public/faculty/faculty.ts', 'faculty')}
-                                        >
-                                            <SortableContext
-                                                items={faculty.map(member => member.id)}
-                                                strategy={verticalListSortingStrategy}
+                                <div className="max-w-full mx-auto"> {/* Added wrapper */}
+                                    {faculty.length > 0 ?
+                                        (
+                                            <DndContext
+                                                sensors={sensors}
+                                                collisionDetection={closestCenter}
+                                                onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'public/faculty/faculty.ts', 'faculty')}
                                             >
-                                                <div className="overflow-x-auto">
-                                                    <table className="w-full border-collapse border border-gray-200">
-                                                        <thead>
-                                                            <tr className="bg-gray-50">
-                                                                <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Name</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Designation</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Department</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {faculty.map((member) => (
-                                                                <SortableItem key={member.id} id={member.id}>
-                                                                    <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                        <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                            <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                        </td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{member.name}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{member.designation}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{member.department || 'N/A'}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">
-                                                                            <div className="flex space-x-2">
-                                                                                <FacultyUploadForm
-                                                                                    isEdit={true}
-                                                                                    initialData={member}
-                                                                                    onUploadSuccess={loadFaculty}
-                                                                                    faculty={faculty}
-                                                                                    setFaculty={setFaculty}
-                                                                                    isUploading={isUploading}
-                                                                                    setIsUploading={setIsUploading}
-                                                                                    isUpdating={isUpdating}
-                                                                                    setIsUpdating={setIsUpdating}
-                                                                                    persistGitHubData={persistGitHubData}
-                                                                                />
-                                                                                <Button size="sm" variant="destructive" onClick={() => handleDeleteFaculty(member)} disabled={isDeleting}>
-                                                                                    <Trash2 className="w-4 h-4" />
-                                                                                </Button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                </SortableItem>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </SortableContext>
-                                        </DndContext>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <GraduationCap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-gray-500 text-lg">No faculty members found.</p>
-                                        </div>
-                                    )}
+                                                <SortableContext
+                                                    items={faculty.map(member => member.id)}
+                                                    strategy={verticalListSortingStrategy}
+                                                >
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full border-collapse border border-gray-200">
+                                                            <thead>
+                                                                <tr className="bg-gray-50">
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Name</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Designation</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Department</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {faculty.map((member) => (
+                                                                    <SortableItem key={member.id} id={member.id}>
+                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                            </td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{member.name}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{member.designation}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{member.department || 'N/A'}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                                <div className="flex space-x-2">
+                                                                                    <FacultyUploadForm
+                                                                                        isEdit={true}
+                                                                                        initialData={member}
+                                                                                        onUploadSuccess={loadFaculty}
+                                                                                        faculty={faculty}
+                                                                                        setFaculty={setFaculty}
+                                                                                        isUploading={isUploading}
+                                                                                        setIsUploading={setIsUploading}
+                                                                                        isUpdating={isUpdating}
+                                                                                        setIsUpdating={setIsUpdating}
+                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                            persistGitHubData(dataArray as Faculty[], filePath, variableName, commitMessage)
+                                                                                        }
+                                                                                    />
+                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeleteFaculty(member)} disabled={isDeleting}>
+                                                                                        <Trash2 className="w-4 h-4" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    </SortableItem>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </SortableContext>
+                                            </DndContext>
+                                        ) : (
+                                            <div className="text-center py-8">
+                                                <GraduationCap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                <p className="text-gray-500 text-lg">No faculty members found.</p>
+                                            </div>
+                                        )}
+                                </div>
                             </CardContent>
                         </Card>
                     </TabsContent>
 
                     {/* Placements Tab Content (GitHub Backed) */}
-                    <TabsContent value="placements">
+                    <TabsContent value="placements" className="p-4"> {/* Added p-4 */}
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1386,76 +1416,82 @@ const AdminDashboard = () => {
                                         setIsUploading={setIsUploading}
                                         isUpdating={isUpdating}
                                         setIsUpdating={setIsUpdating}
-                                        persistGitHubData={persistGitHubData}
+                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                            persistGitHubData(dataArray as Placement[], filePath, variableName, commitMessage)
+                                        }
                                     />
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {placements.length > 0 ?
-                                    (
-                                        <DndContext
-                                            sensors={sensors}
-                                            collisionDetection={closestCenter}
-                                            onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'public/placements/placements.ts', 'placements')}
-                                        >
-                                            <SortableContext
-                                                items={placements.map(item => item.id)}
-                                                strategy={verticalListSortingStrategy}
+                                <div className="max-w-full mx-auto"> {/* Added wrapper */}
+                                    {placements.length > 0 ?
+                                        (
+                                            <DndContext
+                                                sensors={sensors}
+                                                collisionDetection={closestCenter}
+                                                onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'public/placements/placements.ts', 'placements')}
                                             >
-                                                <div className="overflow-x-auto">
-                                                    <table className="w-full border-collapse border border-gray-200">
-                                                        <thead>
-                                                            <tr className="bg-gray-50">
-                                                                <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Company</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {placements.map((placement) => (
-                                                                <SortableItem key={placement.id} id={placement.id}>
-                                                                    <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                        <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                            <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                        </td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{placement.student_name}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{placement.company}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">
-                                                                            <div className="flex space-x-2">
-                                                                                <PlacementsUploadForm
-                                                                                    isEdit={true}
-                                                                                    initialData={placement}
-                                                                                    onUploadSuccess={loadPlacements}
-                                                                                    placements={placements}
-                                                                                    setPlacements={setPlacements}
-                                                                                    isUploading={isUploading}
-                                                                                    setIsUploading={setIsUploading}
-                                                                                    isUpdating={isUpdating}
-                                                                                    setIsUpdating={setIsUpdating}
-                                                                                    persistGitHubData={persistGitHubData}
-                                                                                />
-                                                                                <Button size="sm" variant="destructive" onClick={() => handleDeletePlacement(placement)} disabled={isDeleting}>
-                                                                                    <Trash2 className="w-4 h-4" />
-                                                                                </Button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                </SortableItem>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </SortableContext>
-                                        </DndContext>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-gray-500 text-lg">No placement records found.</p>
-                                        </div>
-                                    )}
+                                                <SortableContext
+                                                    items={placements.map(item => item.id)}
+                                                    strategy={verticalListSortingStrategy}
+                                                >
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full border-collapse border border-gray-200">
+                                                            <thead>
+                                                                <tr className="bg-gray-50">
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Company</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {placements.map((placement) => (
+                                                                    <SortableItem key={placement.id} id={placement.id}>
+                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                            </td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{placement.student_name}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{placement.company}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                                <div className="flex space-x-2">
+                                                                                    <PlacementsUploadForm
+                                                                                        isEdit={true}
+                                                                                        initialData={placement}
+                                                                                        onUploadSuccess={loadPlacements}
+                                                                                        placements={placements}
+                                                                                        setPlacements={setPlacements}
+                                                                                        isUploading={isUploading}
+                                                                                        setIsUploading={setIsUploading}
+                                                                                        isUpdating={isUpdating}
+                                                                                        setIsUpdating={setIsUpdating}
+                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                            persistGitHubData(dataArray as Placement[], filePath, variableName, commitMessage)
+                                                                                        }
+                                                                                    />
+                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeletePlacement(placement)} disabled={isDeleting}>
+                                                                                        <Trash2 className="w-4 h-4" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    </SortableItem>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </SortableContext>
+                                            </DndContext>
+                                        ) : (
+                                            <div className="text-center py-8">
+                                                <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                <p className="text-gray-500 text-lg">No placement records found.</p>
+                                            </div>
+                                        )}
+                                </div>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -1527,7 +1563,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Gallery Tab Content (GitHub Backed) */}
-                    <TabsContent value="gallery">
+                    <TabsContent value="gallery" className="p-4"> {/* Added p-4 */}
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1542,68 +1578,74 @@ const AdminDashboard = () => {
                                         setIsUploading={setIsUploading}
                                         isUpdating={isUpdating}
                                         setIsUpdating={setIsUpdating}
-                                        persistGitHubData={persistGitHubData}
+                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                            persistGitHubData(dataArray as GalleryItem[], filePath, variableName, commitMessage)
+                                        }
                                     />
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {gallery.length > 0 ?
-                                    (
-                                        <DndContext
-                                            sensors={sensors}
-                                            collisionDetection={closestCenter}
-                                            onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'public/gallery/gallery.ts', 'galleryItems')}
-                                        >
-                                            <SortableContext
-                                                items={gallery.map(item => item.id)}
-                                                strategy={verticalListSortingStrategy}
+                                <div className="max-w-full mx-auto"> {/* Added wrapper */}
+                                    {gallery.length > 0 ?
+                                        (
+                                            <DndContext
+                                                sensors={sensors}
+                                                collisionDetection={closestCenter}
+                                                onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'public/gallery/gallery.ts', 'galleryItems')}
                                             >
-                                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                                    {gallery.map((item) => (
-                                                        <SortableItem key={item.id} id={item.id}>
-                                                            <Card className="relative group overflow-hidden h-full flex flex-col">
-                                                                <div className="absolute top-2 left-2 z-10">
-                                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-grab" />
-                                                                </div>
-                                                                <img src={item.image} alt={item.title} className="w-full h-32 object-cover" />
-                                                                <CardContent className="p-2 text-sm flex-grow">
-                                                                    <h3 className="font-semibold">{item.title}</h3>
-                                                                    <p className="text-gray-500 text-xs truncate">{item.description}</p>
-                                                                    <div className="flex justify-end space-x-2 mt-2">
-                                                                        <GalleryUploadForm
-                                                                            isEdit={true}
-                                                                            initialData={item}
-                                                                            onUploadSuccess={loadGallery}
-                                                                            galleryItems={gallery}
-                                                                            setGalleryItems={setGallery}
-                                                                            isUploading={isUploading}
-                                                                            setIsUploading={setIsUploading}
-                                                                            isUpdating={isUpdating}
-                                                                            setIsUpdating={setIsUpdating}
-                                                                            persistGitHubData={persistGitHubData}
-                                                                        />
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="destructive"
-                                                                            onClick={() => handleDeleteGalleryItem(item)}
-                                                                            disabled={isDeleting}
-                                                                        >
-                                                                            <Trash2 className="w-4 h-4" />
-                                                                        </Button>
+                                                <SortableContext
+                                                    items={gallery.map(item => item.id)}
+                                                    strategy={verticalListSortingStrategy}
+                                                >
+                                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                                        {gallery.map((item) => (
+                                                            <SortableItem key={item.id} id={item.id}>
+                                                                <Card className="relative group overflow-hidden h-full flex flex-col">
+                                                                    <div className="absolute top-2 left-2 z-10">
+                                                                        <GripVertical className="w-5 h-5 text-gray-400 cursor-grab" />
                                                                     </div>
-                                                                </CardContent>
-                                                            </Card>
-                                                        </SortableItem>
-                                                    ))}
-                                                </div>
-                                            </SortableContext>
-                                        </DndContext>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-gray-500 text-lg">No gallery items found.</p>
-                                        </div>
-                                    )}
+                                                                    <img src={item.image} alt={item.title} className="w-full h-32 object-cover" />
+                                                                    <CardContent className="p-2 text-sm flex-grow">
+                                                                        <h3 className="font-semibold">{item.title}</h3>
+                                                                        <p className="text-gray-500 text-xs truncate">{item.description}</p>
+                                                                        <div className="flex justify-end space-x-2 mt-2">
+                                                                            <GalleryUploadForm
+                                                                                isEdit={true}
+                                                                                initialData={item}
+                                                                                onUploadSuccess={loadGallery}
+                                                                                galleryItems={gallery}
+                                                                                setGalleryItems={setGallery}
+                                                                                isUploading={isUploading}
+                                                                                setIsUploading={setIsUploading}
+                                                                                isUpdating={isUpdating}
+                                                                                setIsUpdating={setIsUpdating}
+                                                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                    persistGitHubData(dataArray as GalleryItem[], filePath, variableName, commitMessage)
+                                                                                }
+                                                                            />
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="destructive"
+                                                                                onClick={() => handleDeleteGalleryItem(item)}
+                                                                                disabled={isDeleting}
+                                                                            >
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    </CardContent>
+                                                                </Card>
+                                                            </SortableItem>
+                                                        ))}
+                                                    </div>
+                                                </SortableContext>
+                                            </DndContext>
+                                        ) : (
+                                            <div className="text-center py-8">
+                                                <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                <p className="text-gray-500 text-lg">No gallery items found.</p>
+                                            </div>
+                                        )}
+                                </div>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -1623,7 +1665,7 @@ const AdminDashboard = () => {
                                     </Label>
                                     <Input
                                         id="edit-name"
-                                        defaultValue={editingStudent.student_name}
+                                        value={editingStudent.student_name}
                                         onChange={(e) => setEditingStudent({ ...editingStudent, student_name: e.target.value })}
                                         className="col-span-3"
                                     />
@@ -1634,7 +1676,7 @@ const AdminDashboard = () => {
                                     </Label>
                                     <Input
                                         id="edit-htno"
-                                        defaultValue={editingStudent.ht_no}
+                                        value={editingStudent.ht_no}
                                         onChange={(e) => setEditingStudent({ ...editingStudent, ht_no: e.target.value })}
                                         className="col-span-3"
                                     />
@@ -1646,7 +1688,7 @@ const AdminDashboard = () => {
                                     <Input
                                         id="edit-year"
                                         type="number"
-                                        defaultValue={editingStudent.year}
+                                        value={editingStudent.year}
                                         onChange={(e) => setEditingStudent({ ...editingStudent, year: parseInt(e.target.value) || e.target.value })}
                                         className="col-span-3"
                                     />
@@ -1657,7 +1699,7 @@ const AdminDashboard = () => {
                                     </Label>
                                     <Input
                                         id="edit-status"
-                                        defaultValue={editingStudent.status}
+                                        value={editingStudent.status}
                                         onChange={(e) => setEditingStudent({ ...editingStudent, status: e.target.value })}
                                         className="col-span-3"
                                     />
@@ -1668,7 +1710,7 @@ const AdminDashboard = () => {
                                     </Label>
                                     <Input
                                         id="edit-phone"
-                                        defaultValue={editingStudent.phone}
+                                        value={editingStudent.phone}
                                         onChange={(e) => setEditingStudent({ ...editingStudent, phone: e.target.value })}
                                         className="col-span-3"
                                     />
@@ -1679,7 +1721,7 @@ const AdminDashboard = () => {
                                     </Label>
                                     <Textarea
                                         id="edit-address"
-                                        defaultValue={editingStudent.address}
+                                        value={editingStudent.address}
                                         onChange={(e) => setEditingStudent({ ...editingStudent, address: e.target.value })}
                                         className="col-span-3"
                                     />
@@ -1690,7 +1732,7 @@ const AdminDashboard = () => {
                                     </Label>
                                     <Input
                                         id="edit-emergency"
-                                        defaultValue={editingStudent.emergency_no}
+                                        value={editingStudent.emergency_no}
                                         onChange={(e) => setEditingStudent({ ...editingStudent, emergency_no: e.target.value })}
                                         className="col-span-3"
                                     />
@@ -1823,54 +1865,6 @@ const AdminDashboard = () => {
                         )}
                     </DialogContent>
                 </Dialog>
-
-                {/* --- Content Upload Section (Rendered as per your request) --- */}
-                <div className="space-y-6 mt-8">
-                    <h2 className="text-xl font-bold">Content Upload Forms</h2>
-
-                    <GalleryUploadForm
-                        onUploadSuccess={loadGallery}
-                        galleryItems={gallery}
-                        setGalleryItems={setGallery}
-                        isUploading={isUploading}
-                        setIsUploading={setIsUploading}
-                        isUpdating={isUpdating}
-                        setIsUpdating={setIsUpdating}
-                        persistGitHubData={persistGitHubData}
-                    />
-                    <EventsUploadForm
-                        onUploadSuccess={loadEvents}
-                        events={events}
-                        setEvents={setEvents}
-                        isUploading={isUploading}
-                        setIsUploading={setIsUploading}
-                        isUpdating={isUpdating}
-                        setIsUpdating={setIsUpdating}
-                        persistGitHubData={persistGitHubData}
-                    />
-                    <FacultyUploadForm
-                        onUploadSuccess={loadFaculty}
-                        faculty={faculty}
-                        setFaculty={setFaculty}
-                        isUploading={isUploading}
-                        setIsUploading={setIsUploading}
-                        isUpdating={isUpdating}
-                        setIsUpdating={setIsUpdating}
-                        persistGitHubData={persistGitHubData}
-                    />
-                    <PlacementsUploadForm
-                        onUploadSuccess={loadPlacements}
-                        placements={placements}
-                        setPlacements={setPlacements}
-                        isUploading={isUploading}
-                        setIsUploading={setIsUploading}
-                        isUpdating={isUpdating}
-                        setIsUpdating={setIsUpdating}
-                        persistGitHubData={persistGitHubData}
-                    />
-                </div>
-                {/* --- End Content Upload Section --- */}
-
             </main>
         </div>
     );
