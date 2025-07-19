@@ -20,7 +20,7 @@ const EventsUploadForm = () => {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
+    if (e.target.files?.[0]) {
       setForm((prev) => ({ ...prev, image: e.target.files![0] }));
     }
   };
@@ -29,34 +29,38 @@ const EventsUploadForm = () => {
     e.preventDefault();
 
     if (!form.image) {
-      toast({ title: 'Upload image required', variant: 'destructive' });
+      toast({ title: 'Image is required', variant: 'destructive' });
       return;
     }
 
-    const body = new FormData();
-    body.append('imageFile', form.image);
-    body.append('githubPath', 'public/events');
-    body.append('jsonPath', 'src/data/events.json');
-    body.append(
-      'metadata',
-      JSON.stringify({
-        title: form.title,
-        date: form.date,
-        location: form.location,
-        description: form.description,
-      })
-    );
+    const formData = new FormData();
+    formData.append('imageFile', form.image);
+    formData.append('githubPath', 'public/events'); // Image upload directory
+    formData.append('jsonPath', 'src/data/events.json'); // JSON metadata path
 
-    const res = await fetch('/api/upload-content', {
-      method: 'POST',
-      body,
-    });
+    const metadata = {
+      title: form.title,
+      date: form.date,
+      location: form.location,
+      description: form.description,
+    };
+    formData.append('metadata', JSON.stringify(metadata));
 
-    if (res.ok) {
-      toast({ title: 'Event uploaded successfully!' });
-      setForm({ title: '', date: '', location: '', description: '', image: null });
-    } else {
-      toast({ title: 'Upload failed', variant: 'destructive' });
+    try {
+      const res = await fetch('/api/upload-content', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        toast({ title: 'Event uploaded successfully!' });
+        setForm({ title: '', date: '', location: '', description: '', image: null });
+      } else {
+        const error = await res.json();
+        toast({ title: error.message || 'Upload failed', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Something went wrong!', variant: 'destructive' });
     }
   };
 
