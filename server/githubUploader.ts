@@ -1,42 +1,42 @@
 // server/githubUploader.ts
 
-import express from "express";
-import cors from "cors";
-import bodyParser from "body-parser";
-import { Octokit } from "octokit";
-import dotenv from "dotenv";
+import axios from 'axios';
 
-dotenv.config(); // Load .env file
-const app = express();
-const PORT = 3001;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN!;
+const REPO_OWNER = 'theshubhamgundu'; // Change to your GitHub username/org
+const REPO_NAME = 'vitsaids'; // Just the repo name
+const BRANCH = 'main'; // Or 'master' or whichever branch you're using
 
-app.use(cors());
-app.use(bodyParser.json({ limit: "10mb" }));
+const BASE_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents`;
 
-// Create Octokit with your GitHub token
-const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN,
-});
-
-// Upload endpoint
-app.post("/upload-to-github", async (req, res) => {
+export async function uploadFileToGitHub({
+  path,         // e.g., 'public/gallery/image123.png'
+  content,      // base64-encoded file content
+  message,      // commit message
+}: {
+  path: string;
+  content: string;
+  message: string;
+}) {
   try {
-    const { owner, repo, filePath, content, message } = req.body;
+    const response = await axios.put(
+      `${BASE_URL}/${path}`,
+      {
+        message,
+        content,
+        branch: BRANCH,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${GITHUB_TOKEN}`,
+          Accept: 'application/vnd.github+json',
+        },
+      }
+    );
 
-    const response = await octokit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
-      owner,
-      repo,
-      path: filePath,
-      message,
-      content,
-    });
-
-    res.json({ success: true, response });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    return response.data;
+  } catch (error: any) {
+    console.error('GitHub Upload Error:', error?.response?.data || error.message);
+    throw new Error('Failed to upload file to GitHub');
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`✅ GitHub uploader running on http://localhost:${PORT}`);
-});
+}
