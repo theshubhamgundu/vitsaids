@@ -3,12 +3,23 @@ import { Button } from '@/components/ui/button';
 import { Users, UserCheck, Menu, X } from 'lucide-react';
 import LoginModal from './LoginModal';
 import { useAuth } from '@/contexts/AuthContext';
+
 import AchievementsModal from './AchievementsModal';
+import EventsModal from './EventsModal';
+import FacultyModal from './FacultyModal';
+import PlacementsModal from './PlacementsModal';
+import GalleryModal from './GalleryModal';
 
 const Header = () => {
   const [showStudentLogin, setShowStudentLogin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+
   const [showAchievementsModal, setShowAchievementsModal] = useState(false);
+  const [showEventsModal, setShowEventsModal] = useState(false);
+  const [showFacultyModal, setShowFacultyModal] = useState(false);
+  const [showPlacementsModal, setShowPlacementsModal] = useState(false);
+  const [showGalleryModal, setShowGalleryModal] = useState(false);
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
@@ -24,8 +35,16 @@ const Header = () => {
   ];
 
   const scrollToSection = (href: string) => {
-    if (href === '#achievements') {
-      setShowAchievementsModal(true);
+    const modalMap: Record<string, () => void> = {
+      '#achievements': () => setShowAchievementsModal(true),
+      '#events': () => setShowEventsModal(true),
+      '#faculty': () => setShowFacultyModal(true),
+      '#placements': () => setShowPlacementsModal(true),
+      '#gallery': () => setShowGalleryModal(true),
+    };
+
+    if (modalMap[href]) {
+      modalMap[href]();
       setMobileMenuOpen(false);
       return;
     }
@@ -144,11 +163,12 @@ const Header = () => {
         userType="admin"
       />
 
-      {/* Achievements Modal */}
-      <AchievementsModal
-        open={showAchievementsModal}
-        onClose={() => setShowAchievementsModal(false)}
-      />
+      {/* Section Modals */}
+      <AchievementsModal open={showAchievementsModal} onClose={() => setShowAchievementsModal(false)} />
+      <EventsModal open={showEventsModal} onClose={() => setShowEventsModal(false)} />
+      <FacultyModal open={showFacultyModal} onClose={() => setShowFacultyModal(false)} />
+      <PlacementsModal open={showPlacementsModal} onClose={() => setShowPlacementsModal(false)} />
+      <GalleryModal open={showGalleryModal} onClose={() => setShowGalleryModal(false)} />
     </>
   );
 };
