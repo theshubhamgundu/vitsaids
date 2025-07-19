@@ -5,13 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const PlacementsUploadForm = () => {
   const { toast } = useToast();
-  const [form, setForm] = useState({
-    studentName: '',
-    company: '',
-    package: '',
-    year: '',
-    image: null as File | null,
-  });
+  const [form, setForm] = useState({ studentName: '', company: '', package: '', year: '', image: null as File | null });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -19,46 +13,26 @@ const PlacementsUploadForm = () => {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
+    if (e.target.files?.[0]) {
       setForm((prev) => ({ ...prev, image: e.target.files![0] }));
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!form.image) {
-      toast({ title: 'Upload image required', variant: 'destructive' });
-      return;
-    }
+    if (!form.image) return toast({ title: 'Upload image required', variant: 'destructive' });
 
     const body = new FormData();
-    body.append('image', form.image);
-    body.append('type', 'placements');
-    body.append(
-      'metadata',
-      JSON.stringify({
-        studentName: form.studentName,
-        company: form.company,
-        package: form.package,
-        year: form.year,
-      })
-    );
+    body.append('imageFile', form.image);
+    body.append('githubPath', 'public/placements');
+    body.append('jsonPath', 'src/data/placements.json');
+    body.append('metadata', JSON.stringify({ studentName: form.studentName, company: form.company, package: form.package, year: form.year }));
 
-    const res = await fetch('/api/upload-content', {
-      method: 'POST',
-      body,
-    });
+    const res = await fetch('/api/upload-content', { method: 'POST', body });
 
     if (res.ok) {
-      toast({ title: 'Placement uploaded successfully!' });
-      setForm({
-        studentName: '',
-        company: '',
-        package: '',
-        year: '',
-        image: null,
-      });
+      toast({ title: 'Placement uploaded!' });
+      setForm({ studentName: '', company: '', package: '', year: '', image: null });
     } else {
       toast({ title: 'Upload failed', variant: 'destructive' });
     }
