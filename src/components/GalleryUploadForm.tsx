@@ -1,77 +1,53 @@
+// ✅ GalleryUploadForm.tsx
 import React, { useState } from 'react';
-import { toast } from 'sonner';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 const GalleryUploadForm = () => {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const { toast } = useToast();
+  const [form, setForm] = useState({ title: '', description: '', image: null as File | null });
 
-  const handleUpload = async () => {
-    if (!title || !description || !imageFile) {
-      toast.error('All fields are required.');
-      return;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+      setForm((prev) => ({ ...prev, image: e.target.files![0] }));
     }
+  };
 
-    const formData = new FormData();
-    formData.append('type', 'gallery');
-    formData.append('title', title);
-    formData.append('description', description);
-    formData.append('image', imageFile);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.image) return toast({ title: 'Upload image required', variant: 'destructive' });
 
-    setIsUploading(true);
+    const body = new FormData();
+    body.append('imageFile', form.image);
+    body.append('githubPath', 'public/gallery');
+    body.append('jsonPath', 'src/data/gallery.json');
+    body.append('metadata', JSON.stringify({ title: form.title, description: form.description }));
 
-    try {
-      const res = await fetch('/api/upload-content', {
-        method: 'POST',
-        body: formData,
-      });
+    const res = await fetch('/api/upload-content', { method: 'POST', body });
 
-      if (!res.ok) {
-        throw new Error('Upload failed');
-      }
-
-      toast.success('Gallery item uploaded!');
-      setTitle('');
-      setDescription('');
-      setImageFile(null);
-    } catch (err) {
-      console.error(err);
-      toast.error('Upload failed.');
-    } finally {
-      setIsUploading(false);
+    if (res.ok) {
+      toast({ title: 'Gallery item uploaded!' });
+      setForm({ title: '', description: '', image: null });
+    } else {
+      toast({ title: 'Upload failed', variant: 'destructive' });
     }
   };
 
   return (
-    <div className="p-4 border rounded-xl shadow w-full max-w-xl space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4 p-4 border rounded-xl">
       <h2 className="text-xl font-semibold">Upload Gallery Item</h2>
-      <input
-        type="text"
-        placeholder="Title"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        className="w-full p-2 border rounded"
-      />
-      <textarea
-        placeholder="Description"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        className="w-full p-2 border rounded"
-      />
-      <input
-        type="file"
-        accept="image/*"
-        onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-      />
-      <button
-        onClick={handleUpload}
-        disabled={isUploading}
-        className="bg-blue-600 text-white px-4 py-2 rounded"
-      >
-        {isUploading ? 'Uploading...' : 'Upload'}
-      </button>
-    </div>
+      <Input name="title" placeholder="Title" value={form.title} onChange={handleChange} required />
+      <Textarea name="description" placeholder="Description" value={form.description} onChange={handleChange} required />
+      <Input type="file" accept="image/*" onChange={handleFileChange} required />
+      <Button type="submit">Upload</Button>
+    </form>
   );
 };
 
