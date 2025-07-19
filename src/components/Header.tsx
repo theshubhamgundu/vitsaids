@@ -13,7 +13,7 @@ const Header = () => {
   const navItems = [
     { name: 'Home', href: '#home' },
     { name: 'About', href: '#about' },
-    { name: 'Student Achievements', href: '#achievements' },
+    { name: 'Achievements', href: '#achievements' },
     { name: 'Faculty', href: '#faculty' },
     { name: 'Clubs', href: '#clubs' },
     { name: 'Events', href: '#events' },
