@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import { uploadImageAndAppendData } from '@/lib/githubUploader';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 
 const PlacementsUploadForm = () => {
@@ -28,25 +26,39 @@ const PlacementsUploadForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.image) return toast({ title: 'Upload image required' });
 
-    const metadata = {
-      studentName: form.studentName,
-      company: form.company,
-      package: form.package,
-      year: form.year,
-    };
+    if (!form.image) {
+      toast({ title: 'Upload image required', variant: 'destructive' });
+      return;
+    }
 
-    const success = await uploadImageAndAppendData({
-      imageFile: form.image,
-      githubPath: 'public/placements',
-      jsonPath: 'src/data/placements.json',
-      metadata,
+    const body = new FormData();
+    body.append('image', form.image);
+    body.append('type', 'placements');
+    body.append(
+      'metadata',
+      JSON.stringify({
+        studentName: form.studentName,
+        company: form.company,
+        package: form.package,
+        year: form.year,
+      })
+    );
+
+    const res = await fetch('/api/upload-content', {
+      method: 'POST',
+      body,
     });
 
-    if (success) {
+    if (res.ok) {
       toast({ title: 'Placement uploaded successfully!' });
-      setForm({ studentName: '', company: '', package: '', year: '', image: null });
+      setForm({
+        studentName: '',
+        company: '',
+        package: '',
+        year: '',
+        image: null,
+      });
     } else {
       toast({ title: 'Upload failed', variant: 'destructive' });
     }
