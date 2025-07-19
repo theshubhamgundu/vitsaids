@@ -46,7 +46,6 @@ import GalleryUploadForm from '@/components/GalleryUploadForm';
 import EventsUploadForm from '@/components/EventsUploadForm';
 import FacultyUploadForm from '@/components/FacultyUploadForm';
 import PlacementsUploadForm from '@/components/PlacementsUploadForm';
-// IMPORT THE NEWLY CREATED AchievementsUploadForm
 import AchievementsUploadForm from '@/components/AchievementsUploadForm';
 // --- END NEW IMPORTS ---
 
@@ -111,20 +110,21 @@ interface CertificateItem {
     certificate_url: string;
     certificate_name: string;
     uploaded_at?: string;
-    user_profiles?: {
+    user_profiles?: { // This suggests a join on user_profiles
         student_name: string;
+        id: string; // Add id if available
         ht_no: string;
+        email?: string; // Assuming email might be available via user_profiles join
     };
 }
 
-// NEW TYPE FOR ACHIEVEMENT (copied for reference, actual type imported with AchievementsUploadForm)
-// interface Achievement {
-//     id: string;
-//     title: string;
-//     description?: string;
-//     date?: string;
-//     certificate_url?: string;
-// }
+interface Achievement {
+    id: string;
+    title: string;
+    description?: string;
+    date?: string; // Optional date for when achievement was earned
+    certificate_url?: string; // URL to a certificate PDF or image
+}
 
 
 // CRITICAL FIX: Moved SortableItem component definition above AdminDashboard to prevent ReferenceError
@@ -164,7 +164,6 @@ const AdminDashboard = () => {
     const [placements, setPlacements] = useState<Placement[]>([]);
     const [gallery, setGallery] = useState<GalleryItem[]>([]);
     const [certifications, setCertifications] = useState<CertificateItem[]>([]);
-    // NEW STATE FOR ACHIEVEMENTS
     const [achievements, setAchievements] = useState<Achievement[]>([]);
 
 
@@ -174,14 +173,14 @@ const AdminDashboard = () => {
         activeEvents: 0,
         facultyMembers: 0,
         placements: 0,
-        totalAchievements: 0, // NEW STAT
+        totalAchievements: 0,
     });
 
     // Loading states for various operations
     const [isGlobalLoading, setIsGlobalLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [isUpdating, setIsUpdating] = useState(false); // For editing/reordering metadata
+    const [isUpdating, setIsUpdating] = useState(false);
 
     // Student Management States (Supabase)
     const [editingStudent, setEditingStudent] = useState<PendingStudent | null>(null);
@@ -204,7 +203,8 @@ const AdminDashboard = () => {
 
     // Certificate Search State (Supabase backed)
     const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
-    const [adminCertificates, setAdminCertificates] = useState<CertificateItem[]>([]);
+    // This state will hold filtered results from `certifications` for display.
+    const [filteredCertificates, setFilteredCertificates] = useState<CertificateItem[]>([]);
 
     // DND-Kit Sensors
     const sensors = useSensors(
@@ -227,9 +227,6 @@ const AdminDashboard = () => {
     ) => {
         setIsUpdating(true);
         try {
-            // For now, this is a NO-OP for actual GitHub file operations.
-            // You need to implement 'updateFileContentInGithub' (to update filePath)
-            // and potentially 'deleteFileFromGithub' in your github-utils.ts.
             console.warn(`WARNING: persistGitHubData is currently a NO-OP for actual GitHub file content updates/deletions for '${variableName}'.
                 You need to implement 'updateFileContentInGithub' and 'fetchFileContentFromGithub' in your github-utils.ts.`);
             toast({ title: 'Persistence Not Implemented', description: 'GitHub file operations are not yet enabled. Changes are not saved.', variant: 'destructive' });
@@ -244,11 +241,6 @@ const AdminDashboard = () => {
     }, [toast]);
 
     // --- Data Loading Functions ---
-    // IMPORTANT: `fetchAndParseTsFile` is also NOT exported from your `github-utils.ts`.
-    // These functions currently rely on this missing utility to fetch data.
-    // They will need to be updated to use a functional `fetch` utility from `github-utils.ts`
-    // or their data loading mechanism needs to change.
-    // For now, I'm adding `console.error` and returning empty arrays/default stats.
 
     const loadAllStudents = useCallback(async () => {
         setIsGlobalLoading(true);
@@ -281,7 +273,6 @@ const AdminDashboard = () => {
         setIsGlobalLoading(true);
         try {
             console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load events data from GitHub.");
-            // const data = await fetchAndParseTsFile('public/events/events.ts', 'events'); // Placeholder if you implement real GitHub fetch
             const data: Event[] = []; // Default to empty array to prevent crash
             setEvents(data);
         } catch (error: any) {
@@ -296,7 +287,6 @@ const AdminDashboard = () => {
         setIsGlobalLoading(true);
         try {
             console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load faculty data from GitHub.");
-            // const data = await fetchAndParseTsFile('public/faculty/faculty.ts', 'faculty'); // Placeholder if you implement real GitHub fetch
             const data: Faculty[] = []; // Default to empty array
             setFaculty(data);
         } catch (error: any) {
@@ -311,7 +301,6 @@ const AdminDashboard = () => {
         setIsGlobalLoading(true);
         try {
             console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load placements data from GitHub.");
-            // const data = await fetchAndParseTsFile('public/placements/placements.ts', 'placements'); // Placeholder if you implement real GitHub fetch
             const data: Placement[] = []; // Default to empty array
             setPlacements(data);
         } catch (error: any) {
@@ -326,7 +315,6 @@ const AdminDashboard = () => {
         setIsGlobalLoading(true);
         try {
             console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load gallery data from GitHub.");
-            // const data = await fetchAndParseTsFile('public/gallery/gallery.ts', 'galleryItems'); // Placeholder if you implement real GitHub fetch
             const data: GalleryItem[] = []; // Default to empty array
             setGallery(data);
         } catch (error: any) {
@@ -337,12 +325,10 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
-    // NEW: Load Achievements
     const loadAchievements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
             console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load achievements data from GitHub.");
-            // const data = await fetchAndParseTsFile('public/achievements/achievements.ts', 'achievements'); // Placeholder
             const data: Achievement[] = []; // Default to empty array
             setAchievements(data);
         } catch (error: any) {
@@ -357,13 +343,17 @@ const AdminDashboard = () => {
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
+            // Fetch all certificates, joining with user_profiles to get student_name and ht_no
+            // Ensure your RLS allows admin to SELECT all from 'certificates' and 'user_profiles'.
             const { data, error } = await supabase
                 .from('certificates')
-                .select(`*, user_profiles!inner(student_name, id, ht_no)`)
+                .select(`*, user_profiles!inner(student_name, ht_no, email)`) // Added email to select
                 .order('uploaded_at', { ascending: false });
 
             if (!error && data) {
                 setCertifications(data);
+                // Also update filteredCertificates initially with all data
+                setFilteredCertificates(data);
             } else {
                 console.error('Error loading certificates:', error);
                 toast({ title: 'Error loading certificates', description: error?.message || 'Unknown error', variant: 'destructive' });
@@ -376,40 +366,36 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
-    // Fixed: loadStats now relies on already loaded state or fetches directly from Supabase for student count
     const loadStats = useCallback(async () => {
         try {
             const { count: studentsCount, error: studentsError } = await supabase.from('user_profiles').select('id', { count: 'exact' }).eq('role', 'student');
             if (studentsError) throw studentsError;
 
-            // These counts will reflect the state from loadEvents/Faculty/Placements/Achievements
-            // If those fail due to missing GitHub utilities, these will be 0.
             setStats({
                 totalStudents: studentsCount || 0,
                 activeEvents: events.length || 0,
                 facultyMembers: faculty.length || 0,
                 placements: placements.length || 0,
-                totalAchievements: achievements.length || 0, // NEW STAT
+                totalAchievements: achievements.length || 0,
             });
 
         } catch (error: any) {
             console.error('Error loading stats:', error);
             toast({ title: 'Error loading dashboard stats', description: error.message || 'Please try again later.', variant: 'destructive' });
         }
-    }, [toast, events.length, faculty.length, placements.length, achievements.length]); // Dependencies adjusted
+    }, [toast, events.length, faculty.length, placements.length, achievements.length]);
 
     useEffect(() => {
         if (!loading && userProfile?.role === 'admin') {
             loadAllStudents();
-            loadEvents(); // These will now log errors if fetchAndParseTsFile is truly missing
+            loadEvents();
             loadFaculty();
             loadPlacements();
             loadGallery();
-            loadAchievements(); // NEW: Load achievements
-            loadCertifications();
-            loadStats(); // Call after other loads, as it depends on their state
+            loadAchievements();
+            loadCertifications(); // This will now load all certs for admin
+            loadStats();
 
-            // Supabase Subscriptions (for students & certificates)
             const studentsChannel = supabase
                 .channel('students-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, () => {
@@ -432,7 +418,22 @@ const AdminDashboard = () => {
         }
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadStats]);
 
-    // Show loading while checking authentication
+    // Effect to filter certificates when search HTNO changes or main certifications list changes
+    useEffect(() => {
+        if (certificateSearchHTNO) {
+            setFilteredCertificates(
+                certifications.filter(cert =>
+                    cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+                    cert.user_profiles?.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())
+                )
+            );
+        } else {
+            // If search is empty, show all certificates
+            setFilteredCertificates(certifications);
+        }
+    }, [certificateSearchHTNO, certifications]); // Re-run when search input or main certs list changes
+
+
     if (loading || isGlobalLoading || !userProfile) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -444,7 +445,6 @@ const AdminDashboard = () => {
         );
     }
 
-    // Show access denied if not admin
     if (userProfile.role !== 'admin') {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -464,7 +464,6 @@ const AdminDashboard = () => {
         );
     }
 
-    // --- Student Management Functions (Supabase) ---
     const promoteStudent = async (studentId: string, currentYear: number | string) => {
         const numericYear = parseInt(currentYear as string);
         if (isNaN(numericYear)) {
@@ -642,7 +641,6 @@ const AdminDashboard = () => {
                 const newOrderedArray = arrayMove(dataArray, oldIndex, newIndex);
                 setDataArray(newOrderedArray); // Optimistic UI update
 
-                // This call will currently be a NO-OP due to missing GitHub update utility
                 const success = await persistGitHubData(newOrderedArray, filePath, variableName, `Reordered ${variableName}`);
                 if (!success) {
                     setDataArray(dataArray); // Revert if API call fails
@@ -664,15 +662,14 @@ const AdminDashboard = () => {
         try {
             if (eventToDelete.image) {
                 console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete event image from GitHub.");
-                // await deleteFileFromGithub(pathInRepo, `Delete event image: ${eventToDelete.title}`); // Implement in github-utils.ts
             }
 
             const updatedEvents = events.filter(event => event.id !== eventToDelete.id);
-            setEvents(updatedEvents); // Optimistic UI update
+            setEvents(updatedEvents);
 
             const success = await persistGitHubData(updatedEvents, 'public/events/events.ts', 'events', `Delete event: ${eventToDelete.title}`);
             if (!success) {
-                setEvents(events); // Revert if API call fails
+                setEvents(events);
                 toast({ title: 'Error', description: 'Failed to delete event details from GitHub. Please refresh.', variant: 'destructive' });
             } else {
                 toast({ title: 'Event deleted successfully (simulated)' });
@@ -696,7 +693,6 @@ const AdminDashboard = () => {
         try {
             if (facultyToDelete.image) {
                 console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete faculty image from GitHub.");
-                // await deleteFileFromGithub(pathInRepo, `Delete faculty image: ${facultyToDelete.name}`); // Implement in github-utils.ts
             }
 
             const updatedFaculty = faculty.filter(member => member.id !== facultyToDelete.id);
@@ -704,7 +700,7 @@ const AdminDashboard = () => {
 
             const success = await persistGitHubData(updatedFaculty, 'public/faculty/faculty.ts', 'faculty', `Delete faculty: ${facultyToDelete.name}`);
             if (!success) {
-                setFaculty(faculty); // Revert if API call fails
+                setFaculty(faculty);
                 toast({ title: 'Error', description: 'Failed to delete faculty details from GitHub. Please refresh.', variant: 'destructive' });
             } else {
                 toast({ title: 'Faculty member deleted successfully (simulated)' });
@@ -728,7 +724,6 @@ const AdminDashboard = () => {
         try {
             if (itemToDelete.image) {
                 console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete gallery image from GitHub.");
-                // await deleteFileFromGithub(pathInRepo, `Delete gallery image: ${itemToDelete.title}`); // Implement in github-utils.ts
             }
 
             const updatedGallery = gallery.filter(item => item.id !== itemToDelete.id);
@@ -736,7 +731,7 @@ const AdminDashboard = () => {
 
             const success = await persistGitHubData(updatedGallery, 'public/gallery/gallery.ts', 'galleryItems', `Delete gallery item: ${itemToDelete.title}`);
             if (!success) {
-                setGallery(gallery); // Revert if API call fails
+                setGallery(gallery);
                 toast({ title: 'Error', description: 'Failed to delete gallery item from GitHub. Please refresh.', variant: 'destructive' });
             } else {
                 toast({ title: 'Gallery item deleted successfully (simulated)' });
@@ -759,7 +754,6 @@ const AdminDashboard = () => {
         try {
             if (itemToDelete.image) {
                 console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete placement image from GitHub.");
-                // await deleteFileFromGithub(pathInRepo, `Delete placement image: ${itemToDelete.student_name}`); // Implement in github-utils.ts
             }
 
             const updatedPlacements = placements.filter(item => item.id !== itemToDelete.id);
@@ -767,7 +761,7 @@ const AdminDashboard = () => {
 
             const success = await persistGitHubData(updatedPlacements, 'public/placements/placements.ts', 'placements', `Delete placement: ${itemToDelete.student_name}`);
             if (!success) {
-                setPlacements(placements); // Revert if API call fails
+                setPlacements(placements);
                 toast({ title: 'Error', description: 'Failed to delete placement record from GitHub. Please refresh.', variant: 'destructive' });
             } else {
                 toast({ title: 'Placement record deleted successfully (simulated)' });
@@ -790,15 +784,14 @@ const AdminDashboard = () => {
         try {
             if (itemToDelete.certificate_url) {
                 console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete achievement certificate from GitHub.");
-                // await deleteFileFromGithub(pathInRepo, `Delete achievement certificate: ${itemToDelete.title}`); // Implement in github-utils.ts
             }
 
             const updatedAchievements = achievements.filter(item => item.id !== itemToDelete.id);
-            setAchievements(updatedAchievements); // Optimistic UI update
+            setAchievements(updatedAchievements);
 
             const success = await persistGitHubData(updatedAchievements, 'public/achievements/achievements.ts', 'achievements', `Delete achievement: ${itemToDelete.title}`);
             if (!success) {
-                setAchievements(achievements); // Revert if API call fails
+                setAchievements(achievements);
                 toast({ title: 'Error', description: 'Failed to delete achievement from GitHub. Please refresh.', variant: 'destructive' });
             } else {
                 toast({ title: 'Achievement deleted successfully (simulated)' });
@@ -814,35 +807,34 @@ const AdminDashboard = () => {
 
 
     // --- Certificates (Supabase) ---
-    const fetchStudentCertificates = async () => {
+    // The fetchStudentCertificates will now filter the already loaded 'certifications' state
+    const handleSearchCertificates = () => {
         if (!certificateSearchHTNO) {
-            toast({ title: 'Enter HT No. to search' });
-            setAdminCertificates([]);
+            // If search is empty, show all certificates
+            setFilteredCertificates(certifications);
+            toast({ title: 'Showing all certificates.' });
             return;
         }
-        try {
-            const { data, error } = await supabase
-                .from('certificates')
-                .select(`*, user_profiles!inner(student_name, ht_no)`)
-                .eq('ht_no', certificateSearchHTNO);
 
-            if (error) {
-                toast({ title: 'Error fetching certificates', description: error.message, variant: 'destructive' });
-            } else {
-                setAdminCertificates(data || []);
-                if ((data || []).length === 0) {
-                    toast({ title: 'No certificates found for this H.T No.' });
-                } else {
-                    toast({ title: `Found ${data.length} certificate(s).` });
-                }
-            }
-        } catch (error: any) {
-            console.error('Error fetching certificates:', error);
-            toast({ title: 'Error fetching certificates', description: error.message || 'Please try again later.', variant: 'destructive' });
+        const currentFiltered = certifications.filter(cert =>
+            cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+            cert.user_profiles?.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+            cert.user_profiles?.email?.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) // Allow search by email
+        );
+        setFilteredCertificates(currentFiltered);
+
+        if (currentFiltered.length === 0) {
+            toast({ title: 'No certificates found for this search criteria.' });
+        } else {
+            toast({ title: `Found ${currentFiltered.length} certificate(s).` });
         }
     };
 
+
     const deleteCertification = async (certId: string, certificateUrl: string) => {
+        const confirmDelete = window.confirm("Are you sure you want to delete this certificate? This action cannot be undone.");
+        if (!confirmDelete) return;
+
         try {
             if (certificateUrl) {
                 const pathWithinBucket = certificateUrl.split('certificates/')[1];
@@ -862,7 +854,7 @@ const AdminDashboard = () => {
 
             if (!error) {
                 toast({ title: "Certificate deleted successfully" });
-                loadCertifications();
+                loadCertifications(); // Reload all certificates to update the list
             } else {
                 toast({ title: 'Error deleting certificate', description: error.message, variant: 'destructive' });
             }
@@ -929,26 +921,23 @@ const AdminDashboard = () => {
         }
     };
 
-    const handleAttendanceUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleAttendanceFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            toast({ title: "Attendance sheet selected", description: `File: ${file.name}. Processing logic needs to be implemented.` });
+            toast({ title: "Attendance sheet selected", description: `File: ${file.name}. Click 'Process Attendance' to continue.` });
         }
+        // In a real app, you'd store this file in state for 'processAttendance' to use
+        // setAttendanceFile(file);
     };
 
-    // Placeholder for actual attendance processing
     const processAttendance = () => {
-        if (!isUploading) { // Only allow if not already uploading something else
-            toast({
-                title: "Attendance Processing Placeholder",
-                description: "This feature requires backend logic to parse the file and update attendance records. Currently, only file selection is handled.",
-                variant: "info",
-            });
-            // You would typically trigger an API call here to process the file
-            // setIsUploading(true);
-            // await processAttendanceFileApiCall(selectedAttendanceFile);
-            // setIsUploading(false);
-        }
+        // This is a placeholder for actual attendance processing logic (e.g., parsing CSV, updating DB)
+        toast({
+            title: "Attendance Processing Placeholder",
+            description: "Full attendance processing requires backend logic (parsing file, updating database). This button is currently a placeholder.",
+            variant: "info",
+        });
+        // Example: if (attendanceFile) { /* Call API to process attendanceFile */ }
     };
 
 
@@ -957,14 +946,13 @@ const AdminDashboard = () => {
         setResultFile(file);
     };
 
-    // Recommendation: Use constants for tab keys
     const TAB_VALUES = {
         STUDENTS: 'students',
         CERTIFICATIONS: 'certifications',
         EVENTS: 'events',
         FACULTY: 'faculty',
         PLACEMENTS: 'placements',
-        ACHIEVEMENTS: 'achievements', // NEW TAB VALUE
+        ACHIEVEMENTS: 'achievements',
         ATTENDANCE: 'attendance',
         RESULTS: 'results',
         TIMETABLE: 'timetable',
@@ -994,7 +982,7 @@ const AdminDashboard = () => {
             </header>
 
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8"> {/* Adjusted grid-cols to 5 for new stat card */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
                     <Card>
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between">
@@ -1043,7 +1031,6 @@ const AdminDashboard = () => {
                         </CardContent>
                     </Card>
 
-                    {/* NEW: Achievements Stat Card */}
                     <Card>
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between">
@@ -1182,141 +1169,99 @@ const AdminDashboard = () => {
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
                                     <BookOpen className="w-5 h-5" />
-                                    <span>Student Certificates ({certifications.length})</span>
+                                    <span>Student Certificates ({filteredCertificates.length} / {certifications.length} Total)</span> {/* Updated count display */}
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="mb-4 flex items-center space-x-2">
                                     <Input
-                                        placeholder="Search by H.T No."
+                                        placeholder="Search by H.T No., Name, or Email" // Updated placeholder
                                         value={certificateSearchHTNO}
                                         onChange={(e) => setCertificateSearchHTNO(e.target.value)}
                                         className="max-w-xs"
                                     />
-                                    <Button onClick={fetchStudentCertificates}>
+                                    <Button onClick={handleSearchCertificates}> {/* Changed to handleSearchCertificates */}
                                         <Search className="w-4 h-4 mr-2" /> Search
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setCertificateSearchHTNO(''); // Clear search
+                                            setFilteredCertificates(certifications); // Show all
+                                            toast({ title: 'Search cleared, showing all certificates.' });
+                                        }}
+                                        disabled={!certificateSearchHTNO && filteredCertificates.length === certifications.length}
+                                    >
+                                        <X className="w-4 h-4 mr-2" /> Clear Search
                                     </Button>
                                 </div>
 
-                                {adminCertificates.length > 0 && certificateSearchHTNO ? (
-                                    <div className="mb-4 p-4 border rounded-md bg-gray-50">
-                                        <h3 className="font-semibold mb-2">Search Results for H.T No. "{certificateSearchHTNO}"</h3>
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full border-collapse border border-gray-200">
-                                                <thead>
-                                                    <tr className="bg-gray-100">
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Student</th>
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Certificate Name</th>
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Uploaded At</th>
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {adminCertificates.map((cert) => (
-                                                        <tr key={cert.id}>
-                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                {cert.user_profiles?.student_name || 'Unknown'}
-                                                            </td>
-                                                            <td className="border border-gray-200 px-4 py-2">{cert.certificate_name}</td>
-                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'}
-                                                            </td>
-                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                <div className="flex space-x-2">
-                                                                    {cert.certificate_url && (
-                                                                        <Button
-                                                                            asChild
-                                                                            size="sm"
-                                                                            variant="outline"
-                                                                        >
-                                                                            <a
-                                                                                href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
-                                                                            >
-                                                                                View
-                                                                            </a>
-                                                                        </Button>
-                                                                    )}
+                                {filteredCertificates.length > 0 ? ( // Display filteredCertificates
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full border-collapse border border-gray-200">
+                                            <thead>
+                                                <tr className="bg-gray-50">
+                                                    <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
+                                                    <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
+                                                    <th className="border border-gray-200 px-4 py-2 text-left">Email</th>
+                                                    <th className="border border-gray-200 px-4 py-2 text-left">Certificate Name</th>
+                                                    <th className="border border-gray-200 px-4 py-2 text-left">Uploaded At</th>
+                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredCertificates.map((cert) => (
+                                                    <tr key={cert.id}>
+                                                        <td className="border border-gray-200 px-4 py-2">
+                                                            {cert.user_profiles?.student_name || 'Unknown'}
+                                                        </td>
+                                                        <td className="border border-gray-200 px-4 py-2">
+                                                            {cert.ht_no || 'N/A'}
+                                                        </td>
+                                                        <td className="border border-gray-200 px-4 py-2">
+                                                            {cert.user_profiles?.email || 'N/A'}
+                                                        </td>
+                                                        <td className="border border-gray-200 px-4 py-2">{cert.certificate_name}</td>
+                                                        <td className="border border-gray-200 px-4 py-2">
+                                                            {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'}
+                                                        </td>
+                                                        <td className="border border-gray-200 px-4 py-2">
+                                                            <div className="flex space-x-2">
+                                                                {cert.certificate_url && (
                                                                     <Button
+                                                                        asChild
                                                                         size="sm"
-                                                                        variant="destructive"
-                                                                        onClick={() => deleteCertification(cert.id, cert.certificate_url)}
+                                                                        variant="outline"
                                                                     >
-                                                                        <Trash2 className="w-4 h-4" />
+                                                                        <a
+                                                                            href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                        >
+                                                                            View
+                                                                        </a>
                                                                     </Button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                                                )}
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="destructive"
+                                                                    onClick={() => deleteCertification(cert.id, cert.certificate_url)}
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 ) : (
-                                    certifications.length > 0 ?
-                                        (
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full border-collapse border border-gray-200">
-                                                    <thead>
-                                                        <tr className="bg-gray-50">
-                                                            <th className="border border-gray-200 px-4 py-2 text-left">Student</th>
-                                                            <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
-                                                            <th className="border border-gray-200 px-4 py-2 text-left">Certificate Name</th>
-                                                            <th className="border border-gray-200 px-4 py-2 text-left">Uploaded At</th>
-                                                            <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {certifications.map((cert) => (
-                                                            <tr key={cert.id}>
-                                                                <td className="border border-gray-200 px-4 py-2">
-                                                                    {cert.user_profiles?.student_name || 'Unknown'}
-                                                                </td>
-                                                                <td className="border border-gray-200 px-4 py-2">
-                                                                    {cert.ht_no}
-                                                                </td>
-                                                                <td className="border border-gray-200 px-4 py-2">{cert.certificate_name}</td>
-                                                                <td className="border border-gray-200 px-4 py-2">
-                                                                    {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'}
-                                                                </td>
-                                                                <td className="border border-gray-200 px-4 py-2">
-                                                                    <div className="flex space-x-2">
-                                                                        {cert.certificate_url && (
-                                                                            <Button
-                                                                                asChild
-                                                                                size="sm"
-                                                                                variant="outline"
-                                                                            >
-                                                                                <a
-                                                                                    href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
-                                                                                    target="_blank"
-                                                                                    rel="noopener noreferrer"
-                                                                                >
-                                                                                    View
-                                                                                </a>
-                                                                            </Button>
-                                                                        )}
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="destructive"
-                                                                            onClick={() => deleteCertification(cert.id, cert.certificate_url)}
-                                                                        >
-                                                                            <Trash2 className="w-4 h-4" />
-                                                                        </Button>
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        ) : (
-                                            <div className="text-center py-8">
-                                                <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                                <p className="text-gray-500 text-lg">No certificates found</p>
-                                            </div>
-                                        )
+                                    <div className="text-center py-8">
+                                        <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                        <p className="text-gray-500 text-lg">No certificates found</p>
+                                        {certificateSearchHTNO && <p className="text-gray-500 text-sm">(Try clearing the search filter)</p>}
+                                    </div>
                                 )}
                             </CardContent>
                         </Card>
@@ -1783,11 +1728,11 @@ const AdminDashboard = () => {
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <Label htmlFor="attendance-file">Upload Attendance Sheet (CSV/Excel)</Label>
-                                <Input id="attendance-file" type="file" accept=".csv, .xlsx" onChange={handleAttendanceUpload} />
+                                <Input id="attendance-file" type="file" accept=".csv, .xlsx" onChange={handleAttendanceFileUpload} />
                                 <Button
-                                    onClick={processAttendance} // Added onClick handler
+                                    onClick={processAttendance}
                                     className="flex items-center space-x-1"
-                                    disabled={isUploading} // Keep disabled if another upload is in progress
+                                    disabled={isUploading}
                                 >
                                     <Upload className="w-4 h-4" />
                                     <span>Process Attendance (Placeholder)</span>
@@ -1819,7 +1764,7 @@ const AdminDashboard = () => {
                                 <Button
                                     onClick={uploadResult}
                                     className="flex items-center space-x-1"
-                                    disabled={isUploading || !resultFile || !resultTitle} // Correctly disabled if fields are empty
+                                    disabled={isUploading || !resultFile || !resultTitle}
                                 >
                                     {isUploading ? 'Uploading...' : 'Upload Result'}
                                     <Upload className="w-4 h-4" />
@@ -1844,7 +1789,6 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {/* Added Suspense for TimetableManager */}
                                 <Suspense fallback={<div>Loading Timetable...</div>}>
                                     <TimetableManager />
                                 </Suspense>
