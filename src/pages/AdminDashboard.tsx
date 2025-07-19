@@ -35,7 +35,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
-// GitHub utilities - REMOVED updateGithubContentFile as requested
+// GitHub utilities
 import { uploadFileToGithub, deleteFileFromGithub, fetchAndParseTsFile } from '@/lib/github-utils';
 
 // --- NEW IMPORTS FOR UPLOAD FORMS ---
@@ -178,9 +178,9 @@ const AdminDashboard = () => {
     const [resultTitle, setResultTitle] = useState('');
     const [resultFile, setResultFile] = useState<File | null>(null);
 
-    // Notifications State (Supabase backed)
+    // Notifications State (Supabase backed) - FIX APPLIED HERE
     const [notificationTitle, setNotificationTitle] = useState('');
-    const [notificationMessage, setNotificationTitle] = useState('');
+    const [notificationMessage, setNotificationMessage] = useState(''); // Corrected setter name
 
     // Certificate Search State (Supabase backed)
     const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
@@ -195,17 +195,6 @@ const AdminDashboard = () => {
     );
 
     // --- Generic GitHub Data Persistence Function ---
-    // This function will now be responsible for updating content via the github-utils.ts
-    // which should expose the necessary update function (e.g., commitFileToGithub or similar)
-    // if updateGithubContentFile was removed but its functionality is still needed.
-    // If it's expected that the called *UploadForms now handle the actual git commits,
-    // then this function should be either re-implemented here or fully removed if not used.
-    // Given the prompt, I'm assuming 'updateGithubContentFile' was just a typo/missing function,
-    // and a general content update function exists or needs to be re-introduced from github-utils.
-    // For now, I'm keeping the logic as if a 'updateGithubContentFile' equivalent still exists
-    // in github-utils, even if named differently or composed from upload/delete.
-    // If the intention is that `persistGitHubData` itself is not needed here and is fully within the Forms,
-    // please clarify. For now, maintaining its structure.
     const persistGitHubData = useCallback(async <T extends { id: string }>(
         dataArray: T[],
         filePath: string,
@@ -215,32 +204,12 @@ const AdminDashboard = () => {
         setIsUpdating(true);
         try {
             const formattedContent = `export const ${variableName} = ${JSON.stringify(dataArray, null, 2)};\n`;
-            // Assuming 'updateGithubContentFile' was intended to be used or its functionality is now within the other github-utils.
-            // If the actual function name is different in your github-utils.ts, please adjust accordingly.
-            // For example, if it's uploadFileToGithub with upsert: true and content string.
-            // For now, I'll keep a placeholder call.
-            // THIS LINE MIGHT NEED ADJUSTMENT based on your github-utils.ts implementation.
-            // If `updateGithubContentFile` was *truly* removed and its logic wasn't replaced by something in `github-utils`,
-            // then this `persistGitHubData` function itself needs to be re-evaluated or removed.
-            // As per previous context, this function *was* used for DND persistence, so assuming its underlying capability still exists.
-            const success = await uploadFileToGithub(filePath, new TextEncoder().encode(formattedContent), commitMessage, true); // Assuming uploadFileToGithub can upsert content
-            // If uploadFileToGithub does not take `true` for upsert content, you need a different method.
-            // A more robust solution might involve:
-            // const existingContent = await fetchAndParseTsFile(filePath, variableName, true); // true for raw content
-            // const sha = existingContent?.sha; // You need SHA for updates
-            // const success = await updateFileInGithub(filePath, formattedContent, commitMessage, sha); // A dedicated update function
+            // Assuming uploadFileToGithub can handle content updates by overwriting (upsert)
+            // If your github-utils requires a separate 'update' function with SHA, this line needs adjustment.
+            // Based on previous discussions, 'uploadFileToGithub' was configured for this purpose.
+            const success = await uploadFileToGithub(filePath, new TextEncoder().encode(formattedContent), commitMessage, true);
 
-            // Reverting to the original structure to indicate the need for this function
-            // to exist, even if its internal call to updateGithubContentFile needs fixing.
-            // Given the instruction was to remove a *missing* import, it means `updateGithubContentFile`
-            // itself was not found. If its functionality is now part of `uploadFileToGithub` or a new utility,
-            // that internal call needs correction.
-            // For now, I'm making a direct call to `uploadFileToGithub` with `true` for upsert,
-            // which is a common pattern for "updating" by uploading with `upsert: true`.
-            // If your `uploadFileToGithub` doesn't support content updates (only new files),
-            // you'll need a different `update` method in `github-utils.ts`.
-
-            if (!success) { // `success` might be the return of uploadFileToGithub if it confirms the operation
+            if (!success) {
                 toast({ title: 'Error', description: 'Failed to sync changes to GitHub. Please refresh.', variant: 'destructive' });
                 // Re-load data to ensure consistency with remote
                 if (variableName === 'events') loadEvents();
@@ -256,7 +225,7 @@ const AdminDashboard = () => {
         } finally {
             setIsUpdating(false);
         }
-    }, [toast, loadEvents, loadFaculty, loadGallery, loadPlacements, uploadFileToGithub]); // Added uploadFileToGithub to dependency array
+    }, [toast, loadEvents, loadFaculty, loadGallery, loadPlacements, uploadFileToGithub]);
 
     // --- Data Loading Functions ---
 
@@ -644,6 +613,7 @@ const AdminDashboard = () => {
             }
         }
     };
+
 
     // --- Events CRUD (These will be passed to EventsUploadForm) ---
     const handleDeleteEvent = async (eventToDelete: Event) => {
@@ -1230,7 +1200,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Events Tab Content (GitHub Backed) */}
-                    <TabsContent value="events" className="p-4"> {/* Added p-4 */}
+                    <TabsContent value="events" className="p-4">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1252,7 +1222,7 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="max-w-full mx-auto"> {/* Added wrapper */}
+                                <div className="max-w-full mx-auto">
                                     {events.length > 0 ?
                                         (
                                             <DndContext
@@ -1326,7 +1296,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Faculty Tab Content (GitHub Backed) - FIX: value="faculty" */}
-                    <TabsContent value="faculty" className="p-4"> {/* Corrected value and added p-4 */}
+                    <TabsContent value="faculty" className="p-4">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1348,7 +1318,7 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="max-w-full mx-auto"> {/* Added wrapper */}
+                                <div className="max-w-full mx-auto">
                                     {faculty.length > 0 ?
                                         (
                                             <DndContext
@@ -1422,7 +1392,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Placements Tab Content (GitHub Backed) */}
-                    <TabsContent value="placements" className="p-4"> {/* Added p-4 */}
+                    <TabsContent value="placements" className="p-4">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1444,7 +1414,7 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="max-w-full mx-auto"> {/* Added wrapper */}
+                                <div className="max-w-full mx-auto">
                                     {placements.length > 0 ?
                                         (
                                             <DndContext
@@ -1584,7 +1554,7 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Gallery Tab Content (GitHub Backed) */}
-                    <TabsContent value="gallery" className="p-4"> {/* Added p-4 */}
+                    <TabsContent value="gallery" className="p-4">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
@@ -1606,7 +1576,7 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="max-w-full mx-auto"> {/* Added wrapper */}
+                                <div className="max-w-full mx-auto">
                                     {gallery.length > 0 ?
                                         (
                                             <DndContext
