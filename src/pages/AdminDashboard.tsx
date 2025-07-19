@@ -953,7 +953,7 @@ const AdminDashboard = () => {
         GALLERY: 'gallery',
     };
 
-    // New component for Achievements Upload Form (will be embedded here for full file, but should be its own file)
+    // New component for Achievements Upload Form (embedded here for full file, but should be its own file)
     // You should extract this into `src/components/AchievementsUploadForm.tsx`
     const AchievementsUploadForm = ({ onUploadSuccess, achievements, setAchievements, isUploading, setIsUploading, isUpdating, setIsUpdating, persistGitHubData, isEdit = false, initialData = null }: {
         onUploadSuccess: () => void;
@@ -978,6 +978,8 @@ const AdminDashboard = () => {
                 setTitle(initialData.title);
                 setDescription(initialData.description || '');
                 setDate(initialData.date || '');
+                // Do not set certificateFile from initialData.certificate_url here
+                // as it's a URL, not a File object. User will re-upload if needed.
             }
         }, [isEdit, initialData]);
 
@@ -995,7 +997,7 @@ const AdminDashboard = () => {
 
             setIsUploading(true);
             try {
-                let fileUrl = initialData?.certificate_url;
+                let fileUrl = initialData?.certificate_url; // Keep existing URL if not uploading new file
                 if (certificateFile) {
                     const fileExtension = certificateFile.name.split('.').pop();
                     const fileName = `achievement-${Date.now()}.${fileExtension}`;
@@ -1006,8 +1008,8 @@ const AdminDashboard = () => {
                         throw new Error("Failed to upload certificate to GitHub.");
                     }
                     // This public URL part might need adjustment based on how uploadToGitHubRepo returns the URL
-                    // For now, assuming it handles public URL directly or you derive it client-side.
-                    fileUrl = `https://raw.githubusercontent.com/<YOUR_GITHUB_USER>/<YOUR_REPO>/main/${pathInRepo}`; // Placeholder: Replace with actual URL logic
+                    // For now, assuming raw.githubusercontent.com path. Replace with actual logic.
+                    fileUrl = `https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/main/${pathInRepo}`; // *** IMPORTANT: REPLACE WITH YOUR ACTUAL GITHUB USERNAME AND REPO NAME ***
                 }
 
 
@@ -1029,7 +1031,9 @@ const AdminDashboard = () => {
                 }
 
                 setAchievements(updatedAchievements); // Optimistic update
-                const success = await persistGitHubData(updatedAchievements, 'src/data/achievements.json', 'achievements', `Add/Update Achievement: ${title}`); // Use src/data
+                // IMPORTANT: The path for metadata should be `src/data/achievements.json`
+                // Ensure your API handles writing to `src/data` for JSON files.
+                const success = await persistGitHubData(updatedAchievements, 'src/data/achievements.json', 'achievements', `Add/Update Achievement: ${title}`);
                 if (!success) {
                     setAchievements(achievements); // Revert
                     toast({ title: 'Error', description: 'Failed to save achievement metadata to GitHub.', variant: 'destructive' });
@@ -1056,7 +1060,7 @@ const AdminDashboard = () => {
                 <DialogTrigger asChild>
                     <Button variant="outline" size="sm" className="ml-auto h-8 flex items-center space-x-2">
                         <Plus className="h-4 w-4" />
-                        <span>{isEdit ? 'Edit' : 'Add New'}</span>
+                        <span>{isEdit ? 'Edit' : 'Add New Achievement'}</span>
                     </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[425px]">
@@ -1151,7 +1155,7 @@ const AdminDashboard = () => {
             </header>
 
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8"> {/* Adjusted grid-cols to 5 for new stat card */}
                     <Card>
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between">
@@ -1233,11 +1237,11 @@ const AdminDashboard = () => {
                             <span>Faculty</span>
                         </TabsTrigger>
                         <TabsTrigger value={TAB_VALUES.PLACEMENTS} className="flex items-center space-x-1 text-xs lg:text-sm">
-                            <TrendingUp className="w-3 h-3 lg:w-4 lg:h-4" /> {/* Changed from Trophy to TrendingUp for placements as it was in stats */}
+                            <TrendingUp className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Placements</span>
                         </TabsTrigger>
                         <TabsTrigger value={TAB_VALUES.ACHIEVEMENTS} className="flex items-center space-x-1 text-xs lg:text-sm">
-                            <Trophy className="w-3 h-3 lg:w-4 lg:h-4" /> {/* NEW TAB */}
+                            <Trophy className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Achievemnts</span>
                         </TabsTrigger>
                         <TabsTrigger value={TAB_VALUES.ATTENDANCE} className="flex items-center space-x-1 text-xs lg:text-sm">
@@ -1480,291 +1484,339 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Events Tab Content (GitHub Backed) */}
-                    <TabsContent value={TAB_VALUES.EVENTS}> {/* Removed p-4 as it's handled by wrapper div */}
-                        <div className="w-full px-6 py-6"> {/* Added wrapper div for responsive layout */}
-                            <div className="flex flex-col md:flex-row gap-6 items-start justify-between w-full">
+                    <TabsContent value={TAB_VALUES.EVENTS}>
+                        <div className="w-full px-6 py-6">
+                            <div className="flex flex-col md:flex-row gap-6 items-start w-full">
                                 {/* Left Section - Heading + Uploaded List Count */}
                                 <div className="md:w-1/3 w-full">
-                                    <h2 className="text-2xl font-semibold mb-2 flex items-center gap-2">
-                                        <Calendar className="w-5 h-5" />
-                                        Event Management ({events.length})
-                                    </h2>
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="flex items-center space-x-2">
+                                                <Calendar className="w-5 h-5" />
+                                                <span>Event Management ({events.length})</span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            {events.length > 0 ? (
+                                                <DndContext
+                                                    sensors={sensors}
+                                                    collisionDetection={closestCenter}
+                                                    onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'public/events/events.ts', 'events')}
+                                                >
+                                                    <SortableContext
+                                                        items={events.map(event => event.id)}
+                                                        strategy={verticalListSortingStrategy}
+                                                    >
+                                                        <div className="overflow-x-auto">
+                                                            <table className="w-full border-collapse border border-gray-200">
+                                                                <thead>
+                                                                    <tr className="bg-gray-50">
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Venue</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {events.map((event) => (
+                                                                        <SortableItem key={event.id} id={event.id}>
+                                                                            <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                                <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                                </td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{event.title}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{new Date(event.date).toLocaleDateString()}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{event.venue || 'N/A'}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">
+                                                                                    <div className="flex space-x-2">
+                                                                                        <EventsUploadForm
+                                                                                            isEdit={true}
+                                                                                            initialData={event}
+                                                                                            onUploadSuccess={loadEvents}
+                                                                                            events={events}
+                                                                                            setEvents={setEvents}
+                                                                                            isUploading={isUploading}
+                                                                                            setIsUploading={setIsUploading}
+                                                                                            isUpdating={isUpdating}
+                                                                                            setIsUpdating={setIsUpdating}
+                                                                                            persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                                persistGitHubData(dataArray as Event[], filePath, variableName, commitMessage)
+                                                                                            }
+                                                                                        />
+                                                                                        <Button size="sm" variant="destructive" onClick={() => handleDeleteEvent(event)} disabled={isDeleting}>
+                                                                                            <Trash2 className="w-4 h-4" />
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        </SortableItem>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </SortableContext>
+                                                </DndContext>
+                                            ) : (
+                                                <div className="text-center py-8">
+                                                    <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                    <p className="text-gray-500 text-lg">No events scheduled.</p>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
                                 </div>
 
                                 {/* Right Section - Upload Form */}
-                                <div className="bg-white rounded-xl border p-6 shadow-md w-full md:w-2/3 space-y-4">
-                                    <EventsUploadForm
-                                        onUploadSuccess={loadEvents}
-                                        events={events}
-                                        setEvents={setEvents}
-                                        isUploading={isUploading}
-                                        setIsUploading={setIsUploading}
-                                        isUpdating={isUpdating}
-                                        setIsUpdating={setIsUpdating}
-                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                            persistGitHubData(dataArray as Event[], filePath, variableName, commitMessage)
-                                        }
-                                    />
-                                    {events.length > 0 ? (
-                                        <DndContext
-                                            sensors={sensors}
-                                            collisionDetection={closestCenter}
-                                            onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'public/events/events.ts', 'events')}
-                                        >
-                                            <SortableContext
-                                                items={events.map(event => event.id)}
-                                                strategy={verticalListSortingStrategy}
-                                            >
-                                                <div className="overflow-x-auto mt-4"> {/* Added mt-4 for spacing */}
-                                                    <table className="w-full border-collapse border border-gray-200">
-                                                        <thead>
-                                                            <tr className="bg-gray-50">
-                                                                <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Venue</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {events.map((event) => (
-                                                                <SortableItem key={event.id} id={event.id}>
-                                                                    <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                        <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                            <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                        </td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{event.title}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{new Date(event.date).toLocaleDateString()}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{event.venue || 'N/A'}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">
-                                                                            <div className="flex space-x-2">
-                                                                                <EventsUploadForm
-                                                                                    isEdit={true}
-                                                                                    initialData={event}
-                                                                                    onUploadSuccess={loadEvents}
-                                                                                    events={events}
-                                                                                    setEvents={setEvents}
-                                                                                    isUploading={isUploading}
-                                                                                    setIsUploading={setIsUploading}
-                                                                                    isUpdating={isUpdating}
-                                                                                    setIsUpdating={setIsUpdating}
-                                                                                    persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                        persistGitHubData(dataArray as Event[], filePath, variableName, commitMessage)
-                                                                                    }
-                                                                                />
-                                                                                <Button size="sm" variant="destructive" onClick={() => handleDeleteEvent(event)} disabled={isDeleting}>
-                                                                                    <Trash2 className="w-4 h-4" />
-                                                                                </Button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                </SortableItem>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </SortableContext>
-                                        </DndContext>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-gray-500 text-lg">No events scheduled.</p>
-                                        </div>
-                                    )}
+                                <div className="w-full md:w-2/3">
+                                    <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4">
+                                        <CardHeader className="p-0 pb-4">
+                                            <CardTitle className="text-xl font-semibold flex items-center space-x-2">
+                                                <Plus className="h-5 w-5" />
+                                                <span>Upload New Event</span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <EventsUploadForm
+                                                onUploadSuccess={loadEvents}
+                                                events={events}
+                                                setEvents={setEvents}
+                                                isUploading={isUploading}
+                                                setIsUploading={setIsUploading}
+                                                isUpdating={isUpdating}
+                                                setIsUpdating={setIsUpdating}
+                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                    persistGitHubData(dataArray as Event[], filePath, variableName, commitMessage)
+                                                }
+                                            />
+                                        </CardContent>
+                                    </Card>
                                 </div>
                             </div>
                         </div>
                     </TabsContent>
 
                     {/* Faculty Tab Content (GitHub Backed) */}
-                    <TabsContent value={TAB_VALUES.FACULTY}> {/* Removed p-4 */}
-                        <div className="w-full px-6 py-6"> {/* Added wrapper div for responsive layout */}
-                            <div className="flex flex-col md:flex-row gap-6 items-start justify-between w-full">
+                    <TabsContent value={TAB_VALUES.FACULTY}>
+                        <div className="w-full px-6 py-6">
+                            <div className="flex flex-col md:flex-row gap-6 items-start w-full">
                                 {/* Left Section - Heading + Uploaded List Count */}
                                 <div className="md:w-1/3 w-full">
-                                    <h2 className="text-2xl font-semibold mb-2 flex items-center gap-2">
-                                        <GraduationCap className="w-5 h-5" />
-                                        Faculty Management ({faculty.length})
-                                    </h2>
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="flex items-center space-x-2">
+                                                <GraduationCap className="w-5 h-5" />
+                                                <span>Faculty Management ({faculty.length})</span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            {faculty.length > 0 ? (
+                                                <DndContext
+                                                    sensors={sensors}
+                                                    collisionDetection={closestCenter}
+                                                    onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'public/faculty/faculty.ts', 'faculty')}
+                                                >
+                                                    <SortableContext
+                                                        items={faculty.map(member => member.id)}
+                                                        strategy={verticalListSortingStrategy}
+                                                    >
+                                                        <div className="overflow-x-auto">
+                                                            <table className="w-full border-collapse border border-gray-200">
+                                                                <thead>
+                                                                    <tr className="bg-gray-50">
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Name</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Designation</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Department</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {faculty.map((member) => (
+                                                                        <SortableItem key={member.id} id={member.id}>
+                                                                            <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                                <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                                </td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{member.name}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{member.designation}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{member.department || 'N/A'}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">
+                                                                                    <div className="flex space-x-2">
+                                                                                        <FacultyUploadForm
+                                                                                            isEdit={true}
+                                                                                            initialData={member}
+                                                                                            onUploadSuccess={loadFaculty}
+                                                                                            faculty={faculty}
+                                                                                            setFaculty={setFaculty}
+                                                                                            isUploading={isUploading}
+                                                                                            setIsUploading={setIsUploading}
+                                                                                            isUpdating={isUpdating}
+                                                                                            setIsUpdating={setIsUpdating}
+                                                                                            persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                                persistGitHubData(dataArray as Faculty[], filePath, variableName, commitMessage)
+                                                                                            }
+                                                                                        />
+                                                                                        <Button size="sm" variant="destructive" onClick={() => handleDeleteFaculty(member)} disabled={isDeleting}>
+                                                                                            <Trash2 className="w-4 h-4" />
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        </SortableItem>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </SortableContext>
+                                                </DndContext>
+                                            ) : (
+                                                <div className="text-center py-8">
+                                                    <GraduationCap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                    <p className="text-gray-500 text-lg">No faculty members found.</p>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
                                 </div>
 
                                 {/* Right Section - Upload Form */}
-                                <div className="bg-white rounded-xl border p-6 shadow-md w-full md:w-2/3 space-y-4">
-                                    <FacultyUploadForm
-                                        onUploadSuccess={loadFaculty}
-                                        faculty={faculty}
-                                        setFaculty={setFaculty}
-                                        isUploading={isUploading}
-                                        setIsUploading={setIsUploading}
-                                        isUpdating={isUpdating}
-                                        setIsUpdating={setIsUpdating}
-                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                            persistGitHubData(dataArray as Faculty[], filePath, variableName, commitMessage)
-                                        }
-                                    />
-                                    {faculty.length > 0 ? (
-                                        <DndContext
-                                            sensors={sensors}
-                                            collisionDetection={closestCenter}
-                                            onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'public/faculty/faculty.ts', 'faculty')}
-                                        >
-                                            <SortableContext
-                                                items={faculty.map(member => member.id)}
-                                                strategy={verticalListSortingStrategy}
-                                            >
-                                                <div className="overflow-x-auto mt-4"> {/* Added mt-4 for spacing */}
-                                                    <table className="w-full border-collapse border border-gray-200">
-                                                        <thead>
-                                                            <tr className="bg-gray-50">
-                                                                <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Name</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Designation</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Department</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {faculty.map((member) => (
-                                                                <SortableItem key={member.id} id={member.id}>
-                                                                    <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                        <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                            <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                        </td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{member.name}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{member.designation}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{member.department || 'N/A'}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">
-                                                                            <div className="flex space-x-2">
-                                                                                <FacultyUploadForm
-                                                                                    isEdit={true}
-                                                                                    initialData={member}
-                                                                                    onUploadSuccess={loadFaculty}
-                                                                                    faculty={faculty}
-                                                                                    setFaculty={setFaculty}
-                                                                                    isUploading={isUploading}
-                                                                                    setIsUploading={setIsUploading}
-                                                                                    isUpdating={isUpdating}
-                                                                                    setIsUpdating={setIsUpdating}
-                                                                                    persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                        persistGitHubData(dataArray as Faculty[], filePath, variableName, commitMessage)
-                                                                                    }
-                                                                                />
-                                                                                <Button size="sm" variant="destructive" onClick={() => handleDeleteFaculty(member)} disabled={isDeleting}>
-                                                                                    <Trash2 className="w-4 h-4" />
-                                                                                </Button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                </SortableItem>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </SortableContext>
-                                        </DndContext>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <GraduationCap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-gray-500 text-lg">No faculty members found.</p>
-                                        </div>
-                                    )}
+                                <div className="w-full md:w-2/3">
+                                    <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4">
+                                        <CardHeader className="p-0 pb-4">
+                                            <CardTitle className="text-xl font-semibold flex items-center space-x-2">
+                                                <Plus className="h-5 w-5" />
+                                                <span>Add New Faculty</span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <FacultyUploadForm
+                                                onUploadSuccess={loadFaculty}
+                                                faculty={faculty}
+                                                setFaculty={setFaculty}
+                                                isUploading={isUploading}
+                                                setIsUploading={setIsUploading}
+                                                isUpdating={isUpdating}
+                                                setIsUpdating={setIsUpdating}
+                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                    persistGitHubData(dataArray as Faculty[], filePath, variableName, commitMessage)
+                                                }
+                                            />
+                                        </CardContent>
+                                    </Card>
                                 </div>
                             </div>
                         </div>
                     </TabsContent>
 
                     {/* Placements Tab Content (GitHub Backed) */}
-                    <TabsContent value={TAB_VALUES.PLACEMENTS}> {/* Removed p-4 */}
-                        <div className="w-full px-6 py-6"> {/* Added wrapper div for responsive layout */}
-                            <div className="flex flex-col md:flex-row gap-6 items-start justify-between w-full">
+                    <TabsContent value={TAB_VALUES.PLACEMENTS}>
+                        <div className="w-full px-6 py-6">
+                            <div className="flex flex-col md:flex-row gap-6 items-start w-full">
                                 {/* Left Section - Heading + Uploaded List Count */}
                                 <div className="md:w-1/3 w-full">
-                                    <h2 className="text-2xl font-semibold mb-2 flex items-center gap-2">
-                                        <TrendingUp className="w-5 h-5" />
-                                        Placement Management ({placements.length})
-                                    </h2>
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="flex items-center space-x-2">
+                                                <TrendingUp className="w-5 h-5" />
+                                                <span>Placement Management ({placements.length})</span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            {placements.length > 0 ? (
+                                                <DndContext
+                                                    sensors={sensors}
+                                                    collisionDetection={closestCenter}
+                                                    onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'public/placements/placements.ts', 'placements')}
+                                                >
+                                                    <SortableContext
+                                                        items={placements.map(item => item.id)}
+                                                        strategy={verticalListSortingStrategy}
+                                                    >
+                                                        <div className="overflow-x-auto">
+                                                            <table className="w-full border-collapse border border-gray-200">
+                                                                <thead>
+                                                                    <tr className="bg-gray-50">
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Company</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {placements.map((placement) => (
+                                                                        <SortableItem key={placement.id} id={placement.id}>
+                                                                            <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                                <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                                </td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{placement.student_name}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{placement.company}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">
+                                                                                    <div className="flex space-x-2">
+                                                                                        <PlacementsUploadForm
+                                                                                            isEdit={true}
+                                                                                            initialData={placement}
+                                                                                            onUploadSuccess={loadPlacements}
+                                                                                            placements={placements}
+                                                                                            setPlacements={setPlacements}
+                                                                                            isUploading={isUploading}
+                                                                                            setIsUploading={setIsUploading}
+                                                                                            isUpdating={isUpdating}
+                                                                                            setIsUpdating={setIsUpdating}
+                                                                                            persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                                persistGitHubData(dataArray as Placement[], filePath, variableName, commitMessage)
+                                                                                            }
+                                                                                        />
+                                                                                        <Button size="sm" variant="destructive" onClick={() => handleDeletePlacement(placement)} disabled={isDeleting}>
+                                                                                            <Trash2 className="w-4 h-4" />
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        </SortableItem>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </SortableContext>
+                                                </DndContext>
+                                            ) : (
+                                                <div className="text-center py-8">
+                                                    <TrendingUp className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                    <p className="text-gray-500 text-lg">No placement records found.</p>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
                                 </div>
 
                                 {/* Right Section - Upload Form */}
-                                <div className="bg-white rounded-xl border p-6 shadow-md w-full md:w-2/3 space-y-4">
-                                    <PlacementsUploadForm
-                                        onUploadSuccess={loadPlacements}
-                                        placements={placements}
-                                        setPlacements={setPlacements}
-                                        isUploading={isUploading}
-                                        setIsUploading={setIsUploading}
-                                        isUpdating={isUpdating}
-                                        setIsUpdating={setIsUpdating}
-                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                            persistGitHubData(dataArray as Placement[], filePath, variableName, commitMessage)
-                                        }
-                                    />
-                                    {placements.length > 0 ? (
-                                        <DndContext
-                                            sensors={sensors}
-                                            collisionDetection={closestCenter}
-                                            onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'public/placements/placements.ts', 'placements')}
-                                        >
-                                            <SortableContext
-                                                items={placements.map(item => item.id)}
-                                                strategy={verticalListSortingStrategy}
-                                            >
-                                                <div className="overflow-x-auto mt-4"> {/* Added mt-4 for spacing */}
-                                                    <table className="w-full border-collapse border border-gray-200">
-                                                        <thead>
-                                                            <tr className="bg-gray-50">
-                                                                <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Company</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {placements.map((placement) => (
-                                                                <SortableItem key={placement.id} id={placement.id}>
-                                                                    <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                        <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                            <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                        </td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{placement.student_name}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{placement.company}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">
-                                                                            <div className="flex space-x-2">
-                                                                                <PlacementsUploadForm
-                                                                                    isEdit={true}
-                                                                                    initialData={placement}
-                                                                                    onUploadSuccess={loadPlacements}
-                                                                                    placements={placements}
-                                                                                    setPlacements={setPlacements}
-                                                                                    isUploading={isUploading}
-                                                                                    setIsUploading={setIsUploading}
-                                                                                    isUpdating={isUpdating}
-                                                                                    setIsUpdating={setIsUpdating}
-                                                                                    persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                        persistGitHubData(dataArray as Placement[], filePath, variableName, commitMessage)
-                                                                                    }
-                                                                                />
-                                                                                <Button size="sm" variant="destructive" onClick={() => handleDeletePlacement(placement)} disabled={isDeleting}>
-                                                                                    <Trash2 className="w-4 h-4" />
-                                                                                </Button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                </SortableItem>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </SortableContext>
-                                        </DndContext>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <TrendingUp className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-gray-500 text-lg">No placement records found.</p>
-                                        </div>
-                                    )}
+                                <div className="w-full md:w-2/3">
+                                    <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4">
+                                        <CardHeader className="p-0 pb-4">
+                                            <CardTitle className="text-xl font-semibold flex items-center space-x-2">
+                                                <Plus className="h-5 w-5" />
+                                                <span>Add New Placement</span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <PlacementsUploadForm
+                                                onUploadSuccess={loadPlacements}
+                                                placements={placements}
+                                                setPlacements={setPlacements}
+                                                isUploading={isUploading}
+                                                setIsUploading={setIsUploading}
+                                                isUpdating={isUpdating}
+                                                setIsUpdating={setIsUpdating}
+                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                    persistGitHubData(dataArray as Placement[], filePath, variableName, commitMessage)
+                                                }
+                                            />
+                                        </CardContent>
+                                    </Card>
                                 </div>
                             </div>
                         </div>
@@ -1773,93 +1825,109 @@ const AdminDashboard = () => {
                     {/* NEW: Achievements Tab Content (GitHub Backed) */}
                     <TabsContent value={TAB_VALUES.ACHIEVEMENTS}>
                         <div className="w-full px-6 py-6">
-                            <div className="flex flex-col md:flex-row gap-6 items-start justify-between w-full">
+                            <div className="flex flex-col md:flex-row gap-6 items-start w-full">
                                 {/* Left Section - Heading + Uploaded List Count */}
                                 <div className="md:w-1/3 w-full">
-                                    <h2 className="text-2xl font-semibold mb-2 flex items-center gap-2">
-                                        <Trophy className="w-5 h-5" />
-                                        Achievement Management ({achievements.length})
-                                    </h2>
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="flex items-center space-x-2">
+                                                <Trophy className="w-5 h-5" />
+                                                <span>Achievement Management ({achievements.length})</span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            {achievements.length > 0 ? (
+                                                <DndContext
+                                                    sensors={sensors}
+                                                    collisionDetection={closestCenter}
+                                                    onDragEnd={(event) => handleDragEnd(event, achievements, setAchievements, 'public/achievements/achievements.ts', 'achievements')}
+                                                >
+                                                    <SortableContext
+                                                        items={achievements.map(item => item.id)}
+                                                        strategy={verticalListSortingStrategy}
+                                                    >
+                                                        <div className="overflow-x-auto">
+                                                            <table className="w-full border-collapse border border-gray-200">
+                                                                <thead>
+                                                                    <tr className="bg-gray-50">
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
+                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {achievements.map((item) => (
+                                                                        <SortableItem key={item.id} id={item.id}>
+                                                                            <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                                <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                                </td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{item.title}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</td>
+                                                                                <td className="border border-gray-200 px-4 py-2">
+                                                                                    <div className="flex space-x-2">
+                                                                                        <AchievementsUploadForm
+                                                                                            isEdit={true}
+                                                                                            initialData={item}
+                                                                                            onUploadSuccess={loadAchievements}
+                                                                                            achievements={achievements}
+                                                                                            setAchievements={setAchievements}
+                                                                                            isUploading={isUploading}
+                                                                                            setIsUploading={setIsUploading}
+                                                                                            isUpdating={isUpdating}
+                                                                                            setIsUpdating={setIsUpdating}
+                                                                                            persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                                persistGitHubData(dataArray as Achievement[], filePath, variableName, commitMessage)
+                                                                                            }
+                                                                                        />
+                                                                                        <Button size="sm" variant="destructive" onClick={() => handleDeleteAchievement(item)} disabled={isDeleting}>
+                                                                                            <Trash2 className="w-4 h-4" />
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        </SortableItem>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </SortableContext>
+                                                </DndContext>
+                                            ) : (
+                                                <div className="text-center py-8">
+                                                    <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                    <p className="text-gray-500 text-lg">No achievements found.</p>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
                                 </div>
 
                                 {/* Right Section - Upload Form */}
-                                <div className="bg-white rounded-xl border p-6 shadow-md w-full md:w-2/3 space-y-4">
-                                    <AchievementsUploadForm
-                                        onUploadSuccess={loadAchievements}
-                                        achievements={achievements}
-                                        setAchievements={setAchievements}
-                                        isUploading={isUploading}
-                                        setIsUploading={setIsUploading}
-                                        isUpdating={isUpdating}
-                                        setIsUpdating={setIsUpdating}
-                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                            persistGitHubData(dataArray as Achievement[], filePath, variableName, commitMessage)
-                                        }
-                                    />
-                                    {achievements.length > 0 ? (
-                                        <DndContext
-                                            sensors={sensors}
-                                            collisionDetection={closestCenter}
-                                            onDragEnd={(event) => handleDragEnd(event, achievements, setAchievements, 'public/achievements/achievements.ts', 'achievements')}
-                                        >
-                                            <SortableContext
-                                                items={achievements.map(item => item.id)}
-                                                strategy={verticalListSortingStrategy}
-                                            >
-                                                <div className="overflow-x-auto mt-4">
-                                                    <table className="w-full border-collapse border border-gray-200">
-                                                        <thead>
-                                                            <tr className="bg-gray-50">
-                                                                <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
-                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {achievements.map((item) => (
-                                                                <SortableItem key={item.id} id={item.id}>
-                                                                    <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                        <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                            <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                        </td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{item.title}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</td>
-                                                                        <td className="border border-gray-200 px-4 py-2">
-                                                                            <div className="flex space-x-2">
-                                                                                <AchievementsUploadForm
-                                                                                    isEdit={true}
-                                                                                    initialData={item}
-                                                                                    onUploadSuccess={loadAchievements}
-                                                                                    achievements={achievements}
-                                                                                    setAchievements={setAchievements}
-                                                                                    isUploading={isUploading}
-                                                                                    setIsUploading={setIsUploading}
-                                                                                    isUpdating={isUpdating}
-                                                                                    setIsUpdating={setIsUpdating}
-                                                                                    persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                        persistGitHubData(dataArray as Achievement[], filePath, variableName, commitMessage)
-                                                                                    }
-                                                                                />
-                                                                                <Button size="sm" variant="destructive" onClick={() => handleDeleteAchievement(item)} disabled={isDeleting}>
-                                                                                    <Trash2 className="w-4 h-4" />
-                                                                                </Button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                </SortableItem>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </SortableContext>
-                                        </DndContext>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-gray-500 text-lg">No achievements found.</p>
-                                        </div>
-                                    )}
+                                <div className="w-full md:w-2/3">
+                                    <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4">
+                                        <CardHeader className="p-0 pb-4">
+                                            <CardTitle className="text-xl font-semibold flex items-center space-x-2">
+                                                <Plus className="h-5 w-5" />
+                                                <span>Upload New Achievement</span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <AchievementsUploadForm
+                                                onUploadSuccess={loadAchievements}
+                                                achievements={achievements}
+                                                setAchievements={setAchievements}
+                                                isUploading={isUploading}
+                                                setIsUploading={setIsUploading}
+                                                isUpdating={isUpdating}
+                                                setIsUpdating={setIsUpdating}
+                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                    persistGitHubData(dataArray as Achievement[], filePath, variableName, commitMessage)
+                                                }
+                                            />
+                                        </CardContent>
+                                    </Card>
                                 </div>
                             </div>
                         </div>
@@ -1935,89 +2003,105 @@ const AdminDashboard = () => {
                     </TabsContent>
 
                     {/* Gallery Tab Content (GitHub Backed) */}
-                    <TabsContent value={TAB_VALUES.GALLERY}> {/* Removed p-4 */}
-                        <div className="w-full px-6 py-6"> {/* Added wrapper div for responsive layout */}
-                            <div className="flex flex-col md:flex-row gap-6 items-start justify-between w-full">
+                    <TabsContent value={TAB_VALUES.GALLERY}>
+                        <div className="w-full px-6 py-6">
+                            <div className="flex flex-col md:flex-row gap-6 items-start w-full">
                                 {/* Left Section - Heading + Uploaded List Count */}
                                 <div className="md:w-1/3 w-full">
-                                    <h2 className="text-2xl font-semibold mb-2 flex items-center gap-2">
-                                        <Image className="w-5 h-5" />
-                                        Gallery Management ({gallery.length})
-                                    </h2>
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="flex items-center space-x-2">
+                                                <Image className="w-5 h-5" />
+                                                <span>Gallery Management ({gallery.length})</span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            {gallery.length > 0 ? (
+                                                <DndContext
+                                                    sensors={sensors}
+                                                    collisionDetection={closestCenter}
+                                                    onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'public/gallery/gallery.ts', 'galleryItems')}
+                                                >
+                                                    <SortableContext
+                                                        items={gallery.map(item => item.id)}
+                                                        strategy={verticalListSortingStrategy}
+                                                    >
+                                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                                            {gallery.map((item) => (
+                                                                <SortableItem key={item.id} id={item.id}>
+                                                                    <Card className="relative group overflow-hidden h-full flex flex-col">
+                                                                        <div className="absolute top-2 left-2 z-10">
+                                                                            <GripVertical className="w-5 h-5 text-gray-400 cursor-grab" />
+                                                                        </div>
+                                                                        <img src={item.image} alt={item.title} className="w-full h-32 object-cover" />
+                                                                        <CardContent className="p-2 text-sm flex-grow">
+                                                                            <h3 className="font-semibold">{item.title}</h3>
+                                                                            <p className="text-gray-500 text-xs truncate">{item.description}</p>
+                                                                            <div className="flex justify-end space-x-2 mt-2">
+                                                                                <GalleryUploadForm
+                                                                                    isEdit={true}
+                                                                                    initialData={item}
+                                                                                    onUploadSuccess={loadGallery}
+                                                                                    galleryItems={gallery}
+                                                                                    setGalleryItems={setGallery}
+                                                                                    isUploading={isUploading}
+                                                                                    setIsUploading={setIsUploading}
+                                                                                    isUpdating={isUpdating}
+                                                                                    setIsUpdating={setIsUpdating}
+                                                                                    persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                        persistGitHubData(dataArray as GalleryItem[], filePath, variableName, commitMessage)
+                                                                                    }
+                                                                                />
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="destructive"
+                                                                                    onClick={() => handleDeleteGalleryItem(item)}
+                                                                                    disabled={isDeleting}
+                                                                                >
+                                                                                    <Trash2 className="w-4 h-4" />
+                                                                                </Button>
+                                                                            </div>
+                                                                        </CardContent>
+                                                                    </Card>
+                                                                </SortableItem>
+                                                            ))}
+                                                        </div>
+                                                    </SortableContext>
+                                                </DndContext>
+                                            ) : (
+                                                <div className="text-center py-8">
+                                                    <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                    <p className="text-gray-500 text-lg">No gallery items found.</p>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
                                 </div>
 
                                 {/* Right Section - Upload Form */}
-                                <div className="bg-white rounded-xl border p-6 shadow-md w-full md:w-2/3 space-y-4">
-                                    <GalleryUploadForm
-                                        onUploadSuccess={loadGallery}
-                                        galleryItems={gallery}
-                                        setGalleryItems={setGallery}
-                                        isUploading={isUploading}
-                                        setIsUploading={setIsUploading}
-                                        isUpdating={isUpdating}
-                                        setIsUpdating={setIsUpdating}
-                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                            persistGitHubData(dataArray as GalleryItem[], filePath, variableName, commitMessage)
-                                        }
-                                    />
-                                    {gallery.length > 0 ? (
-                                        <DndContext
-                                            sensors={sensors}
-                                            collisionDetection={closestCenter}
-                                            onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'public/gallery/gallery.ts', 'galleryItems')}
-                                        >
-                                            <SortableContext
-                                                items={gallery.map(item => item.id)}
-                                                strategy={verticalListSortingStrategy}
-                                            >
-                                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4"> {/* Added mt-4 for spacing */}
-                                                    {gallery.map((item) => (
-                                                        <SortableItem key={item.id} id={item.id}>
-                                                            <Card className="relative group overflow-hidden h-full flex flex-col">
-                                                                <div className="absolute top-2 left-2 z-10">
-                                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-grab" />
-                                                                </div>
-                                                                <img src={item.image} alt={item.title} className="w-full h-32 object-cover" />
-                                                                <CardContent className="p-2 text-sm flex-grow">
-                                                                    <h3 className="font-semibold">{item.title}</h3>
-                                                                    <p className="text-gray-500 text-xs truncate">{item.description}</p>
-                                                                    <div className="flex justify-end space-x-2 mt-2">
-                                                                        <GalleryUploadForm
-                                                                            isEdit={true}
-                                                                            initialData={item}
-                                                                            onUploadSuccess={loadGallery}
-                                                                            galleryItems={gallery}
-                                                                            setGalleryItems={setGallery}
-                                                                            isUploading={isUploading}
-                                                                            setIsUploading={setIsUploading}
-                                                                            isUpdating={isUpdating}
-                                                                            setIsUpdating={setIsUpdating}
-                                                                            persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                persistGitHubData(dataArray as GalleryItem[], filePath, variableName, commitMessage)
-                                                                            }
-                                                                        />
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="destructive"
-                                                                            onClick={() => handleDeleteGalleryItem(item)}
-                                                                            disabled={isDeleting}
-                                                                        >
-                                                                            <Trash2 className="w-4 h-4" />
-                                                                        </Button>
-                                                                    </div>
-                                                                </CardContent>
-                                                            </Card>
-                                                        </SortableItem>
-                                                    ))}
-                                                </div>
-                                            </SortableContext>
-                                        </DndContext>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                            <p className="text-gray-500 text-lg">No gallery items found.</p>
-                                        </div>
-                                    )}
+                                <div className="w-full md:w-2/3">
+                                    <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4">
+                                        <CardHeader className="p-0 pb-4">
+                                            <CardTitle className="text-xl font-semibold flex items-center space-x-2">
+                                                <Plus className="h-5 w-5" />
+                                                <span>Upload New Gallery Item</span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <GalleryUploadForm
+                                                onUploadSuccess={loadGallery}
+                                                galleryItems={gallery}
+                                                setGalleryItems={setGallery}
+                                                isUploading={isUploading}
+                                                setIsUploading={setIsUploading}
+                                                isUpdating={isUpdating}
+                                                setIsUpdating={setIsUpdating}
+                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                    persistGitHubData(dataArray as GalleryItem[], filePath, variableName, commitMessage)
+                                                }
+                                            />
+                                        </CardContent>
+                                    </Card>
                                 </div>
                             </div>
                         </div>
