@@ -46,6 +46,8 @@ import GalleryUploadForm from '@/components/GalleryUploadForm';
 import EventsUploadForm from '@/components/EventsUploadForm';
 import FacultyUploadForm from '@/components/FacultyUploadForm';
 import PlacementsUploadForm from '@/components/PlacementsUploadForm';
+// IMPORT THE NEWLY CREATED AchievementsUploadForm
+import AchievementsUploadForm from '@/components/AchievementsUploadForm';
 // --- END NEW IMPORTS ---
 
 
@@ -115,14 +117,14 @@ interface CertificateItem {
     };
 }
 
-// NEW TYPE FOR ACHIEVEMENT
-interface Achievement {
-    id: string;
-    title: string;
-    description?: string;
-    date?: string; // Optional date for when achievement was earned
-    certificate_url?: string; // URL to a certificate PDF or image
-}
+// NEW TYPE FOR ACHIEVEMENT (copied for reference, actual type imported with AchievementsUploadForm)
+// interface Achievement {
+//     id: string;
+//     title: string;
+//     description?: string;
+//     date?: string;
+//     certificate_url?: string;
+// }
 
 
 // CRITICAL FIX: Moved SortableItem component definition above AdminDashboard to prevent ReferenceError
@@ -930,9 +932,25 @@ const AdminDashboard = () => {
     const handleAttendanceUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            toast({ title: "Attendance sheet selected", description: `Ready to process: ${file.name}` });
+            toast({ title: "Attendance sheet selected", description: `File: ${file.name}. Processing logic needs to be implemented.` });
         }
     };
+
+    // Placeholder for actual attendance processing
+    const processAttendance = () => {
+        if (!isUploading) { // Only allow if not already uploading something else
+            toast({
+                title: "Attendance Processing Placeholder",
+                description: "This feature requires backend logic to parse the file and update attendance records. Currently, only file selection is handled.",
+                variant: "info",
+            });
+            // You would typically trigger an API call here to process the file
+            // setIsUploading(true);
+            // await processAttendanceFileApiCall(selectedAttendanceFile);
+            // setIsUploading(false);
+        }
+    };
+
 
     const handleResultsFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -951,185 +969,6 @@ const AdminDashboard = () => {
         RESULTS: 'results',
         TIMETABLE: 'timetable',
         GALLERY: 'gallery',
-    };
-
-    // New component for Achievements Upload Form (embedded here for full file, but should be its own file)
-    // You should extract this into `src/components/AchievementsUploadForm.tsx`
-    const AchievementsUploadForm = ({ onUploadSuccess, achievements, setAchievements, isUploading, setIsUploading, isUpdating, setIsUpdating, persistGitHubData, isEdit = false, initialData = null }: {
-        onUploadSuccess: () => void;
-        achievements: Achievement[];
-        setAchievements: React.Dispatch<React.SetStateAction<Achievement[]>>;
-        isUploading: boolean;
-        setIsUploading: React.Dispatch<React.SetStateAction<boolean>>;
-        isUpdating: boolean;
-        setIsUpdating: React.Dispatch<React.SetStateAction<boolean>>;
-        persistGitHubData: (dataArray: Achievement[], filePath: string, variableName: string, commitMessage: string) => Promise<boolean>;
-        isEdit?: boolean;
-        initialData?: Achievement | null;
-    }) => {
-        const [title, setTitle] = useState(initialData?.title || '');
-        const [description, setDescription] = useState(initialData?.description || '');
-        const [date, setDate] = useState(initialData?.date || '');
-        const [certificateFile, setCertificateFile] = useState<File | null>(null);
-        const [dialogOpen, setDialogOpen] = useState(false);
-
-        useEffect(() => {
-            if (isEdit && initialData) {
-                setTitle(initialData.title);
-                setDescription(initialData.description || '');
-                setDate(initialData.date || '');
-                // Do not set certificateFile from initialData.certificate_url here
-                // as it's a URL, not a File object. User will re-upload if needed.
-            }
-        }, [isEdit, initialData]);
-
-        const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-            if (e.target.files && e.target.files[0]) {
-                setCertificateFile(e.target.files[0]);
-            }
-        };
-
-        const handleSubmit = async () => {
-            if (!title) {
-                toast({ title: 'Title is required', variant: 'destructive' });
-                return;
-            }
-
-            setIsUploading(true);
-            try {
-                let fileUrl = initialData?.certificate_url; // Keep existing URL if not uploading new file
-                if (certificateFile) {
-                    const fileExtension = certificateFile.name.split('.').pop();
-                    const fileName = `achievement-${Date.now()}.${fileExtension}`;
-                    const pathInRepo = `public/achievements/${fileName}`; // Changed to public/achievements
-
-                    const uploadSuccess = await uploadToGitHubRepo(certificateFile, pathInRepo, `Upload achievement certificate for ${title}`);
-                    if (!uploadSuccess) {
-                        throw new Error("Failed to upload certificate to GitHub.");
-                    }
-                    // This public URL part might need adjustment based on how uploadToGitHubRepo returns the URL
-                    // For now, assuming raw.githubusercontent.com path. Replace with actual logic.
-                    fileUrl = `https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/main/${pathInRepo}`; // *** IMPORTANT: REPLACE WITH YOUR ACTUAL GITHUB USERNAME AND REPO NAME ***
-                }
-
-
-                const newAchievement: Achievement = {
-                    id: isEdit && initialData ? initialData.id : crypto.randomUUID(),
-                    title,
-                    description: description || undefined,
-                    date: date || undefined,
-                    certificate_url: fileUrl || undefined,
-                };
-
-                let updatedAchievements;
-                if (isEdit && initialData) {
-                    updatedAchievements = achievements.map(item =>
-                        item.id === initialData.id ? newAchievement : item
-                    );
-                } else {
-                    updatedAchievements = [...achievements, newAchievement];
-                }
-
-                setAchievements(updatedAchievements); // Optimistic update
-                // IMPORTANT: The path for metadata should be `src/data/achievements.json`
-                // Ensure your API handles writing to `src/data` for JSON files.
-                const success = await persistGitHubData(updatedAchievements, 'src/data/achievements.json', 'achievements', `Add/Update Achievement: ${title}`);
-                if (!success) {
-                    setAchievements(achievements); // Revert
-                    toast({ title: 'Error', description: 'Failed to save achievement metadata to GitHub.', variant: 'destructive' });
-                    return;
-                }
-
-                toast({ title: `Achievement ${isEdit ? 'updated' : 'uploaded'} successfully` });
-                setDialogOpen(false);
-                setTitle('');
-                setDescription('');
-                setDate('');
-                setCertificateFile(null);
-                onUploadSuccess(); // Refresh parent data (e.g., loadAchievements, loadStats)
-            } catch (error: any) {
-                console.error("Error uploading achievement:", error);
-                toast({ title: "Upload failed", description: error.message || "An unexpected error occurred.", variant: "destructive" });
-            } finally {
-                setIsUploading(false);
-            }
-        };
-
-        return (
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="ml-auto h-8 flex items-center space-x-2">
-                        <Plus className="h-4 w-4" />
-                        <span>{isEdit ? 'Edit' : 'Add New Achievement'}</span>
-                    </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle>{isEdit ? 'Edit Achievement' : 'Upload New Achievement'}</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="achievement-title" className="text-right">
-                                Title
-                            </Label>
-                            <Input
-                                id="achievement-title"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                className="col-span-3"
-                                placeholder="e.g., Best Project Award"
-                            />
-                        </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="achievement-description" className="text-right">
-                                Description
-                            </Label>
-                            <Textarea
-                                id="achievement-description"
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className="col-span-3"
-                                placeholder="Brief description of the achievement"
-                            />
-                        </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="achievement-date" className="text-right">
-                                Date (Optional)
-                            </Label>
-                            <Input
-                                id="achievement-date"
-                                type="date"
-                                value={date}
-                                onChange={(e) => setDate(e.target.value)}
-                                className="col-span-3"
-                            />
-                        </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="achievement-file" className="text-right">
-                                Certificate (PDF/Image)
-                            </Label>
-                            <Input
-                                id="achievement-file"
-                                type="file"
-                                accept=".pdf,image/*"
-                                onChange={handleFileChange}
-                                className="col-span-3"
-                            />
-                        </div>
-                        {initialData?.certificate_url && !certificateFile && (
-                            <div className="col-span-4 text-center text-sm text-gray-500">
-                                Existing file: <a href={initialData.certificate_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">View Current</a>
-                            </div>
-                        )}
-                    </div>
-                    <DialogFooter>
-                        <Button onClick={handleSubmit} disabled={isUploading || isUpdating}>
-                            {isUploading || isUpdating ? (isEdit ? 'Updating...' : 'Uploading...') : (isEdit ? 'Save Changes' : 'Upload Achievement')}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        );
     };
 
 
@@ -1487,7 +1326,7 @@ const AdminDashboard = () => {
                     <TabsContent value={TAB_VALUES.EVENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
-                                {/* Left Section - Heading + Uploaded List Count */}
+                                {/* Left Section - Heading + Uploaded List Content */}
                                 <div className="md:w-1/3 w-full">
                                     <Card>
                                         <CardHeader>
@@ -1600,7 +1439,7 @@ const AdminDashboard = () => {
                     <TabsContent value={TAB_VALUES.FACULTY}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
-                                {/* Left Section - Heading + Uploaded List Count */}
+                                {/* Left Section - Heading + Uploaded List Content */}
                                 <div className="md:w-1/3 w-full">
                                     <Card>
                                         <CardHeader>
@@ -1713,7 +1552,7 @@ const AdminDashboard = () => {
                     <TabsContent value={TAB_VALUES.PLACEMENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
-                                {/* Left Section - Heading + Uploaded List Count */}
+                                {/* Left Section - Heading + Uploaded List Content */}
                                 <div className="md:w-1/3 w-full">
                                     <Card>
                                         <CardHeader>
@@ -1826,7 +1665,7 @@ const AdminDashboard = () => {
                     <TabsContent value={TAB_VALUES.ACHIEVEMENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
-                                {/* Left Section - Heading + Uploaded List Count */}
+                                {/* Left Section - Heading + Uploaded List Content */}
                                 <div className="md:w-1/3 w-full">
                                     <Card>
                                         <CardHeader>
@@ -1945,13 +1784,17 @@ const AdminDashboard = () => {
                             <CardContent className="space-y-4">
                                 <Label htmlFor="attendance-file">Upload Attendance Sheet (CSV/Excel)</Label>
                                 <Input id="attendance-file" type="file" accept=".csv, .xlsx" onChange={handleAttendanceUpload} />
-                                <Button className="flex items-center space-x-1" disabled={isUploading}>
+                                <Button
+                                    onClick={processAttendance} // Added onClick handler
+                                    className="flex items-center space-x-1"
+                                    disabled={isUploading} // Keep disabled if another upload is in progress
+                                >
                                     <Upload className="w-4 h-4" />
                                     <span>Process Attendance (Placeholder)</span>
                                 </Button>
                                 <p className="text-sm text-gray-500">
                                     Upload a spreadsheet containing student attendance data.
-                                    This will be reflected in student profiles. (Further implementation needed for processing file content)
+                                    This will be reflected in student profiles. **Note: Full processing of the file content requires backend implementation.**
                                 </p>
                             </CardContent>
                         </Card>
@@ -1973,10 +1816,17 @@ const AdminDashboard = () => {
                                 <Label htmlFor="result-file">Upload Result File (PDF)</Label>
                                 <Input id="result-file" type="file" accept=".pdf" onChange={handleResultsFileUpload} />
 
-                                <Button onClick={uploadResult} className="flex items-center space-x-1" disabled={isUploading || !resultFile || !resultTitle}>
+                                <Button
+                                    onClick={uploadResult}
+                                    className="flex items-center space-x-1"
+                                    disabled={isUploading || !resultFile || !resultTitle} // Correctly disabled if fields are empty
+                                >
                                     {isUploading ? 'Uploading...' : 'Upload Result'}
                                     <Upload className="w-4 h-4" />
                                 </Button>
+                                {(!resultFile || !resultTitle) && (
+                                    <p className="text-sm text-red-500">Please enter a title and select a PDF file to enable upload.</p>
+                                )}
                                 <p className="text-sm text-gray-500">
                                     Upload official semester results in PDF format.
                                 </p>
@@ -2006,7 +1856,7 @@ const AdminDashboard = () => {
                     <TabsContent value={TAB_VALUES.GALLERY}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
-                                {/* Left Section - Heading + Uploaded List Count */}
+                                {/* Left Section - Heading + Uploaded List Content */}
                                 <div className="md:w-1/3 w-full">
                                     <Card>
                                         <CardHeader>
