@@ -1,22 +1,20 @@
 // StudentDashboard.tsx
-import React, { useEffect, useState, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext'; // Adjust path if necessary
-import { supabase } from '@/integrations/supabase/client'; // Adjust path if necessary
+import React, { useEffect, useState, useRef, useCallback } from 'react'; // Added useCallback
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast'; // Adjust path if necessary
+import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import ProfileCompletionModal from '@/components/ProfileCompletionModal'; // Adjust path if necessary
+import ProfileCompletionModal from '@/components/ProfileCompletionModal';
 import {
     LogOut, Eye, Trash2, Upload, Pencil, Edit, Save, X,
 } from 'lucide-react';
 
-// Define the shape of UserProfile as it comes from AuthContext
-// This should match the interface in AuthContext.tsx
 interface StudentUserProfile {
     id: string;
     role: string;
@@ -35,13 +33,11 @@ interface StudentUserProfile {
 }
 
 const StudentDashboard = () => {
-    // Use the user, userProfile, loading, logout, and refreshUserProfile from AuthContext
     const { user, userProfile, logout, loading, refreshUserProfile } = useAuth();
     const [, setLocation] = useLocation();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
-    // State for dashboard data
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
     const [certificates, setCertificates] = useState<any[]>([]);
     const [results, setResults] = useState<any[]>([]);
@@ -49,12 +45,10 @@ const StudentDashboard = () => {
     const [timetable, setTimetable] = useState<any[]>([]);
     const [tab, setTab] = useState('profile');
 
-    // State for certificate upload form
     const [certTitle, setCertTitle] = useState('');
     const [certDesc, setCertDesc] = useState('');
     const [certFile, setCertFile] = useState<File | null>(null);
 
-    // Profile completion and editing states
     const [showProfileCompletion, setShowProfileCompletion] = useState(false);
     const [showEditProfile, setShowEditProfile] = useState(false);
     const [editForm, setEditForm] = useState({
@@ -63,13 +57,116 @@ const StudentDashboard = () => {
         emergency_no: ''
     });
 
-    // --- Core Redirection and Data Fetching Logic ---
+    // Helper Functions - Wrapped in useCallback for stability in useEffect dependencies
+    const fetchPhoto = useCallback(async (profileId: string) => {
+        if (!profileId) {
+            console.warn("fetchPhoto: profileId is null or undefined.");
+            setPhotoUrl(null);
+            return;
+        }
+        const { data, error } = await supabase.storage
+            .from('profile_photos')
+            .getPublicUrl(`profiles/${profileId}/photo.jpg`);
+
+        if (error) {
+            console.error('Error fetching photo:', error);
+            setPhotoUrl(null);
+            return;
+        }
+        setPhotoUrl(data?.publicUrl || null);
+    }, []);
+
+    const fetchCertificates = useCallback(async (htNo: string) => {
+        if (!htNo) {
+            console.warn("fetchCertificates: htNo is null or undefined. Skipping fetch.");
+            setCertificates([]);
+            return;
+        }
+        console.log(`Attempting to fetch certificates for HT No: ${htNo}`);
+        const { data, error } = await supabase
+            .from('student_certificates')
+            .select('*')
+            .eq('htno', htNo);
+
+        console.log("📄 Certificates Data:", data);
+        console.log("🐞 Certificates Fetch Error:", error);
+
+        if (error) {
+            console.error('Error fetching certificates:', error);
+            setCertificates([]);
+            toast({
+                title: 'Error fetching certificates',
+                description: error.message,
+                variant: 'destructive',
+            });
+            return;
+        }
+        setCertificates(data || []);
+    }, [toast]);
+
+    const fetchResults = useCallback(async (htNo: string) => {
+        if (!htNo) {
+            console.warn("fetchResults: htNo is null or undefined.");
+            setResults([]);
+            return;
+        }
+        const { data, error } = await supabase
+            .from('results')
+            .select('*')
+            .eq('ht_no', htNo);
+
+        if (error) {
+            console.error('Error fetching results:', error);
+            setResults([]);
+            return;
+        }
+        setResults(data || []);
+    }, []);
+
+    const fetchAttendance = useCallback(async (htNo: string) => {
+        if (!htNo) {
+            console.warn("fetchAttendance: htNo is null or undefined.");
+            setAttendance([]);
+            return;
+        }
+        const { data, error } = await supabase
+            .from('attendance')
+            .select('*')
+            .eq('ht_no', htNo);
+
+        if (error) {
+            console.error('Error fetching attendance:', error);
+            setAttendance([]);
+            return;
+        }
+        setAttendance(data || []);
+    }, []);
+
+    const fetchTimetable = useCallback(async (year: string | null) => {
+        const yearAsNumber = parseInt(year || '0');
+        if (!yearAsNumber || yearAsNumber === 0) {
+            console.warn("Timetable: userProfile.year is not a valid number. Skipping fetch.");
+            setTimetable([]);
+            return;
+        }
+        const { data, error } = await supabase
+            .from('timetable')
+            .select('*')
+            .eq('year', yearAsNumber);
+
+        if (error) {
+            console.error('Error fetching timetable:', error);
+            setTimetable([]);
+            return;
+        }
+        setTimetable(data || []);
+    }, []);
 
     // Effect for initial authentication check, redirection, and data fetching
     useEffect(() => {
         console.log("StudentDashboard useEffect: loading=", loading, "user=", user, "userProfile=", userProfile);
 
-        if (!loading) { // Once AuthContext has finished its initial load
+        if (!loading) {
             if (!user || !userProfile || userProfile.role !== 'student') {
                 console.log("StudentDashboard: Unauthorized access or not a student. Redirecting to home.");
                 toast({
@@ -77,32 +174,36 @@ const StudentDashboard = () => {
                     description: 'You must be a logged-in student to view this dashboard.',
                     variant: 'destructive',
                 });
-                setLocation('/'); // Redirect to homepage or login page
+                setLocation('/');
             } else {
-                // If userProfile exists and is a student, check for completion
-                const isIncomplete = !userProfile.phone || !userProfile.address || !userProfile.emergency_no;
-                console.log("StudentDashboard - UserProfile complete check:", userProfile, "Is Incomplete:", isIncomplete);
+                const currentUserProfile = userProfile as StudentUserProfile;
+                const isIncomplete = !currentUserProfile.phone || !currentUserProfile.address || !currentUserProfile.emergency_no;
+                console.log("StudentDashboard - UserProfile complete check:", currentUserProfile, "Is Incomplete:", isIncomplete);
                 setShowProfileCompletion(isIncomplete);
 
-                // Initialize editForm with current profile data when userProfile becomes available
                 setEditForm({
-                    phone: userProfile.phone || '',
-                    address: userProfile.address || '',
-                    emergency_no: userProfile.emergency_no || ''
+                    phone: currentUserProfile.phone || '',
+                    address: currentUserProfile.address || '',
+                    emergency_no: currentUserProfile.emergency_no || ''
                 });
 
                 // Fetch data after successful profile load and role verification
-                fetchPhoto();
-                fetchCertificates();
-                fetchResults();
-                fetchAttendance();
-                fetchTimetable();
+                // Ensure ht_no and id are present before calling fetch functions
+                if (currentUserProfile.id) {
+                    fetchPhoto(currentUserProfile.id);
+                }
+                if (currentUserProfile.ht_no) {
+                    fetchCertificates(currentUserProfile.ht_no);
+                    fetchResults(currentUserProfile.ht_no);
+                    fetchAttendance(currentUserProfile.ht_no);
+                }
+                if (currentUserProfile.year) {
+                    fetchTimetable(currentUserProfile.year);
+                }
             }
         }
-    }, [loading, user, userProfile, setLocation, toast]); // Depend on loading, user, and userProfile from AuthContext
+    }, [loading, user, userProfile, setLocation, toast, fetchPhoto, fetchCertificates, fetchResults, fetchAttendance, fetchTimetable]); // Added all useCallback-wrapped fetch functions as dependencies
 
-    // --- Loading State and Initial Render ---
-    // Display a loading message or spinner while authentication state is being determined
     if (loading) {
         console.log("StudentDashboard: Displaying loading spinner.");
         return (
@@ -115,36 +216,15 @@ const StudentDashboard = () => {
         );
     }
 
-    // If we reach here and userProfile is still null or not a student,
-    // the useEffect above should have redirected. This acts as a final safeguard.
     if (!userProfile || userProfile.role !== 'student') {
         console.log("StudentDashboard: UserProfile is not valid or not student. Returning null.");
-        return null; // Component should not render its content if not authorized, let useEffect handle redirect
+        return null;
     }
 
-    // Safely use userProfile (now guaranteed to be StudentUserProfile by TypeScript due to the above checks)
     const currentUserProfile = userProfile as StudentUserProfile;
 
-    // --- Helper Functions ---
     const getInitials = (name: string | null) =>
-        name?.split(' ').map(n => n[0]).join('').toUpperCase() || ''; // Handle null name gracefully
-
-    const fetchPhoto = async () => {
-        if (!currentUserProfile.id) {
-            console.warn("fetchPhoto: currentUserProfile.id is null or undefined.");
-            return;
-        }
-        const { data, error } = await supabase.storage
-            .from('profile_photos')
-            .getPublicUrl(`profiles/${currentUserProfile.id}/photo.jpg`);
-
-        if (error) {
-            console.error('Error fetching photo:', error);
-            setPhotoUrl(null); // Clear photo if error
-            return;
-        }
-        setPhotoUrl(data?.publicUrl || null);
-    };
+        name?.split(' ').map(n => n[0]).join('').toUpperCase() || '';
 
     const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -162,88 +242,10 @@ const StudentDashboard = () => {
                 throw error;
             }
             toast({ title: 'Photo uploaded successfully.' });
-            fetchPhoto(); // Re-fetch to display the new photo
+            fetchPhoto(currentUserProfile.id); // Re-fetch to display the new photo
         } catch (error: any) {
             toast({ title: 'Upload Failed', description: error.message || 'Failed to upload photo.', variant: 'destructive' });
         }
-    };
-
-    const fetchCertificates = async () => {
-        if (!currentUserProfile.ht_no) {
-            console.warn("fetchCertificates: currentUserProfile.ht_no is null or undefined.");
-            setCertificates([]);
-            return;
-        }
-        const { data, error } = await supabase
-            .from('student_certificates')
-            .select('*')
-            .eq('htno', currentUserProfile.ht_no);
-
-        if (error) {
-            console.error('Error fetching certificates:', error);
-            setCertificates([]); // Clear if error
-            return;
-        }
-        setCertificates(data || []);
-    };
-
-    const fetchResults = async () => {
-        if (!currentUserProfile.ht_no) {
-            console.warn("fetchResults: currentUserProfile.ht_no is null or undefined.");
-            setResults([]);
-            return;
-        }
-        const { data, error } = await supabase
-            .from('results')
-            .select('*')
-            .eq('ht_no', currentUserProfile.ht_no);
-
-        if (error) {
-            console.error('Error fetching results:', error);
-            setResults([]); // Clear if error
-            return;
-        }
-        setResults(data || []);
-    };
-
-    const fetchAttendance = async () => {
-        if (!currentUserProfile.ht_no) {
-            console.warn("fetchAttendance: currentUserProfile.ht_no is null or undefined.");
-            setAttendance([]);
-            return;
-        }
-        const { data, error } = await supabase
-            .from('attendance')
-            .select('*')
-            .eq('ht_no', currentUserProfile.ht_no);
-
-        if (error) {
-            console.error('Error fetching attendance:', error);
-            setAttendance([]); // Clear if error
-            return;
-        }
-        setAttendance(data || []);
-    };
-
-    const fetchTimetable = async () => {
-        // Assuming timetable 'year' column is a number. Adjust if it's '1st Year', '2nd Year' string.
-        const yearAsNumber = parseInt(currentUserProfile.year || '0');
-        if (!yearAsNumber || yearAsNumber === 0) {
-            console.warn("Timetable: userProfile.year is not a valid number.");
-            setTimetable([]);
-            return;
-        }
-        const { data, error } = await supabase
-            .from('timetable')
-            .select('*')
-            .eq('year', yearAsNumber); // Use the parsed number
-
-        if (error) {
-            console.error('Error fetching timetable:', error);
-            setTimetable([]); // Clear if error
-            return;
-        }
-        setTimetable(data || []);
     };
 
     const uploadCert = async () => {
@@ -255,23 +257,21 @@ const StudentDashboard = () => {
             });
             return;
         }
-        if (!currentUserProfile.ht_no || !user?.id) { // Ensure both HT No and User ID are present
-             toast({ title: 'Error', description: 'User profile or authentication details missing.', variant: 'destructive' });
-             return;
+        if (!currentUserProfile.ht_no || !user?.id) {
+            toast({ title: 'Error', description: 'User profile or authentication details missing.', variant: 'destructive' });
+            return;
         }
 
         try {
             console.log('🔍 Debug - Auth user:', user);
             console.log('🔍 Debug - User profile:', currentUserProfile);
 
-            // Get the file extension
             const fileExt = certFile.name.split('.').pop();
             const fileName = `${Date.now()}-${certTitle.replace(/[^a-zA-Z0-9]/g, '_')}.${fileExt}`;
             const path = `${currentUserProfile.ht_no}/${fileName}`;
 
             console.log('🔍 Debug - File path for upload:', path);
 
-            // Upload file to storage
             const { error: uploadError } = await supabase.storage
                 .from('certifications')
                 .upload(path, certFile, { upsert: true });
@@ -281,17 +281,15 @@ const StudentDashboard = () => {
                 throw uploadError;
             }
 
-            // Get public URL for the file
             const publicURL = supabase.storage.from('certifications').getPublicUrl(path).data.publicUrl;
             console.log('🔍 Debug - Public URL:', publicURL);
 
-            // Insert record to database
             console.log('🔍 Debug - About to insert certificate record:', {
                 htno: currentUserProfile.ht_no,
                 title: certTitle,
                 description: certDesc,
                 file_url: publicURL,
-                user_id: user.id, // Use the user.id from Supabase auth session
+                user_id: user.id,
             });
 
             const { data: insertData, error: dbError } = await supabase
@@ -301,9 +299,9 @@ const StudentDashboard = () => {
                     title: certTitle,
                     description: certDesc,
                     file_url: publicURL,
-                    user_id: user.id, // Ensure this matches auth.uid() for RLS
+                    user_id: user.id,
                 })
-                .select(); // Select to get the inserted row back
+                .select();
 
             console.log('🔍 Debug - Insert result:', insertData);
             console.log('🔍 Debug - Insert error:', dbError);
@@ -319,7 +317,8 @@ const StudentDashboard = () => {
             setCertFile(null);
             setCertTitle('');
             setCertDesc('');
-            fetchCertificates(); // Re-fetch to update the list
+            // Call fetchCertificates with the ht_no
+            fetchCertificates(currentUserProfile.ht_no);
 
         } catch (error: any) {
             console.error('Error uploading certificate:', error);
@@ -333,20 +332,19 @@ const StudentDashboard = () => {
 
     const deleteCert = async (fileUrl: string, id: string) => {
         try {
-            // Extract path from URL for storage deletion
             const url = new URL(fileUrl);
             const pathSegments = url.pathname.split('/');
             const fileName = pathSegments[pathSegments.length - 1];
-            const folderName = pathSegments[pathSegments.length - 2]; // This should be your htno
-            const storagePath = `${folderName}/${fileName}`; // Reconstruct path relative to bucket root
+            const folderName = pathSegments[pathSegments.length - 2];
+            const storagePath = `${folderName}/${fileName}`;
 
             console.log(`Deleting storage object: certifications/${storagePath}`);
             const { error: storageError } = await supabase.storage.from('certifications').remove([storagePath]);
 
-            if (storageError && storageError.statusCode !== '404') { // Ignore 404 if file already gone
+            if (storageError && storageError.statusCode !== '404') {
                 console.error('Error deleting file from storage:', storageError);
                 toast({ title: 'Error', description: 'Failed to delete file from storage.', variant: 'destructive' });
-                throw storageError; // Re-throw to prevent DB deletion if storage failed for other reasons
+                throw storageError;
             }
 
             console.log(`Deleting DB record for certificate ID: ${id}`);
@@ -359,16 +357,15 @@ const StudentDashboard = () => {
             }
 
             toast({ title: 'Certificate deleted successfully' });
-            fetchCertificates(); // Re-fetch to update the list
+            // Call fetchCertificates with the ht_no
+            fetchCertificates(currentUserProfile.ht_no);
         } catch (error: any) {
             console.error('Error in deleteCert:', error);
             toast({ title: 'Deletion Failed', description: error.message || 'An unexpected error occurred during deletion.', variant: 'destructive' });
         }
     };
 
-    // Edit profile functions
     const handleEditProfile = () => {
-        // Populate the form with current profile data when opening the dialog
         setEditForm({
             phone: currentUserProfile.phone || '',
             address: currentUserProfile.address || '',
@@ -386,7 +383,7 @@ const StudentDashboard = () => {
                     address: editForm.address,
                     emergency_no: editForm.emergency_no
                 })
-                .eq('id', currentUserProfile.id); // Use the ID from userProfile
+                .eq('id', currentUserProfile.id);
 
             if (error) throw error;
 
@@ -396,7 +393,6 @@ const StudentDashboard = () => {
             });
 
             setShowEditProfile(false);
-            // CRUCIAL: Call refreshUserProfile to update AuthContext's state
             await refreshUserProfile();
         } catch (error: any) {
             console.error('Error saving profile:', error);
@@ -408,25 +404,18 @@ const StudentDashboard = () => {
         }
     };
 
-    // This handles completion from ProfileCompletionModal
     const handleProfileCompletion = async () => {
         setShowProfileCompletion(false);
-        // CRUCIAL: Call refreshUserProfile to update AuthContext's state after modal completes
         await refreshUserProfile();
-        // The main useEffect will then re-evaluate with the refreshed userProfile
-        // and ideally, isIncomplete will now be false, preventing the modal from reopening.
     };
-
 
     return (
         <div className="p-6 space-y-6">
-            {/* Header */}
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">Student Dashboard</h1>
                 <Button onClick={logout}><LogOut className="mr-2" size={16} /> Logout</Button>
             </div>
 
-            {/* Profile Photo + Info */}
             <div className="flex items-center space-x-4">
                 <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center font-bold text-xl">
                     {photoUrl ? (
@@ -444,7 +433,7 @@ const StudentDashboard = () => {
                         ref={fileInputRef}
                         className="hidden"
                         onChange={handlePhotoChange}
-                        accept="image/*" // Restrict to image files
+                        accept="image/*"
                     />
                 </div>
                 <div>
@@ -453,14 +442,12 @@ const StudentDashboard = () => {
                 </div>
             </div>
 
-            {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card><CardContent className="p-4"><p>Attendance</p><h3 className="text-xl font-bold">{attendance[0]?.cumulative || '0'}%</h3></CardContent></Card>
                 <Card><CardContent className="p-4"><p>Current CGPA</p><h3 className="text-xl font-bold">{currentUserProfile.cgpa || 'N/A'}</h3></CardContent></Card>
                 <Card><CardContent className="p-4"><p>Certifications</p><h3 className="text-xl font-bold">{certificates.length}</h3></CardContent></Card>
             </div>
 
-            {/* Tabs Section */}
             <Tabs value={tab} onValueChange={setTab} className="space-y-4">
                 <TabsList className="w-full grid grid-cols-5 gap-2">
                     <TabsTrigger value="profile">Profile</TabsTrigger>
@@ -495,7 +482,7 @@ const StudentDashboard = () => {
                 <TabsContent value="attendance">
                     <Card><CardContent className="p-6">
                         <h3 className="font-semibold mb-4">Subject-wise Attendance</h3>
-                        <div className="overflow-x-auto"> {/* Added for responsiveness */}
+                        <div className="overflow-x-auto">
                             <table className="min-w-full border-collapse">
                                 <thead><tr>
                                     <th className="p-2 border bg-gray-50 text-left">Subject</th>
@@ -568,7 +555,7 @@ const StudentDashboard = () => {
                 <TabsContent value="timetable">
                     <Card><CardContent className="p-6">
                         <h3 className="font-semibold mb-4">Full Timetable</h3>
-                        <div className="overflow-x-auto"> {/* Added for responsiveness */}
+                        <div className="overflow-x-auto">
                             <table className="min-w-full border-collapse">
                                 <thead>
                                     <tr>
@@ -600,14 +587,12 @@ const StudentDashboard = () => {
                 </TabsContent>
             </Tabs>
 
-            {/* Profile Completion Modal */}
             <ProfileCompletionModal
                 isOpen={showProfileCompletion}
-                userProfile={currentUserProfile} // Pass currentUserProfile directly
-                onComplete={handleProfileCompletion} // Use the new handler
+                userProfile={currentUserProfile}
+                onComplete={handleProfileCompletion}
             />
 
-            {/* Edit Profile Dialog */}
             <Dialog open={showEditProfile} onOpenChange={setShowEditProfile}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
