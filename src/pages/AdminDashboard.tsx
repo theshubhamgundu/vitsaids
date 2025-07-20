@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -41,7 +41,6 @@ import { arrayMove } from '@dnd-kit/sortable';
 import { uploadToGitHubRepo } from '@/lib/github-utils';
 
 // --- NEW IMPORTS FOR UPLOAD FORMS ---
-// Verify: Make sure none of these form components import AdminDashboard back (to avoid circular dependencies)
 import GalleryUploadForm from '@/components/GalleryUploadForm';
 import EventsUploadForm from '@/components/EventsUploadForm';
 import FacultyUploadForm from '@/components/FacultyUploadForm';
@@ -60,7 +59,7 @@ interface PendingStudent {
     phone?: string;
     address?: string;
     emergency_no?: string;
-    photo_url?: string;
+    photo_url?: string; // Ensured photo_url is here
     email?: string;
 }
 
@@ -110,11 +109,11 @@ interface CertificateItem {
     certificate_url: string;
     certificate_name: string;
     uploaded_at?: string;
-    user_profiles?: { // This suggests a join on user_profiles
+    user_profiles?: {
         student_name: string;
-        id: string; // Add id if available
+        id: string;
         ht_no: string;
-        email?: string; // Assuming email might be available via user_profiles join
+        email?: string;
     };
 }
 
@@ -122,13 +121,11 @@ interface Achievement {
     id: string;
     title: string;
     description?: string;
-    date?: string; // Optional date for when achievement was earned
-    certificate_url?: string; // URL to a certificate PDF or image
+    date?: string;
+    certificate_url?: string;
 }
 
 
-// CRITICAL FIX: Moved SortableItem component definition above AdminDashboard to prevent ReferenceError
-// Reusable Sortable Item Component for DND-Kit
 const SortableItem = ({ id, children }: { id: string; children: React.ReactNode }) => {
     const {
         attributes,
@@ -157,7 +154,6 @@ const AdminDashboard = () => {
     const { user, userProfile, loading } = useAuth();
     const [, setLocation] = useLocation();
 
-    // State for main data arrays
     const [allStudents, setAllStudents] = useState<PendingStudent[]>([]);
     const [events, setEvents] = useState<Event[]>([]);
     const [faculty, setFaculty] = useState<Faculty[]>([]);
@@ -166,8 +162,6 @@ const AdminDashboard = () => {
     const [certifications, setCertifications] = useState<CertificateItem[]>([]);
     const [achievements, setAchievements] = useState<Achievement[]>([]);
 
-
-    // Dashboard Stats
     const [stats, setStats] = useState({
         totalStudents: 0,
         activeEvents: 0,
@@ -176,37 +170,29 @@ const AdminDashboard = () => {
         totalAchievements: 0,
     });
 
-    // Loading states for various operations
     const [isGlobalLoading, setIsGlobalLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
 
-    // Student Management States (Supabase)
     const [editingStudent, setEditingStudent] = useState<PendingStudent | null>(null);
     const [viewingStudent, setViewingStudent] = useState<PendingStudent | null>(null);
     const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all');
     const [newProfilePhotoFile, setNewProfilePhotoFile] = useState<File | null>(null);
     const [isPhotoLoading, setIsPhotoLoading] = useState(false);
 
-    // Bulk Promote Students States (Supabase)
     const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
     const [yearToPromote, setYearToPromote] = useState<string>('');
 
-    // Results Upload State (Supabase backed for now, assuming PDF direct upload)
     const [resultTitle, setResultTitle] = useState('');
     const [resultFile, setResultFile] = useState<File | null>(null);
 
-    // Notifications State (Supabase backed)
     const [notificationTitle, setNotificationTitle] = useState('');
     const [notificationMessage, setNotificationMessage] = useState('');
 
-    // Certificate Search State (Supabase backed)
     const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
-    // This state will hold filtered results from `certifications` for display.
     const [filteredCertificates, setFilteredCertificates] = useState<CertificateItem[]>([]);
 
-    // DND-Kit Sensors
     const sensors = useSensors(
         useSensor(PointerSensor),
         useSensor(KeyboardSensor, {
@@ -214,11 +200,6 @@ const AdminDashboard = () => {
         })
     );
 
-    // --- Generic GitHub Data Persistence Function ---
-    // IMPORTANT: This function will only simulate success or fail, as your `github-utils.ts`
-    // doesn't export the `updateGithubContentFile` or `deleteFileFromGithub` directly.
-    // You MUST implement corresponding `update` and `delete` functions in `github-utils.ts`
-    // for actual GitHub persistence.
     const persistGitHubData = useCallback(async <T extends { id: string }>(
         dataArray: T[],
         filePath: string,
@@ -230,7 +211,7 @@ const AdminDashboard = () => {
             console.warn(`WARNING: persistGitHubData is currently a NO-OP for actual GitHub file content updates/deletions for '${variableName}'.
                 You need to implement 'updateFileContentInGithub' and 'fetchFileContentFromGithub' in your github-utils.ts.`);
             toast({ title: 'Persistence Not Implemented', description: 'GitHub file operations are not yet enabled. Changes are not saved.', variant: 'destructive' });
-            return false; // Indicate failure to revert optimistic UI updates
+            return false;
         } catch (error: any) {
             console.error(`Error simulating persistence of ${variableName} data to GitHub:`, error);
             toast({ title: 'Persistence Error', description: `Failed to save changes: ${error.message}`, variant: 'destructive' });
@@ -240,8 +221,7 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
-    // --- Data Loading Functions ---
-
+    // MODIFIED: loadAllStudents to fetch profile photos
     const loadAllStudents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -252,14 +232,20 @@ const AdminDashboard = () => {
             const { data, error } = await query.order('student_name', { ascending: true });
             if (error) throw error;
 
-            const studentsWithPublicUrls = await Promise.all(data.map(async (student: PendingStudent) => {
-                if (student.photo_url) {
-                    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(student.photo_url);
-                    return { ...student, photo_url: publicUrlData.publicUrl || student.photo_url };
+            // Fetch public URLs for profile photos
+            const studentsWithPhotos = await Promise.all(data.map(async (student: PendingStudent) => {
+                const photoPath = `profiles/${student.id}/photo.jpg`; // Construct the expected path
+                const { data: publicUrlData, error: storageError } = supabase.storage.from("profile_photos").getPublicUrl(photoPath);
+
+                if (storageError || !publicUrlData?.publicUrl) {
+                    // Log error but don't prevent showing the student
+                    console.warn(`Could not get public URL for student ${student.id}'s photo:`, storageError?.message || 'No public URL found.');
+                    return { ...student, photo_url: '/default-avatar.png' }; // Fallback to default avatar
                 }
-                return student;
+                return { ...student, photo_url: publicUrlData.publicUrl };
             }));
-            setAllStudents(studentsWithPublicUrls);
+
+            setAllStudents(studentsWithPhotos);
         } catch (error: any) {
             console.error('Error loading students:', error);
             toast({ title: 'Error loading students', description: error.message || 'Please try again later.', variant: 'destructive' });
@@ -273,7 +259,7 @@ const AdminDashboard = () => {
         setIsGlobalLoading(true);
         try {
             console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load events data from GitHub.");
-            const data: Event[] = []; // Default to empty array to prevent crash
+            const data: Event[] = [];
             setEvents(data);
         } catch (error: any) {
             console.error('Error loading events:', error);
@@ -287,7 +273,7 @@ const AdminDashboard = () => {
         setIsGlobalLoading(true);
         try {
             console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load faculty data from GitHub.");
-            const data: Faculty[] = []; // Default to empty array
+            const data: Faculty[] = [];
             setFaculty(data);
         } catch (error: any) {
             console.error('Error loading faculty:', error);
@@ -301,7 +287,7 @@ const AdminDashboard = () => {
         setIsGlobalLoading(true);
         try {
             console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load placements data from GitHub.");
-            const data: Placement[] = []; // Default to empty array
+            const data: Placement[] = [];
             setPlacements(data);
         } catch (error: any) {
             console.error('Error loading placements:', error);
@@ -315,7 +301,7 @@ const AdminDashboard = () => {
         setIsGlobalLoading(true);
         try {
             console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load gallery data from GitHub.");
-            const data: GalleryItem[] = []; // Default to empty array
+            const data: GalleryItem[] = [];
             setGallery(data);
         } catch (error: any) {
             console.error('Error loading gallery:', error);
@@ -329,7 +315,7 @@ const AdminDashboard = () => {
         setIsGlobalLoading(true);
         try {
             console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load achievements data from GitHub.");
-            const data: Achievement[] = []; // Default to empty array
+            const data: Achievement[] = [];
             setAchievements(data);
         } catch (error: any) {
             console.error('Error loading achievements:', error);
@@ -343,17 +329,14 @@ const AdminDashboard = () => {
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // Fetch all certificates, joining with user_profiles to get student_name and ht_no
-            // Ensure your RLS allows admin to SELECT all from 'certificates' and 'user_profiles'.
             const { data, error } = await supabase
                 .from('certificates')
-                .select(`*, user_profiles!inner(student_name, ht_no, email)`) // Added email to select
+                .select(`*, user_profiles!inner(student_name, ht_no, email)`) // Ensure user_profiles table has email
                 .order('uploaded_at', { ascending: false });
 
             if (!error && data) {
                 setCertifications(data);
-                // Also update filteredCertificates initially with all data
-                setFilteredCertificates(data);
+                setFilteredCertificates(data); // Initialize filtered with all data
             } else {
                 console.error('Error loading certificates:', error);
                 toast({ title: 'Error loading certificates', description: error?.message || 'Unknown error', variant: 'destructive' });
@@ -393,7 +376,7 @@ const AdminDashboard = () => {
             loadPlacements();
             loadGallery();
             loadAchievements();
-            loadCertifications(); // This will now load all certs for admin
+            loadCertifications();
             loadStats();
 
             const studentsChannel = supabase
@@ -418,20 +401,19 @@ const AdminDashboard = () => {
         }
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadStats]);
 
-    // Effect to filter certificates when search HTNO changes or main certifications list changes
     useEffect(() => {
         if (certificateSearchHTNO) {
             setFilteredCertificates(
                 certifications.filter(cert =>
                     cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
-                    cert.user_profiles?.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())
+                    (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
+                    (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
                 )
             );
         } else {
-            // If search is empty, show all certificates
             setFilteredCertificates(certifications);
         }
-    }, [certificateSearchHTNO, certifications]); // Re-run when search input or main certs list changes
+    }, [certificateSearchHTNO, certifications]);
 
 
     if (loading || isGlobalLoading || !userProfile) {
@@ -572,24 +554,31 @@ const AdminDashboard = () => {
 
         setIsPhotoLoading(true);
 
-        const fileExtension = newProfilePhotoFile.name.split('.').pop();
-        const fileName = `${viewingStudent.id}-${Date.now()}.${fileExtension}`;
-        const filePath = `avatars/${fileName}`;
+        // Define the target path in Supabase Storage
+        const filePathInStorage = `profiles/${viewingStudent.id}/photo.jpg`;
 
         try {
+            // Upload the new file, allowing overwrite (upsert: true)
             const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, newProfilePhotoFile, {
-                    upsert: true,
+                .from('profile_photos') // Use your specific bucket name
+                .upload(filePathInStorage, newProfilePhotoFile, {
+                    upsert: true, // Overwrite if exists
+                    contentType: newProfilePhotoFile.type,
                 });
 
             if (uploadError) {
                 throw uploadError;
             }
 
+            // Get the public URL for the newly uploaded photo
+            const { data: publicUrlData } = supabase.storage.from('profile_photos').getPublicUrl(filePathInStorage);
+            const newPhotoUrl = publicUrlData.publicUrl;
+
+            // Optionally, update the user_profiles table with this URL if you store it there
+            // This is good practice to avoid repeated getPublicUrl calls if you display it often.
             const { error: updateError } = await supabase
                 .from('user_profiles')
-                .update({ photo_url: filePath })
+                .update({ photo_url: newPhotoUrl }) // Assuming a photo_url column in user_profiles
                 .eq('id', viewingStudent.id);
 
             if (updateError) {
@@ -598,9 +587,10 @@ const AdminDashboard = () => {
 
             toast({ title: '✅ Profile photo updated successfully' });
             setNewProfilePhotoFile(null);
+            // Reload all students to ensure the list reflects the new photo
             loadAllStudents();
-            const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-            setViewingStudent(prev => prev ? { ...prev, photo_url: publicUrlData.publicUrl || filePath } : null);
+            // Update the viewing student's photo URL immediately for current view
+            setViewingStudent(prev => prev ? { ...prev, photo_url: newPhotoUrl } : null);
 
         } catch (error: any) {
             console.error('Error uploading profile photo:', error);
@@ -612,24 +602,17 @@ const AdminDashboard = () => {
 
     const handleViewStudentDetails = async (student: PendingStudent) => {
         setIsPhotoLoading(true);
-        let studentToView = { ...student };
-        if (student.photo_url && !student.photo_url.startsWith('http')) {
-            const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(student.photo_url);
-            studentToView.photo_url = publicUrlData.publicUrl || student.photo_url;
-        }
-        setViewingStudent(studentToView);
+        // The student object passed here should already have photo_url from loadAllStudents
+        setViewingStudent(student);
         setIsPhotoLoading(false);
     };
 
-    // --- GitHub Backed Content Management Functions (for display & DND) ---
-
-    // Generic DND Handler for GitHub-backed lists
     const handleDragEnd = async <T extends { id: string }>(
         event: DragEndEvent,
         dataArray: T[],
         setDataArray: React.Dispatch<React.SetStateAction<T[]>>,
-        filePath: string, // e.g., 'public/events/events.ts'
-        variableName: string // e.g., 'events'
+        filePath: string,
+        variableName: string
     ) => {
         const { active, over } = event;
 
@@ -639,11 +622,11 @@ const AdminDashboard = () => {
 
             if (oldIndex !== -1 && newIndex !== -1) {
                 const newOrderedArray = arrayMove(dataArray, oldIndex, newIndex);
-                setDataArray(newOrderedArray); // Optimistic UI update
+                setDataArray(newOrderedArray);
 
                 const success = await persistGitHubData(newOrderedArray, filePath, variableName, `Reordered ${variableName}`);
                 if (!success) {
-                    setDataArray(dataArray); // Revert if API call fails
+                    setDataArray(dataArray);
                     toast({ title: 'Reorder Failed', description: 'Changes could not be saved to GitHub. Please implement persistGitHubData fully.', variant: 'destructive' });
                 } else {
                     toast({ title: 'Reordered successfully', description: `Items in ${variableName} have been reordered (simulated).` });
@@ -653,7 +636,6 @@ const AdminDashboard = () => {
     };
 
 
-    // --- Events CRUD (These will be passed to EventsUploadForm) ---
     const handleDeleteEvent = async (eventToDelete: Event) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the event "${eventToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -684,7 +666,6 @@ const AdminDashboard = () => {
     };
 
 
-    // --- Faculty CRUD (These will be passed to FacultyUploadForm) ---
     const handleDeleteFaculty = async (facultyToDelete: Faculty) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete faculty member "${facultyToDelete.name}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -715,7 +696,6 @@ const AdminDashboard = () => {
     };
 
 
-    // --- Gallery CRUD (These will be passed to GalleryUploadForm) ---
     const handleDeleteGalleryItem = async (itemToDelete: GalleryItem) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the gallery item "${itemToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -745,7 +725,6 @@ const AdminDashboard = () => {
     };
 
 
-    // --- Placements CRUD (These will be passed to PlacementsUploadForm) ---
     const handleDeletePlacement = async (itemToDelete: Placement) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the placement record for "${itemToDelete.student_name}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -775,7 +754,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // NEW: Achievements CRUD
     const handleDeleteAchievement = async (itemToDelete: Achievement) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the achievement "${itemToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -806,11 +784,8 @@ const AdminDashboard = () => {
     };
 
 
-    // --- Certificates (Supabase) ---
-    // The fetchStudentCertificates will now filter the already loaded 'certifications' state
     const handleSearchCertificates = () => {
         if (!certificateSearchHTNO) {
-            // If search is empty, show all certificates
             setFilteredCertificates(certifications);
             toast({ title: 'Showing all certificates.' });
             return;
@@ -818,8 +793,8 @@ const AdminDashboard = () => {
 
         const currentFiltered = certifications.filter(cert =>
             cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
-            cert.user_profiles?.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
-            cert.user_profiles?.email?.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) // Allow search by email
+            (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
+            (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
         );
         setFilteredCertificates(currentFiltered);
 
@@ -854,7 +829,7 @@ const AdminDashboard = () => {
 
             if (!error) {
                 toast({ title: "Certificate deleted successfully" });
-                loadCertifications(); // Reload all certificates to update the list
+                loadCertifications();
             } else {
                 toast({ title: 'Error deleting certificate', description: error.message, variant: 'destructive' });
             }
@@ -864,8 +839,6 @@ const AdminDashboard = () => {
         }
     };
 
-
-    // --- Other Management Functions (Supabase-backed where applicable) ---
 
     const uploadResult = async () => {
         if (!resultFile || !resultTitle) {
@@ -926,18 +899,14 @@ const AdminDashboard = () => {
         if (file) {
             toast({ title: "Attendance sheet selected", description: `File: ${file.name}. Click 'Process Attendance' to continue.` });
         }
-        // In a real app, you'd store this file in state for 'processAttendance' to use
-        // setAttendanceFile(file);
     };
 
     const processAttendance = () => {
-        // This is a placeholder for actual attendance processing logic (e.g., parsing CSV, updating DB)
         toast({
             title: "Attendance Processing Placeholder",
             description: "Full attendance processing requires backend logic (parsing file, updating database). This button is currently a placeholder.",
             variant: "info",
         });
-        // Example: if (attendanceFile) { /* Call API to process attendanceFile */ }
     };
 
 
@@ -981,7 +950,7 @@ const AdminDashboard = () => {
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <main className="max-w-7xl mx-4 sm:mx-6 lg:mx-8 py-8"> {/* Adjusted mx for better full width */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
                     <Card>
                         <CardContent className="p-6">
@@ -1135,6 +1104,7 @@ const AdminDashboard = () => {
                                             <table className="w-full border-collapse border border-gray-200">
                                                 <thead>
                                                     <tr className="bg-gray-50">
+                                                        <th className="border border-gray-200 px-4 py-2 text-left">Photo</th> {/* New column */}
                                                         <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
                                                         <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
                                                         <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
@@ -1143,6 +1113,14 @@ const AdminDashboard = () => {
                                                 <tbody>
                                                     {allStudents.map((student) => (
                                                         <tr key={student.id} onClick={() => handleViewStudentDetails(student)} className="cursor-pointer hover:bg-gray-100">
+                                                            <td className="border border-gray-200 px-2 py-2">
+                                                                <img
+                                                                    src={student.photo_url || '/default-avatar.png'} // Use student.photo_url or fallback
+                                                                    alt={student.student_name}
+                                                                    className="w-10 h-10 rounded-full object-cover"
+                                                                    onError={(e) => (e.currentTarget.src = '/default-avatar.png')} // Fallback on error
+                                                                />
+                                                            </td>
                                                             <td className="border border-gray-200 px-4 py-2">{student.ht_no}</td>
                                                             <td className="border border-gray-200 px-4 py-2">
                                                                 {student.student_name}
@@ -1169,25 +1147,25 @@ const AdminDashboard = () => {
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
                                     <BookOpen className="w-5 h-5" />
-                                    <span>Student Certificates ({filteredCertificates.length} / {certifications.length} Total)</span> {/* Updated count display */}
+                                    <span>Student Certificates ({filteredCertificates.length} / {certifications.length} Total)</span>
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="mb-4 flex items-center space-x-2">
                                     <Input
-                                        placeholder="Search by H.T No., Name, or Email" // Updated placeholder
+                                        placeholder="Search by H.T No., Name, or Email"
                                         value={certificateSearchHTNO}
                                         onChange={(e) => setCertificateSearchHTNO(e.target.value)}
                                         className="max-w-xs"
                                     />
-                                    <Button onClick={handleSearchCertificates}> {/* Changed to handleSearchCertificates */}
+                                    <Button onClick={handleSearchCertificates}>
                                         <Search className="w-4 h-4 mr-2" /> Search
                                     </Button>
                                     <Button
                                         variant="outline"
                                         onClick={() => {
-                                            setCertificateSearchHTNO(''); // Clear search
-                                            setFilteredCertificates(certifications); // Show all
+                                            setCertificateSearchHTNO('');
+                                            setFilteredCertificates(certifications);
                                             toast({ title: 'Search cleared, showing all certificates.' });
                                         }}
                                         disabled={!certificateSearchHTNO && filteredCertificates.length === certifications.length}
@@ -1196,7 +1174,7 @@ const AdminDashboard = () => {
                                     </Button>
                                 </div>
 
-                                {filteredCertificates.length > 0 ? ( // Display filteredCertificates
+                                {filteredCertificates.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="w-full border-collapse border border-gray-200">
                                             <thead>
@@ -1271,7 +1249,6 @@ const AdminDashboard = () => {
                     <TabsContent value={TAB_VALUES.EVENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
-                                {/* Left Section - Heading + Uploaded List Content */}
                                 <div className="md:w-1/3 w-full">
                                     <Card>
                                         <CardHeader>
@@ -1351,7 +1328,6 @@ const AdminDashboard = () => {
                                     </Card>
                                 </div>
 
-                                {/* Right Section - Upload Form */}
                                 <div className="w-full md:w-2/3">
                                     <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4">
                                         <CardHeader className="p-0 pb-4">
@@ -1384,7 +1360,6 @@ const AdminDashboard = () => {
                     <TabsContent value={TAB_VALUES.FACULTY}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
-                                {/* Left Section - Heading + Uploaded List Content */}
                                 <div className="md:w-1/3 w-full">
                                     <Card>
                                         <CardHeader>
@@ -1464,7 +1439,6 @@ const AdminDashboard = () => {
                                     </Card>
                                 </div>
 
-                                {/* Right Section - Upload Form */}
                                 <div className="w-full md:w-2/3">
                                     <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4">
                                         <CardHeader className="p-0 pb-4">
@@ -1497,7 +1471,6 @@ const AdminDashboard = () => {
                     <TabsContent value={TAB_VALUES.PLACEMENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
-                                {/* Left Section - Heading + Uploaded List Content */}
                                 <div className="md:w-1/3 w-full">
                                     <Card>
                                         <CardHeader>
@@ -1577,7 +1550,6 @@ const AdminDashboard = () => {
                                     </Card>
                                 </div>
 
-                                {/* Right Section - Upload Form */}
                                 <div className="w-full md:w-2/3">
                                     <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4">
                                         <CardHeader className="p-0 pb-4">
@@ -1610,7 +1582,6 @@ const AdminDashboard = () => {
                     <TabsContent value={TAB_VALUES.ACHIEVEMENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
-                                {/* Left Section - Heading + Uploaded List Content */}
                                 <div className="md:w-1/3 w-full">
                                     <Card>
                                         <CardHeader>
@@ -1688,7 +1659,6 @@ const AdminDashboard = () => {
                                     </Card>
                                 </div>
 
-                                {/* Right Section - Upload Form */}
                                 <div className="w-full md:w-2/3">
                                     <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4">
                                         <CardHeader className="p-0 pb-4">
@@ -1800,7 +1770,6 @@ const AdminDashboard = () => {
                     <TabsContent value={TAB_VALUES.GALLERY}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
-                                {/* Left Section - Heading + Uploaded List Content */}
                                 <div className="md:w-1/3 w-full">
                                     <Card>
                                         <CardHeader>
@@ -1872,7 +1841,6 @@ const AdminDashboard = () => {
                                     </Card>
                                 </div>
 
-                                {/* Right Section - Upload Form */}
                                 <div className="w-full md:w-2/3">
                                     <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4">
                                         <CardHeader className="p-0 pb-4">
@@ -2044,17 +2012,13 @@ const AdminDashboard = () => {
                                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                                         </div>
                                     ) : (
-                                        viewingStudent.photo_url ? (
-                                            <img
-                                                src={viewingStudent.photo_url}
-                                                alt="Profile Photo"
-                                                className="w-32 h-32 rounded-full object-cover border-2 border-gray-200"
-                                            />
-                                        ) : (
-                                            <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
-                                                <User className="w-16 h-16" />
-                                            </div>
-                                        )
+                                        // Display fetched photo or default avatar
+                                        <img
+                                            src={viewingStudent.photo_url || '/default-avatar.png'}
+                                            alt="Profile Photo"
+                                            className="w-32 h-32 rounded-full object-cover border-2 border-gray-200"
+                                            onError={(e) => (e.currentTarget.src = '/default-avatar.png')} // Fallback on image load error
+                                        />
                                     )}
                                     <span className="text-sm text-gray-500">Profile Photo</span>
                                 </div>
