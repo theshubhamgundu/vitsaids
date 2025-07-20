@@ -337,7 +337,7 @@ const AdminDashboard = () => {
                 .from('certificates')
                 .select(`
                     id,
-                    ht_no, // Corrected column name: ht_no
+                    ht_no,
                     title,
                     description,
                     file_url,
@@ -355,7 +355,7 @@ const AdminDashboard = () => {
             if (!error && data) {
                 const transformedData: CertificateItem[] = data.map((cert: any) => ({
                     id: cert.id,
-                    ht_no: cert.ht_no, // Use 'ht_no' here
+                    ht_no: cert.ht_no,
                     title: cert.title,
                     description: cert.description,
                     file_url: cert.file_url,
@@ -433,8 +433,8 @@ const AdminDashboard = () => {
                 .subscribe();
 
             return () => {
-                supabase.removeChannel(studentsChannel);
-                supabase.removeChannel(certificatesChannel);
+                    supabase.removeChannel(studentsChannel);
+                    supabase.removeChannel(certificatesChannel);
             };
         } else if (!loading && userProfile && userProfile.role !== 'admin') {
             setLocation('/');
@@ -842,7 +842,7 @@ const AdminDashboard = () => {
 
         if (certificateSearchHTNO) {
             currentFiltered = currentFiltered.filter(cert =>
-                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) || // Use cert.ht_no
+                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
                 (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
                 (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
             );
