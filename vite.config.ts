@@ -3,7 +3,10 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-// https://vitejs.dev/config/
+// ⬇️ Add these for Buffer polyfill
+import { NodeGlobalsPolyfillPlugin } from "@esbuild-plugins/node-globals-polyfill";
+import { nodePolyfills } from "vite-plugin-node-polyfills";
+
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -12,17 +15,23 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" && componentTagger(),
+    nodePolyfills({
+      globals: {
+        Buffer: true,
+      },
+      protocolImports: true,
+    }),
   ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      buffer: "buffer", // ⬅️ Needed for Buffer polyfill
     },
   },
   build: {
     sourcemap: true,
     rollupOptions: {
       external: [
-        // Avoid bundling native Node.js modules that may break in Vercel (if backend libs are imported)
         "fs",
         "path",
         "os",
@@ -39,6 +48,16 @@ export default defineConfig(({ mode }) => ({
     },
   },
   optimizeDeps: {
-    exclude: ["@octokit/rest"], // Don’t prebundle Octokit — keep as ESM
+    exclude: ["@octokit/rest"],
+    esbuildOptions: {
+      define: {
+        global: "globalThis", // ⬅️ Required for Buffer polyfill
+      },
+      plugins: [
+        NodeGlobalsPolyfillPlugin({
+          buffer: true,
+        }),
+      ],
+    },
   },
 }));
