@@ -35,7 +35,6 @@ const folderMap = {
 } as const;
 
 type UploadType = keyof typeof folderMap;
-
 type Metadata = Record<string, any>;
 
 export async function uploadImageAndAppendData(
@@ -59,7 +58,7 @@ export async function uploadImageAndAppendData(
 
     const base64Image = optimizedBuffer.toString("base64");
 
-    // Upload the image
+    // Upload the image to GitHub
     await octokit.repos.createOrUpdateFileContents({
       owner: REPO_OWNER,
       repo: REPO_NAME,
@@ -80,9 +79,9 @@ export async function uploadImageAndAppendData(
         let items: any[] = [];
 
         if (existingContent?.includes("export const")) {
-          const jsonRaw = existingContent.split("=")[1]?.trim();
-          const clean = jsonRaw.replace(/;$/, "");
-          items = JSON.parse(clean);
+          const jsonRaw = existingContent.split("=").slice(1).join("=").trim();
+          const jsonStr = jsonRaw.replace(/;$/, "");
+          items = JSON.parse(jsonStr);
         }
 
         items.push({ ...metadata, image: `/${type}/${filename}` });
