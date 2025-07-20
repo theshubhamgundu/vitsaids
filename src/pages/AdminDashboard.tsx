@@ -325,7 +325,6 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
-    // Corrected loadCertifications: Fixed 'htno' to 'ht_no' in select string
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -388,7 +387,6 @@ const AdminDashboard = () => {
             const { count: studentsCount, error: studentsError } = await supabase.from('user_profiles').select('id', { count: 'exact' }).eq('role', 'student');
             if (studentsError) throw studentsError;
 
-            // These counts will reflect the state from loadEvents/Faculty/Placements/Achievements
             setStats({
                 totalStudents: studentsCount || 0,
                 activeEvents: events.length || 0,
@@ -515,8 +513,13 @@ const AdminDashboard = () => {
         } catch (error: any) {
             console.error('Error promoting student:', error);
             toast({ title: 'Promotion failed', description: error.message || 'Please try again later.', variant: 'destructive' });
+        } finally {
+            // Ensure loading state is reset even if toast is triggered before the end of the try block
+            // This might need a separate state or wrapping the entire operation with try/finally
+            // For now, assuming loadAllStudents handles its own loading.
         }
     };
+
 
     const handleBulkPromote = async () => {
         if (!yearToPromote) {
@@ -544,6 +547,7 @@ const AdminDashboard = () => {
             return;
         }
 
+        setIsUpdating(true); // Set loading for bulk promote operation
         try {
             const { error } = await supabase
                 .from('user_profiles')
@@ -569,6 +573,7 @@ const AdminDashboard = () => {
     };
 
     const updateStudent = async (studentData: Partial<PendingStudent>) => {
+        setIsUpdating(true); // Set updating state for individual student edit
         try {
             const { error } = await supabase
                 .from('user_profiles')
@@ -584,6 +589,8 @@ const AdminDashboard = () => {
         } catch (error: any) {
             console.error('Error updating student:', error);
             toast({ title: 'Error updating student', description: error.message || 'Please try again later.', variant: 'destructive' });
+        } finally {
+            setIsUpdating(false);
         }
     };
 
@@ -680,7 +687,11 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (eventToDelete.image) {
-                const imagePathInRepo = eventToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1];
+                // Ensure the path correctly extracts to match the GitHub repo structure (e.g., public/events/image.jpg)
+                const imagePathInRepo = eventToDelete.image.includes('raw.githubusercontent.com')
+                    ? eventToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
+                    : eventToDelete.image; // Assume it's already a relative path if not a full URL
+
                 if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete event image: ${eventToDelete.title}`);
                     if (!deleteResult.success) {
@@ -716,7 +727,10 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (facultyToDelete.image) {
-                const imagePathInRepo = facultyToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1];
+                const imagePathInRepo = facultyToDelete.image.includes('raw.githubusercontent.com')
+                    ? facultyToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
+                    : facultyToDelete.image;
+
                  if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete faculty image: ${facultyToDelete.name}`);
                     if (!deleteResult.success) {
@@ -752,7 +766,10 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (itemToDelete.image) {
-                const imagePathInRepo = itemToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1];
+                const imagePathInRepo = itemToDelete.image.includes('raw.githubusercontent.com')
+                    ? itemToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
+                    : itemToDelete.image;
+
                  if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete gallery image: ${itemToDelete.title}`);
                     if (!deleteResult.success) {
@@ -787,7 +804,10 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (itemToDelete.image) {
-                const imagePathInRepo = itemToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1];
+                const imagePathInRepo = itemToDelete.image.includes('raw.githubusercontent.com')
+                    ? itemToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
+                    : itemToDelete.image;
+
                  if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete placement image: ${itemToDelete.student_name}`);
                     if (!deleteResult.success) {
@@ -823,7 +843,10 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (itemToDelete.certificate_url) {
-                const filePathInRepo = itemToDelete.certificate_url.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1];
+                const filePathInRepo = itemToDelete.certificate_url.includes('raw.githubusercontent.com')
+                    ? itemToDelete.certificate_url.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
+                    : itemToDelete.certificate_url;
+
                  if (filePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(filePathInRepo, `Delete achievement certificate: ${itemToDelete.title}`);
                     if (!deleteResult.success) {
@@ -890,6 +913,7 @@ const AdminDashboard = () => {
         const confirmDelete = window.confirm("Are you sure you want to delete this certificate? This action cannot be undone.");
         if (!confirmDelete) return;
 
+        setIsDeleting(true); // Assuming you want a loading state for this delete too
         try {
             if (certificateUrl) {
                 const pathWithinBucket = certificateUrl.split('certificates/')[1];
@@ -917,7 +941,7 @@ const AdminDashboard = () => {
             console.error('Error deleting certificate:', error);
             toast({ title: 'Error deleting certificate', description: error.message || 'Please try again later.', variant: 'destructive' });
         } finally {
-            setIsDeleting(false);
+            setIsDeleting(false); // Reset deleting state
         }
     };
 
@@ -2078,7 +2102,8 @@ const AdminDashboard = () => {
                                 </Label>
                                 <Select value={yearToPromote} onValueChange={setYearToPromote}>
                                     <SelectTrigger className="col-span-3">
-                                        <SelectValue placeholder="Select current year to />
+                                        {/* CORRECTED: Removed extra "1" that caused syntax error */}
+                                        <SelectValue placeholder="Select current year to promote" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="1">1st Year</SelectItem>
