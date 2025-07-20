@@ -36,6 +36,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
 // GitHub utilities
+// IMPORTANT: fetchAndParseTsFile, deleteFileFromGithub, updateGithubContentFile are NOT exported by your provided github-utils.ts
+// You MUST implement these functions in '@/lib/github-utils' for GitHub-backed features to work.
 import { uploadToGitHubRepo } from '@/lib/github-utils';
 
 // --- NEW IMPORTS FOR UPLOAD FORMS ---
@@ -43,6 +45,7 @@ import GalleryUploadForm from '@/components/GalleryUploadForm';
 import EventsUploadForm from '@/components/EventsUploadForm';
 import FacultyUploadForm from '@/components/FacultyUploadForm';
 import PlacementsUploadForm from '@/components/PlacementsUploadForm';
+// Correctly import AchievementsUploadForm from its dedicated file
 import AchievementsUploadForm from '@/components/AchievementsUploadForm';
 // --- END NEW IMPORTS ---
 
@@ -109,7 +112,7 @@ interface CertificateItem {
     description?: string; // From your schema: 'description' (text)
     file_url: string; // From your schema: 'file_url' (text)
     uploaded_at?: string; // From your schema: 'uploaded_at' (timestamp without time zone)
-    user_id?: string; // From your schema: 'user_id' (uuid) - now optional in type, but used for join
+    user_id?: string; // From your schema: 'user_id' (uuid)
     user_profiles?: { // Nested user_profiles data from the join
         student_name: string;
         id: string; // User's ID
@@ -179,7 +182,7 @@ const AdminDashboard = () => {
 
     const [editingStudent, setEditingStudent] = useState<PendingStudent | null>(null);
     const [viewingStudent, setViewingStudent] = useState<PendingStudent | null>(null);
-    const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all');
+    const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all'); // For student list
     const [newProfilePhotoFile, setNewProfilePhotoFile] = useState<File | null>(null);
     const [isPhotoLoading, setIsPhotoLoading] = useState(false);
 
@@ -194,7 +197,7 @@ const AdminDashboard = () => {
 
     const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
     const [filteredCertificates, setFilteredCertificates] = useState<CertificateItem[]>([]);
-    const [selectedYearFilterCerts, setSelectedYearFilterCerts] = useState<string>('all');
+    const [selectedYearFilterCerts, setSelectedYearFilterCerts] = useState<string>('all'); // For certificate filter
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -326,7 +329,7 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
-    // MODIFIED: loadCertifications to explicitly handle the join structure and map fields
+    // Corrected loadCertifications: Removed comments from select string
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -334,13 +337,13 @@ const AdminDashboard = () => {
                 .from('certificates')
                 .select(`
                     id,
-                    htno,      // Select htno directly from certificates
-                    title,     // Select title directly from certificates
-                    description, // Select description directly from certificates
-                    file_url,  // Select file_url directly from certificates
+                    htno,
+                    title,
+                    description,
+                    file_url,
                     uploaded_at,
-                    user_id,   // Select user_id directly from certificates (for consistency, though join handles it)
-                    user_profiles (id, student_name, ht_no, email, year) // Explicitly join and select desired fields from user_profiles
+                    user_id,
+                    user_profiles (id, student_name, ht_no, email, year)
                 `);
 
             if (selectedYearFilterCerts !== 'all') {
@@ -350,14 +353,12 @@ const AdminDashboard = () => {
             const { data, error } = await query.order('uploaded_at', { ascending: false });
 
             if (!error && data) {
-                // Map the data to match the CertificateItem interface structure,
-                // ensuring joined 'user_profiles' data is correctly nested and other fields are mapped.
                 const transformedData: CertificateItem[] = data.map((cert: any) => ({
                     id: cert.id,
-                    htno: cert.htno, // Use 'htno' directly from certificates table
-                    title: cert.title, // Use 'title' for certificate name
+                    htno: cert.htno,
+                    title: cert.title,
                     description: cert.description,
-                    file_url: cert.file_url, // Use 'file_url' for the certificate file URL
+                    file_url: cert.file_url,
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
                     user_profiles: cert.user_profiles ? {
@@ -366,13 +367,11 @@ const AdminDashboard = () => {
                         ht_no: cert.user_profiles.ht_no,
                         email: cert.user_profiles.email,
                         year: cert.user_profiles.year,
-                    } : undefined // Ensure user_profiles is undefined if no join data
+                    } : undefined
                 }));
 
                 setCertifications(transformedData);
-                // When loading all certifications, also update the filtered list
-                // This ensures the initial display and subsequent year changes show correct data
-                if (!certificateSearchHTNO) { // Only update if no active search is applied when data initially loaded
+                if (!certificateSearchHTNO) {
                     setFilteredCertificates(transformedData);
                 }
             } else {
@@ -415,7 +414,7 @@ const AdminDashboard = () => {
             loadPlacements();
             loadGallery();
             loadAchievements();
-            loadCertifications(); // This will now load all certs for admin, or filtered by year
+            loadCertifications();
             loadStats();
 
             const studentsChannel = supabase
@@ -429,7 +428,7 @@ const AdminDashboard = () => {
             const certificatesChannel = supabase
                 .channel('certificates-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, () => {
-                    loadCertifications(); // Reload certificates on change
+                    loadCertifications();
                 })
                 .subscribe();
 
@@ -442,32 +441,28 @@ const AdminDashboard = () => {
         }
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadStats]);
 
-    // Effect to filter certificates when search HTNO changes or main certifications list changes
-    // This effect should only filter, not re-fetch from DB.
     useEffect(() => {
-        if (certificateSearchHTNO || selectedYearFilterCerts !== 'all') { // Trigger filter if any filter is active
+        if (certificateSearchHTNO || selectedYearFilterCerts !== 'all') {
             let currentFiltered = certifications;
 
-            // Apply year filter first if selected
             if (selectedYearFilterCerts !== 'all') {
                 currentFiltered = currentFiltered.filter(cert =>
                     cert.user_profiles?.year === parseInt(selectedYearFilterCerts)
                 );
             }
 
-            // Apply text search if active
             if (certificateSearchHTNO) {
                 currentFiltered = currentFiltered.filter(cert =>
-                    cert.htno.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) || // Use cert.htno
+                    cert.htno.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
                     (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
                     (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
                 );
             }
             setFilteredCertificates(currentFiltered);
         } else {
-            setFilteredCertificates(certifications); // Show all if no filters are active
+            setFilteredCertificates(certifications);
         }
-    }, [certificateSearchHTNO, certifications, selectedYearFilterCerts]); // Added selectedYearFilterCerts here too
+    }, [certificateSearchHTNO, certifications, selectedYearFilterCerts]);
 
 
     if (loading || isGlobalLoading || !userProfile) {
@@ -1235,7 +1230,7 @@ const AdminDashboard = () => {
                                         onClick={() => {
                                             setCertificateSearchHTNO('');
                                             setSelectedYearFilterCerts('all');
-                                            loadCertifications();
+                                            loadCertifications(); // Re-load all certs from DB without filters
                                             toast({ title: 'Filters cleared, showing all certificates.' });
                                         }}
                                         disabled={!certificateSearchHTNO && selectedYearFilterCerts === 'all'}
@@ -1265,7 +1260,7 @@ const AdminDashboard = () => {
                                                             {cert.user_profiles?.student_name || 'Unknown'}
                                                         </td>
                                                         <td className="border border-gray-200 px-4 py-2">
-                                                            {cert.htno || 'N/A'} {/* Use cert.htno directly from certificate */}
+                                                            {cert.htno || 'N/A'}
                                                         </td>
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             {cert.user_profiles?.email || 'N/A'}
@@ -1273,13 +1268,13 @@ const AdminDashboard = () => {
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             {cert.user_profiles?.year || 'N/A'}
                                                         </td>
-                                                        <td className="border border-gray-200 px-4 py-2">{cert.title}</td> {/* Use cert.title for certificate name */}
+                                                        <td className="border border-gray-200 px-4 py-2">{cert.title}</td>
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'}
                                                         </td>
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             <div className="flex space-x-2">
-                                                                {cert.file_url && ( // Use cert.file_url
+                                                                {cert.file_url && (
                                                                     <Button
                                                                         asChild
                                                                         size="sm"
