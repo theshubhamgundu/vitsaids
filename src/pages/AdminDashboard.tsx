@@ -325,20 +325,21 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
+    // Corrected loadCertifications: Explicitly quoted column names in select string
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
             let query = supabase
                 .from('certificates')
                 .select(`
-                    id,
-                    ht_no,
-                    title,
-                    description,
-                    file_url,
-                    uploaded_at,
-                    user_id,
-                    user_profiles (id, student_name, ht_no, email, year)
+                    "id",
+                    "ht_no",
+                    "title",
+                    "description",
+                    "file_url",
+                    "uploaded_at",
+                    "user_id",
+                    user_profiles ("id", "student_name", "ht_no", "email", "year")
                 `);
 
             if (selectedYearFilterCerts !== 'all') {
@@ -547,7 +548,7 @@ const AdminDashboard = () => {
             return;
         }
 
-        setIsUpdating(true); // Set loading for bulk promote operation
+        setIsUpdating(true);
         try {
             const { error } = await supabase
                 .from('user_profiles')
@@ -573,7 +574,7 @@ const AdminDashboard = () => {
     };
 
     const updateStudent = async (studentData: Partial<PendingStudent>) => {
-        setIsUpdating(true); // Set updating state for individual student edit
+        setIsUpdating(true);
         try {
             const { error } = await supabase
                 .from('user_profiles')
@@ -687,10 +688,9 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (eventToDelete.image) {
-                // Ensure the path correctly extracts to match the GitHub repo structure (e.g., public/events/image.jpg)
                 const imagePathInRepo = eventToDelete.image.includes('raw.githubusercontent.com')
                     ? eventToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : eventToDelete.image; // Assume it's already a relative path if not a full URL
+                    : eventToDelete.image;
 
                 if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete event image: ${eventToDelete.title}`);
@@ -913,7 +913,7 @@ const AdminDashboard = () => {
         const confirmDelete = window.confirm("Are you sure you want to delete this certificate? This action cannot be undone.");
         if (!confirmDelete) return;
 
-        setIsDeleting(true); // Assuming you want a loading state for this delete too
+        setIsDeleting(true);
         try {
             if (certificateUrl) {
                 const pathWithinBucket = certificateUrl.split('certificates/')[1];
@@ -941,7 +941,7 @@ const AdminDashboard = () => {
             console.error('Error deleting certificate:', error);
             toast({ title: 'Error deleting certificate', description: error.message || 'Please try again later.', variant: 'destructive' });
         } finally {
-            setIsDeleting(false); // Reset deleting state
+            setIsDeleting(false);
         }
     };
 
@@ -2102,7 +2102,6 @@ const AdminDashboard = () => {
                                 </Label>
                                 <Select value={yearToPromote} onValueChange={setYearToPromote}>
                                     <SelectTrigger className="col-span-3">
-                                        {/* CORRECTED: Removed extra "1" that caused syntax error */}
                                         <SelectValue placeholder="Select current year to promote" />
                                     </SelectTrigger>
                                     <SelectContent>
