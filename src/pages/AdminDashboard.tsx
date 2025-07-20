@@ -107,18 +107,18 @@ interface Placement {
 // UPDATED CertificateItem INTERFACE TO MATCH YOUR DB SCHEMA
 interface CertificateItem {
     id: string;
-    ht_no: string; // From your schema: 'ht_no' (text)
-    title: string;   // From your schema: 'title' (text)
-    description?: string; // From your schema: 'description' (text)
-    file_url: string; // From your schema: 'file_url' (text)
-    uploaded_at?: string; // From your schema: 'uploaded_at' (timestamp without time zone)
-    user_id?: string; // From your schema: 'user_id' (uuid)
-    user_profiles?: { // Nested user_profiles data from the join
+    ht_no: string; // Corrected from htno to ht_no
+    title: string;
+    description?: string;
+    file_url: string;
+    uploaded_at?: string;
+    user_id?: string;
+    user_profiles?: {
         student_name: string;
-        id: string; // User's ID
-        ht_no: string; // HT No. from user_profiles
+        id: string;
+        ht_no: string;
         email?: string;
-        year?: number; // Year from user_profiles
+        year?: number;
     };
 }
 
@@ -182,7 +182,7 @@ const AdminDashboard = () => {
 
     const [editingStudent, setEditingStudent] = useState<PendingStudent | null>(null);
     const [viewingStudent, setViewingStudent] = useState<PendingStudent | null>(null);
-    const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all'); // For student list
+    const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all');
     const [newProfilePhotoFile, setNewProfilePhotoFile] = useState<File | null>(null);
     const [isPhotoLoading, setIsPhotoLoading] = useState(false);
 
@@ -195,9 +195,9 @@ const AdminDashboard = () => {
     const [notificationTitle, setNotificationTitle] = useState('');
     const [notificationMessage, setNotificationMessage] = useState('');
 
-    const [certificateSearchht_no, setCertificateSearchht_no] = useState('');
+    const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
     const [filteredCertificates, setFilteredCertificates] = useState<CertificateItem[]>([]);
-    const [selectedYearFilterCerts, setSelectedYearFilterCerts] = useState<string>('all'); // For certificate filter
+    const [selectedYearFilterCerts, setSelectedYearFilterCerts] = useState<string>('all');
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -329,7 +329,7 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
-    // Corrected loadCertifications: Removed comments from select string
+    // Corrected loadCertifications: Fixed 'htno' to 'ht_no' in select string
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -337,7 +337,7 @@ const AdminDashboard = () => {
                 .from('certificates')
                 .select(`
                     id,
-                    ht_no,
+                    ht_no, // Corrected column name: ht_no
                     title,
                     description,
                     file_url,
@@ -355,7 +355,7 @@ const AdminDashboard = () => {
             if (!error && data) {
                 const transformedData: CertificateItem[] = data.map((cert: any) => ({
                     id: cert.id,
-                    ht_no: cert.ht_no,
+                    ht_no: cert.ht_no, // Use 'ht_no' here
                     title: cert.title,
                     description: cert.description,
                     file_url: cert.file_url,
@@ -371,7 +371,7 @@ const AdminDashboard = () => {
                 }));
 
                 setCertifications(transformedData);
-                if (!certificateSearchHT_NO) {
+                if (!certificateSearchHTNO) {
                     setFilteredCertificates(transformedData);
                 }
             } else {
@@ -384,7 +384,7 @@ const AdminDashboard = () => {
         } finally {
             setIsGlobalLoading(false);
         }
-    }, [toast, selectedYearFilterCerts, certificateSearchHT_NO]);
+    }, [toast, selectedYearFilterCerts, certificateSearchHTNO]);
 
 
     const loadStats = useCallback(async () => {
@@ -442,7 +442,7 @@ const AdminDashboard = () => {
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadStats]);
 
     useEffect(() => {
-        if (certificateSearchHT_NO || selectedYearFilterCerts !== 'all') {
+        if (certificateSearchHTNO || selectedYearFilterCerts !== 'all') {
             let currentFiltered = certifications;
 
             if (selectedYearFilterCerts !== 'all') {
@@ -451,18 +451,18 @@ const AdminDashboard = () => {
                 );
             }
 
-            if (certificateSearchHT_NO) {
+            if (certificateSearchHTNO) {
                 currentFiltered = currentFiltered.filter(cert =>
-                    cert.ht_no.toLowerCase().includes(certificateSearchHT_NO.toLowerCase()) ||
-                    (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHT_NO.toLowerCase())) ||
-                    (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHT_NO.toLowerCase()))
+                    cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+                    (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
+                    (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
                 );
             }
             setFilteredCertificates(currentFiltered);
         } else {
             setFilteredCertificates(certifications);
         }
-    }, [certificateSearchHT_NO, certifications, selectedYearFilterCerts]);
+    }, [certificateSearchHTNO, certifications, selectedYearFilterCerts]);
 
 
     if (loading || isGlobalLoading || !userProfile) {
@@ -826,7 +826,7 @@ const AdminDashboard = () => {
 
 
     const handleSearchCertificates = () => {
-        if (!certificateSearchHT_NO && selectedYearFilterCerts === 'all') {
+        if (!certificateSearchHTNO && selectedYearFilterCerts === 'all') {
             setFilteredCertificates(certifications);
             toast({ title: 'Showing all certificates.' });
             return;
@@ -840,11 +840,11 @@ const AdminDashboard = () => {
             );
         }
 
-        if (certificateSearchht_no) {
+        if (certificateSearchHTNO) {
             currentFiltered = currentFiltered.filter(cert =>
-                cert.ht_no.toLowerCase().includes(certificateSearchht_no.toLowerCase()) ||
-                (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchht_no.toLowerCase())) ||
-                (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchht_no.toLowerCase()))
+                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) || // Use cert.ht_no
+                (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
+                (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
             );
         }
 
@@ -1203,8 +1203,8 @@ const AdminDashboard = () => {
                                 <div className="mb-4 flex flex-wrap items-center gap-2">
                                     <Input
                                         placeholder="Search by H.T No., Name, or Email"
-                                        value={certificateSearchht_no}
-                                        onChange={(e) => setCertificateSearchht_no(e.target.value)}
+                                        value={certificateSearchHTNO}
+                                        onChange={(e) => setCertificateSearchHTNO(e.target.value)}
                                         className="max-w-xs"
                                     />
                                     <Select value={selectedYearFilterCerts} onValueChange={(value) => {
@@ -1228,12 +1228,12 @@ const AdminDashboard = () => {
                                     <Button
                                         variant="outline"
                                         onClick={() => {
-                                            setCertificateSearchht_no('');
+                                            setCertificateSearchHTNO('');
                                             setSelectedYearFilterCerts('all');
                                             loadCertifications(); // Re-load all certs from DB without filters
                                             toast({ title: 'Filters cleared, showing all certificates.' });
                                         }}
-                                        disabled={!certificateSearchht_no && selectedYearFilterCerts === 'all'}
+                                        disabled={!certificateSearchHTNO && selectedYearFilterCerts === 'all'}
                                     >
                                         <X className="w-4 h-4 mr-2" /> Clear Filters
                                     </Button>
@@ -1307,7 +1307,7 @@ const AdminDashboard = () => {
                                     <div className="text-center py-8">
                                         <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                                         <p className="text-gray-500 text-lg">No certificates found</p>
-                                        {(certificateSearchht_no || selectedYearFilterCerts !== 'all') && <p className="text-gray-500 text-sm">(Try clearing the filters)</p>}
+                                        {(certificateSearchHTNO || selectedYearFilterCerts !== 'all') && <p className="text-gray-500 text-sm">(Try clearing the filters)</p>}
                                     </div>
                                 )}
                             </CardContent>
@@ -1959,11 +1959,11 @@ const AdminDashboard = () => {
                                     />
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="edit-ht_no" className="text-right">
+                                    <Label htmlFor="edit-htno" className="text-right">
                                         H.T No.
                                     </Label>
                                     <Input
-                                        id="edit-ht_no"
+                                        id="edit-htno"
                                         value={editingStudent.ht_no}
                                         onChange={(e) => setEditingStudent({ ...editingStudent, ht_no: e.target.value })}
                                         className="col-span-3"
