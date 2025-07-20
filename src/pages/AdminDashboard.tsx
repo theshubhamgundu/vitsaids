@@ -36,8 +36,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
 // GitHub utilities
-// IMPORTANT: fetchAndParseTsFile, deleteFileFromGithub, updateGithubContentFile are NOT exported by your provided github-utils.ts
-// You MUST implement these functions in '@/lib/github-utils' for GitHub-backed features to work.
 import { uploadToGitHubRepo } from '@/lib/github-utils';
 
 // --- NEW IMPORTS FOR UPLOAD FORMS ---
@@ -59,7 +57,7 @@ interface PendingStudent {
     phone?: string;
     address?: string;
     emergency_no?: string;
-    photo_url?: string; // Ensured photo_url is here
+    photo_url?: string;
     email?: string;
 }
 
@@ -114,6 +112,7 @@ interface CertificateItem {
         id: string;
         ht_no: string;
         email?: string;
+        year?: number;
     };
 }
 
@@ -192,6 +191,7 @@ const AdminDashboard = () => {
 
     const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
     const [filteredCertificates, setFilteredCertificates] = useState<CertificateItem[]>([]);
+    const [selectedYearFilterCerts, setSelectedYearFilterCerts] = useState<string>('all');
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -221,7 +221,6 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
-    // MODIFIED: loadAllStudents to fetch profile photos
     const loadAllStudents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -232,15 +231,13 @@ const AdminDashboard = () => {
             const { data, error } = await query.order('student_name', { ascending: true });
             if (error) throw error;
 
-            // Fetch public URLs for profile photos
             const studentsWithPhotos = await Promise.all(data.map(async (student: PendingStudent) => {
-                const photoPath = `profiles/${student.id}/photo.jpg`; // Construct the expected path
+                const photoPath = `profiles/${student.id}/photo.jpg`;
                 const { data: publicUrlData, error: storageError } = supabase.storage.from("profile_photos").getPublicUrl(photoPath);
 
                 if (storageError || !publicUrlData?.publicUrl) {
-                    // Log error but don't prevent showing the student
                     console.warn(`Could not get public URL for student ${student.id}'s photo:`, storageError?.message || 'No public URL found.');
-                    return { ...student, photo_url: '/default-avatar.png' }; // Fallback to default avatar
+                    return { ...student, photo_url: '/default-avatar.png' };
                 }
                 return { ...student, photo_url: publicUrlData.publicUrl };
             }));
@@ -329,14 +326,21 @@ const AdminDashboard = () => {
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('certificates')
-                .select(`*, user_profiles!inner(student_name, ht_no, email)`) // Ensure user_profiles table has email
-                .order('uploaded_at', { ascending: false });
+                .select(`*, user_profiles!inner(student_name, ht_no, email, year)`);
+
+            if (selectedYearFilterCerts !== 'all') {
+                query = query.eq('user_profiles.year', parseInt(selectedYearFilterCerts));
+            }
+
+            const { data, error } = await query.order('uploaded_at', { ascending: false });
 
             if (!error && data) {
                 setCertifications(data);
-                setFilteredCertificates(data); // Initialize filtered with all data
+                if (!certificateSearchHTNO) {
+                    setFilteredCertificates(data);
+                }
             } else {
                 console.error('Error loading certificates:', error);
                 toast({ title: 'Error loading certificates', description: error?.message || 'Unknown error', variant: 'destructive' });
@@ -347,7 +351,8 @@ const AdminDashboard = () => {
         } finally {
             setIsGlobalLoading(false);
         }
-    }, [toast]);
+    }, [toast, selectedYearFilterCerts, certificateSearchHTNO]);
+
 
     const loadStats = useCallback(async () => {
         try {
@@ -389,7 +394,9 @@ const AdminDashboard = () => {
 
             const certificatesChannel = supabase
                 .channel('certificates-changes')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, loadCertifications)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, () => {
+                    loadCertifications();
+                })
                 .subscribe();
 
             return () => {
@@ -402,18 +409,27 @@ const AdminDashboard = () => {
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadStats]);
 
     useEffect(() => {
-        if (certificateSearchHTNO) {
-            setFilteredCertificates(
-                certifications.filter(cert =>
+        if (certificateSearchHTNO || selectedYearFilterCerts !== 'all') { // Trigger filter if any filter is active
+            let currentFiltered = certifications;
+
+            if (selectedYearFilterCerts !== 'all') {
+                currentFiltered = currentFiltered.filter(cert =>
+                    cert.user_profiles?.year === parseInt(selectedYearFilterCerts)
+                );
+            }
+
+            if (certificateSearchHTNO) {
+                currentFiltered = currentFiltered.filter(cert =>
                     cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
                     (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
                     (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
-                )
-            );
+                );
+            }
+            setFilteredCertificates(currentFiltered);
         } else {
-            setFilteredCertificates(certifications);
+            setFilteredCertificates(certifications); // Show all if no filters are active
         }
-    }, [certificateSearchHTNO, certifications]);
+    }, [certificateSearchHTNO, certifications, selectedYearFilterCerts]); // Added selectedYearFilterCerts here too
 
 
     if (loading || isGlobalLoading || !userProfile) {
@@ -554,15 +570,13 @@ const AdminDashboard = () => {
 
         setIsPhotoLoading(true);
 
-        // Define the target path in Supabase Storage
         const filePathInStorage = `profiles/${viewingStudent.id}/photo.jpg`;
 
         try {
-            // Upload the new file, allowing overwrite (upsert: true)
             const { error: uploadError } = await supabase.storage
-                .from('profile_photos') // Use your specific bucket name
+                .from('profile_photos')
                 .upload(filePathInStorage, newProfilePhotoFile, {
-                    upsert: true, // Overwrite if exists
+                    upsert: true,
                     contentType: newProfilePhotoFile.type,
                 });
 
@@ -570,15 +584,12 @@ const AdminDashboard = () => {
                 throw uploadError;
             }
 
-            // Get the public URL for the newly uploaded photo
             const { data: publicUrlData } = supabase.storage.from('profile_photos').getPublicUrl(filePathInStorage);
             const newPhotoUrl = publicUrlData.publicUrl;
 
-            // Optionally, update the user_profiles table with this URL if you store it there
-            // This is good practice to avoid repeated getPublicUrl calls if you display it often.
             const { error: updateError } = await supabase
                 .from('user_profiles')
-                .update({ photo_url: newPhotoUrl }) // Assuming a photo_url column in user_profiles
+                .update({ photo_url: newPhotoUrl })
                 .eq('id', viewingStudent.id);
 
             if (updateError) {
@@ -587,9 +598,7 @@ const AdminDashboard = () => {
 
             toast({ title: '✅ Profile photo updated successfully' });
             setNewProfilePhotoFile(null);
-            // Reload all students to ensure the list reflects the new photo
             loadAllStudents();
-            // Update the viewing student's photo URL immediately for current view
             setViewingStudent(prev => prev ? { ...prev, photo_url: newPhotoUrl } : null);
 
         } catch (error: any) {
@@ -602,7 +611,6 @@ const AdminDashboard = () => {
 
     const handleViewStudentDetails = async (student: PendingStudent) => {
         setIsPhotoLoading(true);
-        // The student object passed here should already have photo_url from loadAllStudents
         setViewingStudent(student);
         setIsPhotoLoading(false);
     };
@@ -785,17 +793,28 @@ const AdminDashboard = () => {
 
 
     const handleSearchCertificates = () => {
-        if (!certificateSearchHTNO) {
+        if (!certificateSearchHTNO && selectedYearFilterCerts === 'all') {
             setFilteredCertificates(certifications);
             toast({ title: 'Showing all certificates.' });
             return;
         }
 
-        const currentFiltered = certifications.filter(cert =>
-            cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
-            (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
-            (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
-        );
+        let currentFiltered = certifications;
+
+        if (selectedYearFilterCerts !== 'all') {
+            currentFiltered = currentFiltered.filter(cert =>
+                cert.user_profiles?.year === parseInt(selectedYearFilterCerts)
+            );
+        }
+
+        if (certificateSearchHTNO) {
+            currentFiltered = currentFiltered.filter(cert =>
+                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+                (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
+                (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
+            );
+        }
+
         setFilteredCertificates(currentFiltered);
 
         if (currentFiltered.length === 0) {
@@ -936,7 +955,7 @@ const AdminDashboard = () => {
                     <div className="flex justify-between items-center h-16">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-                            <p className="text-sm text-gray-600">Welcome back, {user?.email}! Manage your department effectively.</p>
+                            <p className="text-sm text-gray-600">Welcome back, {user?.email} (Admin).</p>
                         </div>
                         <Button
                             onClick={userProfile?.role === 'admin' ? () => supabase.auth.signOut() : () => setLocation('/login')}
@@ -950,7 +969,7 @@ const AdminDashboard = () => {
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-4 sm:mx-6 lg:mx-8 py-8"> {/* Adjusted mx for better full width */}
+            <main className="max-w-7xl mx-4 sm:mx-6 lg:mx-8 py-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
                     <Card>
                         <CardContent className="p-6">
@@ -1104,28 +1123,25 @@ const AdminDashboard = () => {
                                             <table className="w-full border-collapse border border-gray-200">
                                                 <thead>
                                                     <tr className="bg-gray-50">
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Photo</th> {/* New column */}
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
-                                                        <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
+                                                        <th className="border border-gray-200 px-3 py-2 text-left">H.T No.</th>
+                                                        <th className="border border-gray-200 px-3 py-2 text-left">Student Name</th> {/* Combined Photo and Name Header */}
+                                                        <th className="border border-gray-200 px-3 py-2 text-left">Year</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {allStudents.map((student) => (
                                                         <tr key={student.id} onClick={() => handleViewStudentDetails(student)} className="cursor-pointer hover:bg-gray-100">
-                                                            <td className="border border-gray-200 px-2 py-2">
+                                                            <td className="border border-gray-200 py-2 px-3">{student.ht_no}</td>
+                                                            <td className="border border-gray-200 py-2 px-3 flex items-center gap-2">
                                                                 <img
-                                                                    src={student.photo_url || '/default-avatar.png'} // Use student.photo_url or fallback
-                                                                    alt={student.student_name}
-                                                                    className="w-10 h-10 rounded-full object-cover"
-                                                                    onError={(e) => (e.currentTarget.src = '/default-avatar.png')} // Fallback on error
+                                                                    src={student.photo_url || "/default-avatar.png"}
+                                                                    alt="Profile"
+                                                                    className="w-6 h-6 rounded-full object-cover" // Applied small avatar styles
+                                                                    onError={(e) => (e.currentTarget.src = '/default-avatar.png')}
                                                                 />
+                                                                <span className="text-sm font-medium">{student.student_name}</span> {/* Ensured text-sm */}
                                                             </td>
-                                                            <td className="border border-gray-200 px-4 py-2">{student.ht_no}</td>
-                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                {student.student_name}
-                                                            </td>
-                                                            <td className="border border-gray-200 px-4 py-2">{student.year}</td>
+                                                            <td className="border border-gray-200 py-2 px-3">{student.year}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -1151,26 +1167,44 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="mb-4 flex items-center space-x-2">
+                                <div className="mb-4 flex flex-wrap items-center gap-2">
                                     <Input
                                         placeholder="Search by H.T No., Name, or Email"
                                         value={certificateSearchHTNO}
                                         onChange={(e) => setCertificateSearchHTNO(e.target.value)}
                                         className="max-w-xs"
                                     />
+                                    <Select value={selectedYearFilterCerts} onValueChange={(value) => {
+                                        setSelectedYearFilterCerts(value);
+                                        // No direct call to handleSearchCertificates here,
+                                        // the useEffect below will trigger on state change.
+                                    }}>
+                                        <SelectTrigger className="w-[180px]">
+                                            <SelectValue placeholder="Filter by Year" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Years</SelectItem>
+                                            <SelectItem value="1">1st Year</SelectItem>
+                                            <SelectItem value="2">2nd Year</SelectItem>
+                                            <SelectItem value="3">3rd Year</SelectItem>
+                                            <SelectItem value="4">4th Year</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+
                                     <Button onClick={handleSearchCertificates}>
-                                        <Search className="w-4 h-4 mr-2" /> Search
+                                        <Search className="w-4 h-4 mr-2" /> Apply Filters
                                     </Button>
                                     <Button
                                         variant="outline"
                                         onClick={() => {
                                             setCertificateSearchHTNO('');
-                                            setFilteredCertificates(certifications);
-                                            toast({ title: 'Search cleared, showing all certificates.' });
+                                            setSelectedYearFilterCerts('all');
+                                            loadCertifications(); // Re-load all certs from DB without filters
+                                            toast({ title: 'Filters cleared, showing all certificates.' });
                                         }}
-                                        disabled={!certificateSearchHTNO && filteredCertificates.length === certifications.length}
+                                        disabled={!certificateSearchHTNO && selectedYearFilterCerts === 'all'}
                                     >
-                                        <X className="w-4 h-4 mr-2" /> Clear Search
+                                        <X className="w-4 h-4 mr-2" /> Clear Filters
                                     </Button>
                                 </div>
 
@@ -1182,6 +1216,7 @@ const AdminDashboard = () => {
                                                     <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
                                                     <th className="border border-gray-200 px-4 py-2 text-left">H.T No.</th>
                                                     <th className="border border-gray-200 px-4 py-2 text-left">Email</th>
+                                                    <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
                                                     <th className="border border-gray-200 px-4 py-2 text-left">Certificate Name</th>
                                                     <th className="border border-gray-200 px-4 py-2 text-left">Uploaded At</th>
                                                     <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
@@ -1198,6 +1233,9 @@ const AdminDashboard = () => {
                                                         </td>
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             {cert.user_profiles?.email || 'N/A'}
+                                                        </td>
+                                                        <td className="border border-gray-200 px-4 py-2">
+                                                            {cert.user_profiles?.year || 'N/A'}
                                                         </td>
                                                         <td className="border border-gray-200 px-4 py-2">{cert.certificate_name}</td>
                                                         <td className="border border-gray-200 px-4 py-2">
@@ -1238,7 +1276,7 @@ const AdminDashboard = () => {
                                     <div className="text-center py-8">
                                         <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                                         <p className="text-gray-500 text-lg">No certificates found</p>
-                                        {certificateSearchHTNO && <p className="text-gray-500 text-sm">(Try clearing the search filter)</p>}
+                                        {(certificateSearchHTNO || selectedYearFilterCerts !== 'all') && <p className="text-gray-500 text-sm">(Try clearing the filters)</p>}
                                     </div>
                                 )}
                             </CardContent>
@@ -1985,6 +2023,7 @@ const AdminDashboard = () => {
                                         <SelectItem value="1">1st Year</SelectItem>
                                         <SelectItem value="2">2nd Year</SelectItem>
                                         <SelectItem value="3">3rd Year</SelectItem>
+                                        <SelectItem value="4">4th Year</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -2012,12 +2051,11 @@ const AdminDashboard = () => {
                                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                                         </div>
                                     ) : (
-                                        // Display fetched photo or default avatar
                                         <img
                                             src={viewingStudent.photo_url || '/default-avatar.png'}
                                             alt="Profile Photo"
                                             className="w-32 h-32 rounded-full object-cover border-2 border-gray-200"
-                                            onError={(e) => (e.currentTarget.src = '/default-avatar.png')} // Fallback on image load error
+                                            onError={(e) => (e.currentTarget.src = '/default-avatar.png')}
                                         />
                                     )}
                                     <span className="text-sm text-gray-500">Profile Photo</span>
