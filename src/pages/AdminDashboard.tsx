@@ -101,18 +101,21 @@ interface Placement {
     image?: string;
 }
 
+// UPDATED CertificateItem INTERFACE TO MATCH YOUR DB SCHEMA
 interface CertificateItem {
     id: string;
-    ht_no: string;
-    certificate_url: string;
-    certificate_name: string;
-    uploaded_at?: string;
-    user_profiles?: {
+    htno: string; // From your schema: 'htno' (text)
+    title: string;   // From your schema: 'title' (text)
+    description?: string; // From your schema: 'description' (text)
+    file_url: string; // From your schema: 'file_url' (text)
+    uploaded_at?: string; // From your schema: 'uploaded_at' (timestamp without time zone)
+    user_id?: string; // From your schema: 'user_id' (uuid) - now optional in type, but used for join
+    user_profiles?: { // Nested user_profiles data from the join
         student_name: string;
-        id: string;
-        ht_no: string;
+        id: string; // User's ID
+        ht_no: string; // HT No. from user_profiles
         email?: string;
-        year?: number;
+        year?: number; // Year from user_profiles
     };
 }
 
@@ -323,12 +326,22 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
+    // MODIFIED: loadCertifications to explicitly handle the join structure and map fields
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
             let query = supabase
                 .from('certificates')
-                .select(`*, user_profiles!inner(student_name, ht_no, email, year)`);
+                .select(`
+                    id,
+                    htno,      // Select htno directly from certificates
+                    title,     // Select title directly from certificates
+                    description, // Select description directly from certificates
+                    file_url,  // Select file_url directly from certificates
+                    uploaded_at,
+                    user_id,   // Select user_id directly from certificates (for consistency, though join handles it)
+                    user_profiles (id, student_name, ht_no, email, year) // Explicitly join and select desired fields from user_profiles
+                `);
 
             if (selectedYearFilterCerts !== 'all') {
                 query = query.eq('user_profiles.year', parseInt(selectedYearFilterCerts));
@@ -337,9 +350,30 @@ const AdminDashboard = () => {
             const { data, error } = await query.order('uploaded_at', { ascending: false });
 
             if (!error && data) {
-                setCertifications(data);
-                if (!certificateSearchHTNO) {
-                    setFilteredCertificates(data);
+                // Map the data to match the CertificateItem interface structure,
+                // ensuring joined 'user_profiles' data is correctly nested and other fields are mapped.
+                const transformedData: CertificateItem[] = data.map((cert: any) => ({
+                    id: cert.id,
+                    htno: cert.htno, // Use 'htno' directly from certificates table
+                    title: cert.title, // Use 'title' for certificate name
+                    description: cert.description,
+                    file_url: cert.file_url, // Use 'file_url' for the certificate file URL
+                    uploaded_at: cert.uploaded_at,
+                    user_id: cert.user_id,
+                    user_profiles: cert.user_profiles ? {
+                        id: cert.user_profiles.id,
+                        student_name: cert.user_profiles.student_name,
+                        ht_no: cert.user_profiles.ht_no,
+                        email: cert.user_profiles.email,
+                        year: cert.user_profiles.year,
+                    } : undefined // Ensure user_profiles is undefined if no join data
+                }));
+
+                setCertifications(transformedData);
+                // When loading all certifications, also update the filtered list
+                // This ensures the initial display and subsequent year changes show correct data
+                if (!certificateSearchHTNO) { // Only update if no active search is applied when data initially loaded
+                    setFilteredCertificates(transformedData);
                 }
             } else {
                 console.error('Error loading certificates:', error);
@@ -381,7 +415,7 @@ const AdminDashboard = () => {
             loadPlacements();
             loadGallery();
             loadAchievements();
-            loadCertifications();
+            loadCertifications(); // This will now load all certs for admin, or filtered by year
             loadStats();
 
             const studentsChannel = supabase
@@ -395,7 +429,7 @@ const AdminDashboard = () => {
             const certificatesChannel = supabase
                 .channel('certificates-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, () => {
-                    loadCertifications();
+                    loadCertifications(); // Reload certificates on change
                 })
                 .subscribe();
 
@@ -408,19 +442,23 @@ const AdminDashboard = () => {
         }
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadStats]);
 
+    // Effect to filter certificates when search HTNO changes or main certifications list changes
+    // This effect should only filter, not re-fetch from DB.
     useEffect(() => {
         if (certificateSearchHTNO || selectedYearFilterCerts !== 'all') { // Trigger filter if any filter is active
             let currentFiltered = certifications;
 
+            // Apply year filter first if selected
             if (selectedYearFilterCerts !== 'all') {
                 currentFiltered = currentFiltered.filter(cert =>
                     cert.user_profiles?.year === parseInt(selectedYearFilterCerts)
                 );
             }
 
+            // Apply text search if active
             if (certificateSearchHTNO) {
                 currentFiltered = currentFiltered.filter(cert =>
-                    cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+                    cert.htno.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) || // Use cert.htno
                     (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
                     (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
                 );
@@ -809,7 +847,7 @@ const AdminDashboard = () => {
 
         if (certificateSearchHTNO) {
             currentFiltered = currentFiltered.filter(cert =>
-                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+                cert.htno.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
                 (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
                 (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
             );
@@ -1124,7 +1162,7 @@ const AdminDashboard = () => {
                                                 <thead>
                                                     <tr className="bg-gray-50">
                                                         <th className="border border-gray-200 px-3 py-2 text-left">H.T No.</th>
-                                                        <th className="border border-gray-200 px-3 py-2 text-left">Student Name</th> {/* Combined Photo and Name Header */}
+                                                        <th className="border border-gray-200 px-3 py-2 text-left">Student Name</th>
                                                         <th className="border border-gray-200 px-3 py-2 text-left">Year</th>
                                                     </tr>
                                                 </thead>
@@ -1136,10 +1174,10 @@ const AdminDashboard = () => {
                                                                 <img
                                                                     src={student.photo_url || "/default-avatar.png"}
                                                                     alt="Profile"
-                                                                    className="w-6 h-6 rounded-full object-cover" // Applied small avatar styles
+                                                                    className="w-6 h-6 rounded-full object-cover"
                                                                     onError={(e) => (e.currentTarget.src = '/default-avatar.png')}
                                                                 />
-                                                                <span className="text-sm font-medium">{student.student_name}</span> {/* Ensured text-sm */}
+                                                                <span className="text-sm font-medium">{student.student_name}</span>
                                                             </td>
                                                             <td className="border border-gray-200 py-2 px-3">{student.year}</td>
                                                         </tr>
@@ -1176,8 +1214,6 @@ const AdminDashboard = () => {
                                     />
                                     <Select value={selectedYearFilterCerts} onValueChange={(value) => {
                                         setSelectedYearFilterCerts(value);
-                                        // No direct call to handleSearchCertificates here,
-                                        // the useEffect below will trigger on state change.
                                     }}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Filter by Year" />
@@ -1199,7 +1235,7 @@ const AdminDashboard = () => {
                                         onClick={() => {
                                             setCertificateSearchHTNO('');
                                             setSelectedYearFilterCerts('all');
-                                            loadCertifications(); // Re-load all certs from DB without filters
+                                            loadCertifications();
                                             toast({ title: 'Filters cleared, showing all certificates.' });
                                         }}
                                         disabled={!certificateSearchHTNO && selectedYearFilterCerts === 'all'}
@@ -1229,7 +1265,7 @@ const AdminDashboard = () => {
                                                             {cert.user_profiles?.student_name || 'Unknown'}
                                                         </td>
                                                         <td className="border border-gray-200 px-4 py-2">
-                                                            {cert.ht_no || 'N/A'}
+                                                            {cert.htno || 'N/A'} {/* Use cert.htno directly from certificate */}
                                                         </td>
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             {cert.user_profiles?.email || 'N/A'}
@@ -1237,20 +1273,20 @@ const AdminDashboard = () => {
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             {cert.user_profiles?.year || 'N/A'}
                                                         </td>
-                                                        <td className="border border-gray-200 px-4 py-2">{cert.certificate_name}</td>
+                                                        <td className="border border-gray-200 px-4 py-2">{cert.title}</td> {/* Use cert.title for certificate name */}
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'}
                                                         </td>
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             <div className="flex space-x-2">
-                                                                {cert.certificate_url && (
+                                                                {cert.file_url && ( // Use cert.file_url
                                                                     <Button
                                                                         asChild
                                                                         size="sm"
                                                                         variant="outline"
                                                                     >
                                                                         <a
-                                                                            href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
+                                                                            href={supabase.storage.from('certificates').getPublicUrl(cert.file_url).data.publicUrl}
                                                                             target="_blank"
                                                                             rel="noopener noreferrer"
                                                                         >
@@ -1261,7 +1297,7 @@ const AdminDashboard = () => {
                                                                 <Button
                                                                     size="sm"
                                                                     variant="destructive"
-                                                                    onClick={() => deleteCertification(cert.id, cert.certificate_url)}
+                                                                    onClick={() => deleteCertification(cert.id, cert.file_url)}
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
                                                                 </Button>
