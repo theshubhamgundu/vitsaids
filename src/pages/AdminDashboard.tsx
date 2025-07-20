@@ -35,19 +35,16 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
-// GitHub utilities
-// IMPORTANT: fetchAndParseTsFile, deleteFileFromGithub, updateGithubContentFile are NOT exported by your provided github-utils.ts
-// You MUST implement these functions in '@/lib/github-utils' for GitHub-backed features to work.
-import { uploadToGitHubRepo } from '@/lib/github-utils';
+// GitHub utilities - Now importing the newly implemented functions
+import { uploadToGitHubRepo, fetchAndParseJsonFile, updateGithubContentFile, deleteFileFromGithub } from '@/lib/github-utils';
 
-// --- NEW IMPORTS FOR UPLOAD FORMS ---
+// --- IMPORTS FOR UPLOAD FORMS ---
 import GalleryUploadForm from '@/components/GalleryUploadForm';
 import EventsUploadForm from '@/components/EventsUploadForm';
 import FacultyUploadForm from '@/components/FacultyUploadForm';
 import PlacementsUploadForm from '@/components/PlacementsUploadForm';
-// Correctly import AchievementsUploadForm from its dedicated file
 import AchievementsUploadForm from '@/components/AchievementsUploadForm';
-// --- END NEW IMPORTS ---
+// --- END IMPORTS ---
 
 
 // Type definitions for our data (these remain in AdminDashboard as it manages the overall state)
@@ -104,10 +101,9 @@ interface Placement {
     image?: string;
 }
 
-// UPDATED CertificateItem INTERFACE TO MATCH YOUR DB SCHEMA
 interface CertificateItem {
     id: string;
-    ht_no: string; // Corrected from htno to ht_no
+    ht_no: string;
     title: string;
     description?: string;
     file_url: string;
@@ -206,6 +202,7 @@ const AdminDashboard = () => {
         })
     );
 
+    // UPDATED: Now actually calls updateGithubContentFile
     const persistGitHubData = useCallback(async <T extends { id: string }>(
         dataArray: T[],
         filePath: string,
@@ -214,115 +211,89 @@ const AdminDashboard = () => {
     ) => {
         setIsUpdating(true);
         try {
-            console.warn(`WARNING: persistGitHubData is currently a NO-OP for actual GitHub file content updates/deletions for '${variableName}'.
-                You need to implement 'updateFileContentInGithub' and 'fetchFileContentFromGithub' in your github-utils.ts.`);
-            toast({ title: 'Persistence Not Implemented', description: 'GitHub file operations are not yet enabled. Changes are not saved.', variant: 'destructive' });
-            return false;
+            const result = await updateGithubContentFile(dataArray, filePath, commitMessage);
+            if (result.success) {
+                toast({ title: 'Success', description: `${variableName} data saved to GitHub.` });
+                return true;
+            } else {
+                console.error(`Error saving ${variableName} data to GitHub:`, result.message);
+                toast({ title: 'Persistence Error', description: `Failed to save ${variableName} data: ${result.message}`, variant: 'destructive' });
+                return false;
+            }
         } catch (error: any) {
-            console.error(`Error simulating persistence of ${variableName} data to GitHub:`, error);
-            toast({ title: 'Persistence Error', description: `Failed to save changes: ${error.message}`, variant: 'destructive' });
+            console.error(`Unexpected error during persistence of ${variableName} data to GitHub:`, error);
+            toast({ title: 'Persistence Error', description: `Unexpected error: ${error.message}`, variant: 'destructive' });
             return false;
         } finally {
             setIsUpdating(false);
         }
     }, [toast]);
 
-    const loadAllStudents = useCallback(async () => {
-        setIsGlobalLoading(true);
-        try {
-            let query = supabase.from('user_profiles').select('*').eq('role', 'student');
-            if (selectedYearFilter !== 'all') {
-                query = query.eq('year', parseInt(selectedYearFilter));
-            }
-            const { data, error } = await query.order('student_name', { ascending: true });
-            if (error) throw error;
-
-            const studentsWithPhotos = await Promise.all(data.map(async (student: PendingStudent) => {
-                const photoPath = `profiles/${student.id}/photo.jpg`;
-                const { data: publicUrlData, error: storageError } = supabase.storage.from("profile_photos").getPublicUrl(photoPath);
-
-                if (storageError || !publicUrlData?.publicUrl) {
-                    console.warn(`Could not get public URL for student ${student.id}'s photo:`, storageError?.message || 'No public URL found.');
-                    return { ...student, photo_url: '/default-avatar.png' };
-                }
-                return { ...student, photo_url: publicUrlData.publicUrl };
-            }));
-
-            setAllStudents(studentsWithPhotos);
-        } catch (error: any) {
-            console.error('Error loading students:', error);
-            toast({ title: 'Error loading students', description: error.message || 'Please try again later.', variant: 'destructive' });
-        } finally {
-            setIsGlobalLoading(false);
-        }
-    }, [selectedYearFilter, toast]);
-
-
+    // UPDATED: Now actually calls fetchAndParseJsonFile
     const loadEvents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load events data from GitHub.");
-            const data: Event[] = [];
-            setEvents(data);
+            const data = await fetchAndParseJsonFile<Event[]>('src/data/events.json');
+            setEvents(data || []);
         } catch (error: any) {
             console.error('Error loading events:', error);
-            toast({ title: 'Error loading events', description: error.message || 'Please implement GitHub fetch.', variant: 'destructive' });
+            toast({ title: 'Error loading events', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
     }, [toast]);
 
+    // UPDATED: Now actually calls fetchAndParseJsonFile
     const loadFaculty = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load faculty data from GitHub.");
-            const data: Faculty[] = [];
-            setFaculty(data);
+            const data = await fetchAndParseJsonFile<Faculty[]>('src/data/faculty.json');
+            setFaculty(data || []);
         } catch (error: any) {
             console.error('Error loading faculty:', error);
-            toast({ title: 'Error loading faculty', description: error.message || 'Please implement GitHub fetch.', variant: 'destructive' });
+            toast({ title: 'Error loading faculty', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
     }, [toast]);
 
+    // UPDATED: Now actually calls fetchAndParseJsonFile
     const loadPlacements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load placements data from GitHub.");
-            const data: Placement[] = [];
-            setPlacements(data);
+            const data = await fetchAndParseJsonFile<Placement[]>('src/data/placements.json');
+            setPlacements(data || []);
         } catch (error: any) {
             console.error('Error loading placements:', error);
-            toast({ title: 'Error loading placements', description: error.message || 'Please implement GitHub fetch.', variant: 'destructive' });
+            toast({ title: 'Error loading placements', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
     }, [toast]);
 
+    // UPDATED: Now actually calls fetchAndParseJsonFile
     const loadGallery = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load gallery data from GitHub.");
-            const data: GalleryItem[] = [];
-            setGallery(data);
+            const data = await fetchAndParseJsonFile<GalleryItem[]>('src/data/gallery.json');
+            setGallery(data || []);
         } catch (error: any) {
             console.error('Error loading gallery:', error);
-            toast({ title: 'Error loading gallery', description: error.message || 'Please implement GitHub fetch.', variant: 'destructive' });
+            toast({ title: 'Error loading gallery', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
     }, [toast]);
 
+    // UPDATED: Now actually calls fetchAndParseJsonFile
     const loadAchievements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            console.error("CRITICAL: GitHub integration incomplete: fetchAndParseTsFile is missing. Cannot load achievements data from GitHub.");
-            const data: Achievement[] = [];
-            setAchievements(data);
+            const data = await fetchAndParseJsonFile<Achievement[]>('src/data/achievements.json');
+            setAchievements(data || []);
         } catch (error: any) {
             console.error('Error loading achievements:', error);
-            toast({ title: 'Error loading achievements', description: error.message || 'Please implement GitHub fetch.', variant: 'destructive' });
+            toast({ title: 'Error loading achievements', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -392,6 +363,7 @@ const AdminDashboard = () => {
             const { count: studentsCount, error: studentsError } = await supabase.from('user_profiles').select('id', { count: 'exact' }).eq('role', 'student');
             if (studentsError) throw studentsError;
 
+            // These counts will reflect the state from loadEvents/Faculty/Placements/Achievements
             setStats({
                 totalStudents: studentsCount || 0,
                 activeEvents: events.length || 0,
@@ -433,8 +405,8 @@ const AdminDashboard = () => {
                 .subscribe();
 
             return () => {
-                    supabase.removeChannel(studentsChannel);
-                    supabase.removeChannel(certificatesChannel);
+                supabase.removeChannel(studentsChannel);
+                supabase.removeChannel(certificatesChannel);
             };
         } else if (!loading && userProfile && userProfile.role !== 'admin') {
             setLocation('/');
@@ -668,35 +640,43 @@ const AdminDashboard = () => {
                 const success = await persistGitHubData(newOrderedArray, filePath, variableName, `Reordered ${variableName}`);
                 if (!success) {
                     setDataArray(dataArray);
-                    toast({ title: 'Reorder Failed', description: 'Changes could not be saved to GitHub. Please implement persistGitHubData fully.', variant: 'destructive' });
+                    toast({ title: 'Reorder Failed', description: 'Changes could not be saved to GitHub.', variant: 'destructive' });
                 } else {
-                    toast({ title: 'Reordered successfully', description: `Items in ${variableName} have been reordered (simulated).` });
+                    toast({ title: 'Reordered successfully', description: `Items in ${variableName} have been reordered.` });
                 }
             }
         }
     };
 
-
+    // UPDATED: Now calls deleteFileFromGithub
     const handleDeleteEvent = async (eventToDelete: Event) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the event "${eventToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
 
         setIsDeleting(true);
         try {
+            // Delete image from GitHub if it exists
             if (eventToDelete.image) {
-                console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete event image from GitHub.");
+                const imagePathInRepo = eventToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]; // Adjust this path extraction if needed
+                if (imagePathInRepo) {
+                    const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete event image: ${eventToDelete.title}`);
+                    if (!deleteResult.success) {
+                        console.warn(`Failed to delete image for event ${eventToDelete.title}: ${deleteResult.message}`);
+                        toast({ title: 'Image Deletion Warning', description: `Could not delete event image from GitHub: ${deleteResult.message}`, variant: 'warning' });
+                    }
+                }
             }
 
             const updatedEvents = events.filter(event => event.id !== eventToDelete.id);
             setEvents(updatedEvents);
 
-            const success = await persistGitHubData(updatedEvents, 'public/events/events.ts', 'events', `Delete event: ${eventToDelete.title}`);
+            const success = await persistGitHubData(updatedEvents, 'src/data/events.json', 'events', `Delete event: ${eventToDelete.title}`);
             if (!success) {
                 setEvents(events);
                 toast({ title: 'Error', description: 'Failed to delete event details from GitHub. Please refresh.', variant: 'destructive' });
             } else {
-                toast({ title: 'Event deleted successfully (simulated)' });
-                loadStats();
+                toast({ title: 'Event deleted successfully' });
+                loadStats(); // Update stats after successful deletion
             }
         } catch (error: any) {
             console.error('Error deleting event:', error);
@@ -706,7 +686,7 @@ const AdminDashboard = () => {
         }
     };
 
-
+    // UPDATED: Now calls deleteFileFromGithub
     const handleDeleteFaculty = async (facultyToDelete: Faculty) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete faculty member "${facultyToDelete.name}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -714,18 +694,25 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (facultyToDelete.image) {
-                console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete faculty image from GitHub.");
+                const imagePathInRepo = facultyToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1];
+                 if (imagePathInRepo) {
+                    const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete faculty image: ${facultyToDelete.name}`);
+                    if (!deleteResult.success) {
+                        console.warn(`Failed to delete image for faculty ${facultyToDelete.name}: ${deleteResult.message}`);
+                        toast({ title: 'Image Deletion Warning', description: `Could not delete faculty image from GitHub: ${deleteResult.message}`, variant: 'warning' });
+                    }
+                }
             }
 
             const updatedFaculty = faculty.filter(member => member.id !== facultyToDelete.id);
             setFaculty(updatedFaculty);
 
-            const success = await persistGitHubData(updatedFaculty, 'public/faculty/faculty.ts', 'faculty', `Delete faculty: ${facultyToDelete.name}`);
+            const success = await persistGitHubData(updatedFaculty, 'src/data/faculty.json', 'faculty', `Delete faculty: ${facultyToDelete.name}`);
             if (!success) {
                 setFaculty(faculty);
                 toast({ title: 'Error', description: 'Failed to delete faculty details from GitHub. Please refresh.', variant: 'destructive' });
             } else {
-                toast({ title: 'Faculty member deleted successfully (simulated)' });
+                toast({ title: 'Faculty member deleted successfully' });
                 loadStats();
             }
         } catch (error: any) {
@@ -736,7 +723,7 @@ const AdminDashboard = () => {
         }
     };
 
-
+    // UPDATED: Now calls deleteFileFromGithub
     const handleDeleteGalleryItem = async (itemToDelete: GalleryItem) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the gallery item "${itemToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -744,18 +731,25 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (itemToDelete.image) {
-                console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete gallery image from GitHub.");
+                const imagePathInRepo = itemToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1];
+                 if (imagePathInRepo) {
+                    const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete gallery image: ${itemToDelete.title}`);
+                    if (!deleteResult.success) {
+                        console.warn(`Failed to delete image for gallery item ${itemToDelete.title}: ${deleteResult.message}`);
+                        toast({ title: 'Image Deletion Warning', description: `Could not delete gallery image from GitHub: ${deleteResult.message}`, variant: 'warning' });
+                    }
+                }
             }
 
             const updatedGallery = gallery.filter(item => item.id !== itemToDelete.id);
             setGallery(updatedGallery);
 
-            const success = await persistGitHubData(updatedGallery, 'public/gallery/gallery.ts', 'galleryItems', `Delete gallery item: ${itemToDelete.title}`);
+            const success = await persistGitHubData(updatedGallery, 'src/data/gallery.json', 'galleryItems', `Delete gallery item: ${itemToDelete.title}`);
             if (!success) {
                 setGallery(gallery);
                 toast({ title: 'Error', description: 'Failed to delete gallery item from GitHub. Please refresh.', variant: 'destructive' });
             } else {
-                toast({ title: 'Gallery item deleted successfully (simulated)' });
+                toast({ title: 'Gallery item deleted successfully' });
             }
         } catch (error: any) {
             console.error('Error deleting gallery item:', error);
@@ -765,7 +759,7 @@ const AdminDashboard = () => {
         }
     };
 
-
+    // UPDATED: Now calls deleteFileFromGithub
     const handleDeletePlacement = async (itemToDelete: Placement) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the placement record for "${itemToDelete.student_name}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -773,18 +767,25 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (itemToDelete.image) {
-                console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete placement image from GitHub.");
+                const imagePathInRepo = itemToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1];
+                 if (imagePathInRepo) {
+                    const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete placement image: ${itemToDelete.student_name}`);
+                    if (!deleteResult.success) {
+                        console.warn(`Failed to delete image for placement ${itemToDelete.student_name}: ${deleteResult.message}`);
+                        toast({ title: 'Image Deletion Warning', description: `Could not delete placement image from GitHub: ${deleteResult.message}`, variant: 'warning' });
+                    }
+                }
             }
 
             const updatedPlacements = placements.filter(item => item.id !== itemToDelete.id);
             setPlacements(updatedPlacements);
 
-            const success = await persistGitHubData(updatedPlacements, 'public/placements/placements.ts', 'placements', `Delete placement: ${itemToDelete.student_name}`);
+            const success = await persistGitHubData(updatedPlacements, 'src/data/placements.json', 'placements', `Delete placement: ${itemToDelete.student_name}`);
             if (!success) {
                 setPlacements(placements);
                 toast({ title: 'Error', description: 'Failed to delete placement record from GitHub. Please refresh.', variant: 'destructive' });
             } else {
-                toast({ title: 'Placement record deleted successfully (simulated)' });
+                toast({ title: 'Placement record deleted successfully' });
                 loadStats();
             }
         } catch (error: any) {
@@ -795,6 +796,7 @@ const AdminDashboard = () => {
         }
     };
 
+    // UPDATED: Now calls deleteFileFromGithub
     const handleDeleteAchievement = async (itemToDelete: Achievement) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the achievement "${itemToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -802,18 +804,25 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (itemToDelete.certificate_url) {
-                console.error("CRITICAL: GitHub integration incomplete: deleteFileFromGithub is missing. Cannot delete achievement certificate from GitHub.");
+                const filePathInRepo = itemToDelete.certificate_url.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1];
+                 if (filePathInRepo) {
+                    const deleteResult = await deleteFileFromGithub(filePathInRepo, `Delete achievement certificate: ${itemToDelete.title}`);
+                    if (!deleteResult.success) {
+                        console.warn(`Failed to delete certificate for achievement ${itemToDelete.title}: ${deleteResult.message}`);
+                        toast({ title: 'Certificate Deletion Warning', description: `Could not delete achievement certificate from GitHub: ${deleteResult.message}`, variant: 'warning' });
+                    }
+                }
             }
 
             const updatedAchievements = achievements.filter(item => item.id !== itemToDelete.id);
             setAchievements(updatedAchievements);
 
-            const success = await persistGitHubData(updatedAchievements, 'public/achievements/achievements.ts', 'achievements', `Delete achievement: ${itemToDelete.title}`);
+            const success = await persistGitHubData(updatedAchievements, 'src/data/achievements.json', 'achievements', `Delete achievement: ${itemToDelete.title}`);
             if (!success) {
                 setAchievements(achievements);
                 toast({ title: 'Error', description: 'Failed to delete achievement from GitHub. Please refresh.', variant: 'destructive' });
             } else {
-                toast({ title: 'Achievement deleted successfully (simulated)' });
+                toast({ title: 'Achievement deleted successfully' });
                 loadStats();
             }
         } catch (error: any) {
@@ -864,12 +873,13 @@ const AdminDashboard = () => {
 
         try {
             if (certificateUrl) {
-                const pathWithinBucket = certificateUrl.split('certificates/')[1];
+                // Supabase Storage path for certificates should be different from GitHub paths
+                const pathWithinBucket = certificateUrl.split('certificates/')[1]; // Assuming 'certificates' is your Supabase Storage bucket name
                 if (pathWithinBucket) {
                     const { error: storageError } = await supabase.storage.from('certificates').remove([pathWithinBucket]);
                     if (storageError) {
-                        console.warn('Error deleting certificate file from storage:', storageError);
-                        toast({ title: 'Warning', description: 'Could not delete file from storage. Record deleted from DB.', variant: 'destructive' });
+                        console.warn('Error deleting certificate file from Supabase storage:', storageError);
+                        toast({ title: 'Warning', description: 'Could not delete file from Supabase storage. Record deleted from DB.', variant: 'destructive' });
                     }
                 }
             }
@@ -1331,7 +1341,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'public/events/events.ts', 'events')}
+                                                    onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'src/data/events.json', 'events')}
                                                 >
                                                     <SortableContext
                                                         items={events.map(event => event.id)}
@@ -1442,7 +1452,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'public/faculty/faculty.ts', 'faculty')}
+                                                    onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'src/data/faculty.json', 'faculty')}
                                                 >
                                                     <SortableContext
                                                         items={faculty.map(member => member.id)}
@@ -1553,7 +1563,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'public/placements/placements.ts', 'placements')}
+                                                    onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'src/data/placements.json', 'placements')}
                                                 >
                                                     <SortableContext
                                                         items={placements.map(item => item.id)}
@@ -1664,7 +1674,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, achievements, setAchievements, 'public/achievements/achievements.ts', 'achievements')}
+                                                    onDragEnd={(event) => handleDragEnd(event, achievements, setAchievements, 'src/data/achievements.json', 'achievements')}
                                                 >
                                                     <SortableContext
                                                         items={achievements.map(item => item.id)}
@@ -1852,7 +1862,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'public/gallery/gallery.ts', 'galleryItems')}
+                                                    onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'src/data/gallery.json', 'galleryItems')}
                                                 >
                                                     <SortableContext
                                                         items={gallery.map(item => item.id)}
