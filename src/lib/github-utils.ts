@@ -1,90 +1,103 @@
 import { Octokit } from "octokit";
 
+const owner = "theshubhamgundu";
+const repo = "vitsaids";
+const branch = "main";
+
 const octokit = new Octokit({
-  auth: process.env.NEXT_PUBLIC_GITHUB_TOKEN, // Store securely in Vercel/Environment vars
+  auth: process.env.GITHUB_TOKEN,
 });
 
-// Base configuration
-const OWNER = "theshubhamgundu";
-const REPO = "vitsaids";
-const BRANCH = "main";
-
-/**
- * Uploads a file to the GitHub repo at the specified path.
- * @param file - File object (image/pdf)
- * @param uploadPath - Path inside repo, e.g., "public/gallery/image1.jpg"
- */
-export async function uploadToGitHubRepo(file: File, uploadPath: string) {
+export async function uploadToGitHubRepo(file: File, path: string) {
   try {
-    const reader = new FileReader();
-    const fileContent = await new Promise<string>((resolve, reject) => {
-      reader.onload = () => resolve((reader.result as string).split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+    const contentBuffer = await file.arrayBuffer();
+    const base64Content = Buffer.from(contentBuffer).toString("base64");
 
-    // Get existing SHA if file exists
-    let sha: string | undefined = undefined;
-    try {
-      const res = await octokit.rest.repos.getContent({
-        owner: OWNER,
-        repo: REPO,
-        path: uploadPath,
-        ref: BRANCH,
-      });
-      sha = (res.data as any).sha;
-    } catch (_) {
-      sha = undefined; // File doesn't exist yet
-    }
+    const { data: existingFile } = await octokit.request(
+      "GET /repos/{owner}/{repo}/contents/{path}",
+      {
+        owner,
+        repo,
+        path,
+      }
+    ).catch(() => ({ data: null })); // ignore if not found
 
-    // Upload or update file
-    const response = await octokit.rest.repos.createOrUpdateFileContents({
-      owner: OWNER,
-      repo: REPO,
-      path: uploadPath,
-      message: `Upload ${uploadPath}`,
-      content: fileContent,
-      branch: BRANCH,
-      ...(sha && { sha }),
+    const res = await octokit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
+      owner,
+      repo,
+      path,
+      message: `Upload ${path}`,
+      content: base64Content,
+      branch,
+      sha: existingFile?.sha,
     });
 
     return {
       success: true,
       message: "File uploaded successfully",
-      url: response.data.content?.download_url || null,
+      downloadUrl: res.data.content.download_url,
     };
-  } catch (error) {
-    console.error("GitHub upload error:", error);
+  } catch (error: any) {
+    console.error("GitHub Upload Error:", error);
     return {
       success: false,
-      message: "Failed to upload file to GitHub",
+      message: error.message || "Upload failed",
     };
   }
 }
 
-/**
- * Fetches and parses a JSON/TS file from the repo and returns the parsed content.
- * @param filePath - Full GitHub path, e.g., "src/data/gallery.json"
- */
-export async function fetchAndParseTsFile(filePath: string): Promise<any[]> {
+export async function updateJsonMetadataFile<T = any[]>(
+  newEntry: T,
+  jsonPath: string
+) {
   try {
-    const res = await octokit.rest.repos.getContent({
-      owner: OWNER,
-      repo: REPO,
-      path: filePath,
-      ref: BRANCH,
+    const { data } = await octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+      owner,
+      repo,
+      path: jsonPath,
     });
 
-    if (!res || !res.data || !("content" in res.data)) {
-      console.error("Invalid response from GitHub:", res);
-      return [];
-    }
+    const content = Buffer.from(data.content, "base64").toString();
+    const existing = JSON.parse(content) as T[];
 
-    const content = Buffer.from((res.data as any).content, "base64").toString("utf-8");
-    const parsed = JSON.parse(content);
-    return Array.isArray(parsed) ? parsed : [];
+    const updated = [...existing, newEntry];
+    const updatedContent = Buffer.from(JSON.stringify(updated, null, 2)).toString("base64");
+
+    await octokit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
+      owner,
+      repo,
+      path: jsonPath,
+      message: `Update ${jsonPath}`,
+      content: updatedContent,
+      sha: data.sha,
+      branch,
+    });
+
+    return {
+      success: true,
+      message: `Updated ${jsonPath} successfully`,
+    };
+  } catch (error: any) {
+    console.error(`Failed to update ${jsonPath}:`, error);
+    return {
+      success: false,
+      message: error.message || "Update failed",
+    };
+  }
+}
+
+export async function fetchAndParseJsonFile<T = any>(jsonPath: string): Promise<T | null> {
+  try {
+    const { data } = await octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+      owner,
+      repo,
+      path: jsonPath,
+    });
+
+    const decoded = Buffer.from(data.content, "base64").toString();
+    return JSON.parse(decoded) as T;
   } catch (error) {
-    console.error("Failed to fetch GitHub file:", error);
-    return [];
+    console.error(`Failed to fetch or parse ${jsonPath}:`, error);
+    return null;
   }
 }
