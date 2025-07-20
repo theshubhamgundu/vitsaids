@@ -1,103 +1,114 @@
-import { Octokit } from "octokit";
+import { Octokit } from "@octokit/rest";
 
 const owner = "theshubhamgundu";
 const repo = "vitsaids";
 const branch = "main";
 
 const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN,
+  auth: process.env.GITHUB_TOKEN, // set this in Vercel env vars
 });
 
+/**
+ * Uploads a file (e.g., image) to a GitHub repo path like `public/gallery/image.jpg`
+ */
 export async function uploadToGitHubRepo(file: File, path: string) {
   try {
-    const contentBuffer = await file.arrayBuffer();
-    const base64Content = Buffer.from(contentBuffer).toString("base64");
+    const buffer = await file.arrayBuffer();
+    const contentEncoded = Buffer.from(buffer).toString("base64");
 
-    const { data: existingFile } = await octokit.request(
-      "GET /repos/{owner}/{repo}/contents/{path}",
-      {
+    let sha: string | undefined = undefined;
+
+    try {
+      const existing = await octokit.repos.getContent({
         owner,
         repo,
         path,
-      }
-    ).catch(() => ({ data: null })); // ignore if not found
+        ref: branch,
+      });
+      sha = (existing.data as any).sha;
+    } catch {
+      sha = undefined; // file doesn't exist
+    }
 
-    const res = await octokit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
+    const res = await octokit.repos.createOrUpdateFileContents({
       owner,
       repo,
       path,
       message: `Upload ${path}`,
-      content: base64Content,
+      content: contentEncoded,
       branch,
-      sha: existingFile?.sha,
+      ...(sha && { sha }),
     });
 
     return {
       success: true,
       message: "File uploaded successfully",
-      downloadUrl: res.data.content.download_url,
+      downloadUrl: res.data.content?.download_url ?? null,
     };
-  } catch (error: any) {
-    console.error("GitHub Upload Error:", error);
+  } catch (err: any) {
+    console.error("Upload error:", err);
     return {
       success: false,
-      message: error.message || "Upload failed",
+      message: err.message || "Upload failed",
     };
   }
 }
 
-export async function updateJsonMetadataFile<T = any[]>(
+/**
+ * Updates a JSON metadata file like `src/data/gallery.json` with a new entry
+ */
+export async function updateJsonMetadataFile<T = any>(
   newEntry: T,
   jsonPath: string
 ) {
   try {
-    const { data } = await octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+    const res = await octokit.repos.getContent({
       owner,
       repo,
       path: jsonPath,
+      ref: branch,
     });
 
-    const content = Buffer.from(data.content, "base64").toString();
-    const existing = JSON.parse(content) as T[];
+    const existingSha = (res.data as any).sha;
+    const existingData = Buffer.from((res.data as any).content, "base64").toString();
+    const parsed = JSON.parse(existingData);
 
-    const updated = [...existing, newEntry];
+    const updated = [...parsed, newEntry];
     const updatedContent = Buffer.from(JSON.stringify(updated, null, 2)).toString("base64");
 
-    await octokit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
+    await octokit.repos.createOrUpdateFileContents({
       owner,
       repo,
       path: jsonPath,
       message: `Update ${jsonPath}`,
       content: updatedContent,
-      sha: data.sha,
+      sha: existingSha,
       branch,
     });
 
-    return {
-      success: true,
-      message: `Updated ${jsonPath} successfully`,
-    };
-  } catch (error: any) {
-    console.error(`Failed to update ${jsonPath}:`, error);
-    return {
-      success: false,
-      message: error.message || "Update failed",
-    };
+    return { success: true, message: "Metadata updated" };
+  } catch (err: any) {
+    console.error("Update error:", err);
+    return { success: false, message: err.message || "Update failed" };
   }
 }
 
-export async function fetchAndParseJsonFile<T = any>(jsonPath: string): Promise<T | null> {
+/**
+ * Fetches and parses JSON from GitHub like `src/data/gallery.json`
+ */
+export async function fetchAndParseJsonFile<T = any[]>(jsonPath: string): Promise<T | null> {
   try {
-    const { data } = await octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+    const res = await octokit.repos.getContent({
       owner,
       repo,
       path: jsonPath,
+      ref: branch,
     });
 
-    const decoded = Buffer.from(data.content, "base64").toString();
-    return JSON.parse(decoded) as T;
-  } catch (error) {
-    console.error(`Failed to fetch or parse ${jsonPath}:`, error);
+    const content = Buffer.from((res.data as any).content, "base64").toString();
+    return JSON.parse(content);
+  } catch (err) {
+    console.error(`Failed to fetch ${jsonPath}:`, err);
     return null;
   }
 }
