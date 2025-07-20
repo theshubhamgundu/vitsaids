@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-// ⬇️ Add these for Buffer polyfill
+// Polyfills for Node.js globals like `Buffer`
 import { NodeGlobalsPolyfillPlugin } from "@esbuild-plugins/node-globals-polyfill";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
 
@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => ({
     nodePolyfills({
       globals: {
         Buffer: true,
+        process: true, // Optional but useful
       },
       protocolImports: true,
     }),
@@ -25,7 +26,8 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      buffer: "buffer", // ⬅️ Needed for Buffer polyfill
+      buffer: "buffer", // Ensure Buffer works in browser
+      process: "process/browser", // Optional: some Octokit internals may use it
     },
   },
   build: {
@@ -48,14 +50,15 @@ export default defineConfig(({ mode }) => ({
     },
   },
   optimizeDeps: {
-    exclude: ["@octokit/rest"],
+    exclude: ["@octokit/rest"], // Keep Octokit as ESM
     esbuildOptions: {
       define: {
-        global: "globalThis", // ⬅️ Required for Buffer polyfill
+        global: "globalThis",
       },
       plugins: [
         NodeGlobalsPolyfillPlugin({
           buffer: true,
+          process: true,
         }),
       ],
     },
