@@ -35,7 +35,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
-// GitHub utilities - Now importing the newly implemented functions
+// GitHub utilities
 import { uploadToGitHubRepo, fetchAndParseJsonFile, updateGithubContentFile, deleteFileFromGithub } from '@/lib/github-utils';
 
 // --- IMPORTS FOR UPLOAD FORMS ---
@@ -202,7 +202,6 @@ const AdminDashboard = () => {
         })
     );
 
-    // UPDATED: Now actually calls updateGithubContentFile
     const persistGitHubData = useCallback(async <T extends { id: string }>(
         dataArray: T[],
         filePath: string,
@@ -229,7 +228,37 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
-    // UPDATED: Now actually calls fetchAndParseJsonFile
+    const loadAllStudents = useCallback(async () => {
+        setIsGlobalLoading(true);
+        try {
+            let query = supabase.from('user_profiles').select('*').eq('role', 'student');
+            if (selectedYearFilter !== 'all') {
+                query = query.eq('year', parseInt(selectedYearFilter));
+            }
+            const { data, error } = await query.order('student_name', { ascending: true });
+            if (error) throw error;
+
+            const studentsWithPhotos = await Promise.all(data.map(async (student: PendingStudent) => {
+                const photoPath = `profiles/${student.id}/photo.jpg`;
+                const { data: publicUrlData, error: storageError } = supabase.storage.from("profile_photos").getPublicUrl(photoPath);
+
+                if (storageError || !publicUrlData?.publicUrl) {
+                    console.warn(`Could not get public URL for student ${student.id}'s photo:`, storageError?.message || 'No public URL found.');
+                    return { ...student, photo_url: '/default-avatar.png' };
+                }
+                return { ...student, photo_url: publicUrlData.publicUrl };
+            }));
+
+            setAllStudents(studentsWithPhotos);
+        } catch (error: any) {
+            console.error('Error loading students:', error);
+            toast({ title: 'Error loading students', description: error.message || 'Please try again later.', variant: 'destructive' });
+        } finally {
+            setIsGlobalLoading(false);
+        }
+    }, [selectedYearFilter, toast]);
+
+
     const loadEvents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -243,7 +272,6 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
-    // UPDATED: Now actually calls fetchAndParseJsonFile
     const loadFaculty = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -257,7 +285,6 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
-    // UPDATED: Now actually calls fetchAndParseJsonFile
     const loadPlacements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -271,7 +298,6 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
-    // UPDATED: Now actually calls fetchAndParseJsonFile
     const loadGallery = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -285,7 +311,6 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
-    // UPDATED: Now actually calls fetchAndParseJsonFile
     const loadAchievements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -648,16 +673,14 @@ const AdminDashboard = () => {
         }
     };
 
-    // UPDATED: Now calls deleteFileFromGithub
     const handleDeleteEvent = async (eventToDelete: Event) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the event "${eventToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
 
         setIsDeleting(true);
         try {
-            // Delete image from GitHub if it exists
             if (eventToDelete.image) {
-                const imagePathInRepo = eventToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]; // Adjust this path extraction if needed
+                const imagePathInRepo = eventToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1];
                 if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete event image: ${eventToDelete.title}`);
                     if (!deleteResult.success) {
@@ -676,7 +699,7 @@ const AdminDashboard = () => {
                 toast({ title: 'Error', description: 'Failed to delete event details from GitHub. Please refresh.', variant: 'destructive' });
             } else {
                 toast({ title: 'Event deleted successfully' });
-                loadStats(); // Update stats after successful deletion
+                loadStats();
             }
         } catch (error: any) {
             console.error('Error deleting event:', error);
@@ -686,7 +709,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // UPDATED: Now calls deleteFileFromGithub
     const handleDeleteFaculty = async (facultyToDelete: Faculty) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete faculty member "${facultyToDelete.name}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -723,7 +745,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // UPDATED: Now calls deleteFileFromGithub
     const handleDeleteGalleryItem = async (itemToDelete: GalleryItem) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the gallery item "${itemToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -759,7 +780,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // UPDATED: Now calls deleteFileFromGithub
     const handleDeletePlacement = async (itemToDelete: Placement) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the placement record for "${itemToDelete.student_name}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -796,7 +816,6 @@ const AdminDashboard = () => {
         }
     };
 
-    // UPDATED: Now calls deleteFileFromGithub
     const handleDeleteAchievement = async (itemToDelete: Achievement) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the achievement "${itemToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
@@ -873,8 +892,7 @@ const AdminDashboard = () => {
 
         try {
             if (certificateUrl) {
-                // Supabase Storage path for certificates should be different from GitHub paths
-                const pathWithinBucket = certificateUrl.split('certificates/')[1]; // Assuming 'certificates' is your Supabase Storage bucket name
+                const pathWithinBucket = certificateUrl.split('certificates/')[1];
                 if (pathWithinBucket) {
                     const { error: storageError } = await supabase.storage.from('certificates').remove([pathWithinBucket]);
                     if (storageError) {
@@ -898,6 +916,8 @@ const AdminDashboard = () => {
         } catch (error: any) {
             console.error('Error deleting certificate:', error);
             toast({ title: 'Error deleting certificate', description: error.message || 'Please try again later.', variant: 'destructive' });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -2058,7 +2078,7 @@ const AdminDashboard = () => {
                                 </Label>
                                 <Select value={yearToPromote} onValueChange={setYearToPromote}>
                                     <SelectTrigger className="col-span-3">
-                                        <SelectValue placeholder="Select current year to promote" />
+                                        <SelectValue placeholder="Select current year to />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="1">1st Year</SelectItem>
