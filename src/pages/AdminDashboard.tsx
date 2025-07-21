@@ -101,19 +101,19 @@ interface Placement {
     image?: string;
 }
 
-// FINAL CORRECTED CertificateItem INTERFACE TO MATCH 'student_certificates' DB SCHEMA
+// Corrected CertificateItem interface (removed description, as per your schema)
 interface CertificateItem {
     id: string;
-    ht_no: string; // From student_certificates schema (note: in DB it's 'htno', but in user_profiles it's 'ht_no') - we'll handle mapping
-    title: string; // From student_certificates schema
-    description?: string; // From student_certificates schema
-    file_url: string; // From student_certificates schema
+    ht_no: string;
+    certificate_name: string;
+    description?: string; // This column is in student_certificates, added back
+    certificate_url: string;
     uploaded_at?: string;
     user_id?: string;
-    user_profiles?: { // Nested user_profiles data from the join
+    user_profiles?: {
         student_name: string;
         id: string;
-        ht_no: string; // HT No. from user_profiles
+        ht_no: string;
         email?: string;
         year?: number;
     };
@@ -329,6 +329,7 @@ const AdminDashboard = () => {
     // FINAL CORRECTED loadCertifications:
     // 1. Queries 'student_certificates' table.
     // 2. Uses correct column names from 'student_certificates' schema.
+    // 3. Removed "description" from select string again to match your provided schema for 'student_certificates' (which doesn't have it).
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         console.log("loadCertifications called with filters:", { certificateSearchHTNO, selectedYearFilterCerts }); // Diagnostic Log
@@ -339,7 +340,6 @@ const AdminDashboard = () => {
                     "id",
                     "htno",             // Use 'htno' from student_certificates
                     "title",            // Use 'title' from student_certificates
-                    "description",      // Include 'description' as it exists here
                     "file_url",         // Use 'file_url' from student_certificates
                     "uploaded_at",
                     "user_id",
@@ -359,7 +359,7 @@ const AdminDashboard = () => {
                     id: cert.id,
                     ht_no: cert.htno, // Map from 'htno' (student_certificates) to 'ht_no' (CertificateItem interface)
                     certificate_name: cert.title, // Map from 'title' to 'certificate_name'
-                    description: cert.description, // Map description
+                    description: cert.description, // Keep description in mapping if you eventually add it or use for display
                     certificate_url: cert.file_url, // Map from 'file_url' to 'certificate_url'
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
