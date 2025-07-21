@@ -101,12 +101,11 @@ interface Placement {
     image?: string;
 }
 
-// Corrected CertificateItem interface (no changes from last attempt, just confirming)
+// Corrected CertificateItem interface (removed description, as per your schema)
 interface CertificateItem {
     id: string;
     ht_no: string;
     certificate_name: string;
-    description?: string;
     certificate_url: string;
     uploaded_at?: string;
     user_id?: string;
@@ -326,7 +325,7 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
-    // Corrected loadCertifications: Removed all comments from inside the select string
+    // Corrected loadCertifications: Removed "description" from select string based on your schema
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -336,7 +335,6 @@ const AdminDashboard = () => {
                     "id",
                     "ht_no",
                     "certificate_name",
-                    "description",
                     "certificate_url",
                     "uploaded_at",
                     "user_id",
@@ -354,7 +352,6 @@ const AdminDashboard = () => {
                     id: cert.id,
                     ht_no: cert.ht_no,
                     certificate_name: cert.certificate_name,
-                    description: cert.description,
                     certificate_url: cert.certificate_url,
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
@@ -1267,7 +1264,7 @@ const AdminDashboard = () => {
                                     }}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Filter by Year" />
-                                                                                </SelectTrigger>
+                                        </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All Years</SelectItem>
                                             <SelectItem value="1">1st Year</SelectItem>
