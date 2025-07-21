@@ -101,13 +101,13 @@ interface Placement {
     image?: string;
 }
 
-// CORRECTED CertificateItem INTERFACE TO MATCH YOUR DB SCHEMA
+// Corrected CertificateItem interface (no changes from last attempt, just confirming)
 interface CertificateItem {
     id: string;
     ht_no: string;
-    certificate_name: string; // Corrected column name
-    description?: string; // Add description if it exists in DB
-    certificate_url: string; // Corrected column name
+    certificate_name: string;
+    description?: string;
+    certificate_url: string;
     uploaded_at?: string;
     user_id?: string;
     user_profiles?: {
@@ -326,7 +326,7 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
-    // Corrected loadCertifications: Using correct column names "certificate_name" and "certificate_url"
+    // Corrected loadCertifications: Removed all comments from inside the select string
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -335,9 +335,9 @@ const AdminDashboard = () => {
                 .select(`
                     "id",
                     "ht_no",
-                    "certificate_name", // Corrected column name
+                    "certificate_name",
                     "description",
-                    "certificate_url",  // Corrected column name
+                    "certificate_url",
                     "uploaded_at",
                     "user_id",
                     user_profiles ("id", "student_name", "ht_no", "email", "year")
@@ -353,9 +353,9 @@ const AdminDashboard = () => {
                 const transformedData: CertificateItem[] = data.map((cert: any) => ({
                     id: cert.id,
                     ht_no: cert.ht_no,
-                    certificate_name: cert.certificate_name, // Use correct name
+                    certificate_name: cert.certificate_name,
                     description: cert.description,
-                    certificate_url: cert.certificate_url,  // Use correct name
+                    certificate_url: cert.certificate_url,
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
                     user_profiles: cert.user_profiles ? {
@@ -430,8 +430,8 @@ const AdminDashboard = () => {
                 .subscribe();
 
             return () => {
-                    supabase.removeChannel(studentsChannel);
-                    supabase.removeChannel(certificatesChannel);
+                supabase.removeChannel(studentsChannel);
+                supabase.removeChannel(certificatesChannel);
             };
         } else if (!loading && userProfile && userProfile.role !== 'admin') {
             setLocation('/');
@@ -1267,7 +1267,7 @@ const AdminDashboard = () => {
                                     }}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Filter by Year" />
-                                        </SelectTrigger>
+                                                                                </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All Years</SelectItem>
                                             <SelectItem value="1">1st Year</SelectItem>
