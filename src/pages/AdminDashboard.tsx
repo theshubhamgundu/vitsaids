@@ -31,7 +31,7 @@ import {
     sortableKeyboardCoordinates,
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { useSortable } from '@dnd-kit/sortable';
+import { useSortable } => '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
@@ -101,12 +101,13 @@ interface Placement {
     image?: string;
 }
 
+// CORRECTED CertificateItem INTERFACE TO MATCH YOUR DB SCHEMA
 interface CertificateItem {
     id: string;
     ht_no: string;
-    title: string;
-    description?: string;
-    file_url: string;
+    certificate_name: string; // Corrected column name
+    description?: string; // Add description if it exists in DB
+    certificate_url: string; // Corrected column name
     uploaded_at?: string;
     user_id?: string;
     user_profiles?: {
@@ -325,7 +326,7 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
-    // Corrected loadCertifications: Explicitly quoted column names in select string
+    // Corrected loadCertifications: Using correct column names "certificate_name" and "certificate_url"
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
@@ -334,9 +335,9 @@ const AdminDashboard = () => {
                 .select(`
                     "id",
                     "ht_no",
-                    "title",
+                    "certificate_name", // Corrected column name
                     "description",
-                    "file_url",
+                    "certificate_url",  // Corrected column name
                     "uploaded_at",
                     "user_id",
                     user_profiles ("id", "student_name", "ht_no", "email", "year")
@@ -352,9 +353,9 @@ const AdminDashboard = () => {
                 const transformedData: CertificateItem[] = data.map((cert: any) => ({
                     id: cert.id,
                     ht_no: cert.ht_no,
-                    title: cert.title,
+                    certificate_name: cert.certificate_name, // Use correct name
                     description: cert.description,
-                    file_url: cert.file_url,
+                    certificate_url: cert.certificate_url,  // Use correct name
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
                     user_profiles: cert.user_profiles ? {
@@ -429,8 +430,8 @@ const AdminDashboard = () => {
                 .subscribe();
 
             return () => {
-                supabase.removeChannel(studentsChannel);
-                supabase.removeChannel(certificatesChannel);
+                    supabase.removeChannel(studentsChannel);
+                    supabase.removeChannel(certificatesChannel);
             };
         } else if (!loading && userProfile && userProfile.role !== 'admin') {
             setLocation('/');
@@ -1322,20 +1323,20 @@ const AdminDashboard = () => {
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             {cert.user_profiles?.year || 'N/A'}
                                                         </td>
-                                                        <td className="border border-gray-200 px-4 py-2">{cert.title}</td>
+                                                        <td className="border border-gray-200 px-4 py-2">{cert.certificate_name}</td>
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'}
                                                         </td>
                                                         <td className="border border-gray-200 px-4 py-2">
                                                             <div className="flex space-x-2">
-                                                                {cert.file_url && (
+                                                                {cert.certificate_url && (
                                                                     <Button
                                                                         asChild
                                                                         size="sm"
                                                                         variant="outline"
                                                                     >
                                                                         <a
-                                                                            href={supabase.storage.from('certificates').getPublicUrl(cert.file_url).data.publicUrl}
+                                                                            href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
                                                                             target="_blank"
                                                                             rel="noopener noreferrer"
                                                                         >
@@ -1346,7 +1347,7 @@ const AdminDashboard = () => {
                                                                 <Button
                                                                     size="sm"
                                                                     variant="destructive"
-                                                                    onClick={() => deleteCertification(cert.id, cert.file_url)}
+                                                                    onClick={() => deleteCertification(cert.id, cert.certificate_url)}
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
                                                                 </Button>
