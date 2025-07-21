@@ -101,17 +101,19 @@ interface Placement {
     image?: string;
 }
 
+// FINAL CORRECTED CertificateItem INTERFACE TO MATCH 'student_certificates' DB SCHEMA
 interface CertificateItem {
     id: string;
-    ht_no: string;
-    certificate_name: string;
-    certificate_url: string;
+    ht_no: string; // From student_certificates schema (note: in DB it's 'htno', but in user_profiles it's 'ht_no') - we'll handle mapping
+    title: string; // From student_certificates schema
+    description?: string; // From student_certificates schema
+    file_url: string; // From student_certificates schema
     uploaded_at?: string;
     user_id?: string;
-    user_profiles?: {
+    user_profiles?: { // Nested user_profiles data from the join
         student_name: string;
         id: string;
-        ht_no: string;
+        ht_no: string; // HT No. from user_profiles
         email?: string;
         year?: number;
     };
@@ -324,21 +326,24 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
-    // FINAL CORRECTED loadCertifications: Removed "description" from select string based on your schema
+    // FINAL CORRECTED loadCertifications:
+    // 1. Queries 'student_certificates' table.
+    // 2. Uses correct column names from 'student_certificates' schema.
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         console.log("loadCertifications called with filters:", { certificateSearchHTNO, selectedYearFilterCerts }); // Diagnostic Log
         try {
             let query = supabase
-                .from('certificates')
+                .from('student_certificates') // CHANGED TABLE NAME
                 .select(`
                     "id",
-                    "ht_no",
-                    "certificate_name",
-                    "certificate_url",
+                    "htno",             // Use 'htno' from student_certificates
+                    "title",            // Use 'title' from student_certificates
+                    "description",      // Include 'description' as it exists here
+                    "file_url",         // Use 'file_url' from student_certificates
                     "uploaded_at",
                     "user_id",
-                    user_profiles ("id", "student_name", "ht_no", "email", "year")
+                    user_profiles ("id", "student_name", "ht_no", "email", "year") // user_profiles columns should match user_profiles table
                 `);
 
             if (selectedYearFilterCerts !== 'all') {
@@ -352,9 +357,10 @@ const AdminDashboard = () => {
             if (!error && data) {
                 const transformedData: CertificateItem[] = data.map((cert: any) => ({
                     id: cert.id,
-                    ht_no: cert.ht_no,
-                    certificate_name: cert.certificate_name,
-                    certificate_url: cert.certificate_url,
+                    ht_no: cert.htno, // Map from 'htno' (student_certificates) to 'ht_no' (CertificateItem interface)
+                    certificate_name: cert.title, // Map from 'title' to 'certificate_name'
+                    description: cert.description, // Map description
+                    certificate_url: cert.file_url, // Map from 'file_url' to 'certificate_url'
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
                     user_profiles: cert.user_profiles ? {
@@ -425,8 +431,8 @@ const AdminDashboard = () => {
 
             const certificatesChannel = supabase
                 .channel('certificates-changes')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, () => {
-                    console.log("Supabase certificates change detected. Reloading certs."); // Diagnostic Log
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'student_certificates' }, () => { // Changed table name in subscription
+                    console.log("Supabase student_certificates change detected. Reloading certs."); // Diagnostic Log
                     loadCertifications();
                 })
                 .subscribe();
@@ -454,8 +460,9 @@ const AdminDashboard = () => {
         }
 
         if (certificateSearchHTNO) {
+            // Updated to check against `ht_no` in the CertificateItem interface and user_profiles fields
             currentFiltered = currentFiltered.filter(cert =>
-                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) || // Search against mapped ht_no
                 (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
                 (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
             );
@@ -881,6 +888,7 @@ const AdminDashboard = () => {
 
 
     const handleSearchCertificates = () => {
+        console.log("handleSearchCertificates triggered."); // Diagnostic Log
         if (!certificateSearchHTNO && selectedYearFilterCerts === 'all') {
             setFilteredCertificates(certifications);
             toast({ title: 'Showing all certificates.' });
@@ -931,7 +939,7 @@ const AdminDashboard = () => {
             }
 
             const { error } = await supabase
-                .from('certificates')
+                .from('student_certificates') // Changed table name for delete
                 .delete()
                 .eq('id', certId);
 
