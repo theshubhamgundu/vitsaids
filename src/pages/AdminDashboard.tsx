@@ -101,7 +101,6 @@ interface Placement {
     image?: string;
 }
 
-// Corrected CertificateItem interface (removed description, as per your schema)
 interface CertificateItem {
     id: string;
     ht_no: string;
