@@ -276,7 +276,7 @@ const AdminDashboard = () => {
         try {
             const data = await fetchAndParseJsonFile<Faculty[]>('src/data/faculty.json');
             setFaculty(data || []);
-        } catch (error: any) {
+        }  catch (error: any) {
             console.error('Error loading faculty:', error);
             toast({ title: 'Error loading faculty', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
         } finally {
@@ -289,7 +289,7 @@ const AdminDashboard = () => {
         try {
             const data = await fetchAndParseJsonFile<Placement[]>('src/data/placements.json');
             setPlacements(data || []);
-        } catch (error: any) {
+        }  catch (error: any) {
             console.error('Error loading placements:', error);
             toast({ title: 'Error loading placements', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
         } finally {
@@ -324,9 +324,10 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
-    // Corrected loadCertifications: Removed "description" from select string based on your schema
+    // FINAL CORRECTED loadCertifications: Removed "description" from select string based on your schema
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
+        console.log("loadCertifications called with filters:", { certificateSearchHTNO, selectedYearFilterCerts }); // Diagnostic Log
         try {
             let query = supabase
                 .from('certificates')
@@ -346,6 +347,8 @@ const AdminDashboard = () => {
 
             const { data, error } = await query.order('uploaded_at', { ascending: false });
 
+            console.log("Supabase query result:", { data, error }); // Diagnostic Log
+
             if (!error && data) {
                 const transformedData: CertificateItem[] = data.map((cert: any) => ({
                     id: cert.id,
@@ -363,6 +366,7 @@ const AdminDashboard = () => {
                     } : undefined
                 }));
 
+                console.log("Transformed data:", transformedData); // Diagnostic Log
                 setCertifications(transformedData);
                 if (!certificateSearchHTNO) {
                     setFilteredCertificates(transformedData);
@@ -400,6 +404,7 @@ const AdminDashboard = () => {
     }, [toast, events.length, faculty.length, placements.length, achievements.length]);
 
     useEffect(() => {
+        console.log("AdminDashboard useEffect triggered. Loading:", loading, " UserProfile:", userProfile); // Diagnostic Log
         if (!loading && userProfile?.role === 'admin') {
             loadAllStudents();
             loadEvents();
@@ -407,7 +412,7 @@ const AdminDashboard = () => {
             loadPlacements();
             loadGallery();
             loadAchievements();
-            loadCertifications();
+            loadCertifications(); // This will now load all certs for admin, or filtered by year
             loadStats();
 
             const studentsChannel = supabase
@@ -421,6 +426,7 @@ const AdminDashboard = () => {
             const certificatesChannel = supabase
                 .channel('certificates-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, () => {
+                    console.log("Supabase certificates change detected. Reloading certs."); // Diagnostic Log
                     loadCertifications();
                 })
                 .subscribe();
@@ -430,31 +436,32 @@ const AdminDashboard = () => {
                 supabase.removeChannel(certificatesChannel);
             };
         } else if (!loading && userProfile && userProfile.role !== 'admin') {
+            console.log("Redirecting non-admin user to /."); // Diagnostic Log
             setLocation('/');
         }
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadStats]);
 
+    // This useEffect handles the *client-side filtering* based on search/year input
+    // It does NOT trigger a new database fetch, only filters the 'certifications' state.
     useEffect(() => {
-        if (certificateSearchHTNO || selectedYearFilterCerts !== 'all') {
-            let currentFiltered = certifications;
+        console.log("Filtering useEffect triggered. Search:", certificateSearchHTNO, " Year Filter:", selectedYearFilterCerts, " Certs count:", certifications.length); // Diagnostic Log
+        let currentFiltered = certifications;
 
-            if (selectedYearFilterCerts !== 'all') {
-                currentFiltered = currentFiltered.filter(cert =>
-                    cert.user_profiles?.year === parseInt(selectedYearFilterCerts)
-                );
-            }
-
-            if (certificateSearchHTNO) {
-                currentFiltered = currentFiltered.filter(cert =>
-                    cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
-                    (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
-                    (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
-                );
-            }
-            setFilteredCertificates(currentFiltered);
-        } else {
-            setFilteredCertificates(certifications);
+        if (selectedYearFilterCerts !== 'all') {
+            currentFiltered = currentFiltered.filter(cert =>
+                cert.user_profiles?.year === parseInt(selectedYearFilterCerts)
+            );
         }
+
+        if (certificateSearchHTNO) {
+            currentFiltered = currentFiltered.filter(cert =>
+                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+                (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
+                (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
+            );
+        }
+        setFilteredCertificates(currentFiltered);
+        console.log("Filtered certificates count:", currentFiltered.length); // Diagnostic Log
     }, [certificateSearchHTNO, certifications, selectedYearFilterCerts]);
 
 
