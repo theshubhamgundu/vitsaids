@@ -31,7 +31,7 @@ import {
     sortableKeyboardCoordinates,
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { useSortable } from '@dnd-kit/sortable'; // Correct import syntax already present
+import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
@@ -330,15 +330,10 @@ const AdminDashboard = () => {
     }, [toast]);
 
 
-    // FINAL CORRECTED loadCertifications:
-    // 1. Queries 'student_certificates' table.
-    // 2. Uses correct column names from 'student_certificates' schema.
-    // 3. Selects 'description' from 'student_certificates' as it exists in your provided schema.
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         console.log("loadCertifications called with filters:", { certificateSearchHTNO, selectedYearFilterCerts }); // Diagnostic Log
         try {
-            // Updated select string to reflect actual columns in 'student_certificates' and 'user_profiles'
             let query = supabase
                 .from('student_certificates') // Corrected table name
                 .select(`
@@ -380,7 +375,6 @@ const AdminDashboard = () => {
 
                 console.log("Transformed data:", transformedData); // Diagnostic Log
                 setCertifications(transformedData);
-                // When loadCertifications is called, refresh filteredCertificates as well
                 if (!certificateSearchHTNO && selectedYearFilterCerts === 'all') {
                     setFilteredCertificates(transformedData);
                 }
@@ -394,7 +388,7 @@ const AdminDashboard = () => {
         } finally {
             setIsGlobalLoading(false);
         }
-    }, [toast, selectedYearFilterCerts, certificateSearchHTNO]); // Dependencies updated
+    }, [toast, selectedYearFilterCerts, certificateSearchHTNO]);
 
     const loadStats = useCallback(async () => {
         try {
@@ -712,7 +706,7 @@ const AdminDashboard = () => {
                     ? eventToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
                     : eventToDelete.image.startsWith('src/assets/uploads/') // Check for relative paths used directly in repo
                         ? eventToDelete.image
-                        : null; // If neither, it might be an external URL not managed by us
+                        : null;
 
                 if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete event image: ${eventToDelete.title}`);
@@ -924,7 +918,7 @@ const AdminDashboard = () => {
 
         if (certificateSearchHTNO) {
             currentFiltered = currentFiltered.filter(cert =>
-                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) || // Search against mapped ht_no
                 (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
                 (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
             );
@@ -1153,7 +1147,7 @@ const AdminDashboard = () => {
                     </Card>
                 </div>
 
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6"> {/* Controlled Tabs */}
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                     <TabsList className="grid w-full grid-cols-3 lg:grid-cols-11 gap-1">
                         <TabsTrigger value={TAB_VALUES.STUDENTS} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <Users className="w-3 h-3 lg:w-4 lg:h-4" />
@@ -1256,8 +1250,8 @@ const AdminDashboard = () => {
                                                 <tbody>
                                                     {allStudents.map((student) => (
                                                         <tr key={student.id} onClick={() => handleViewStudentDetails(student)} className="cursor-pointer hover:bg-gray-100">
-                                                            <td className="border border-gray-200 py-2 px-3">{student.ht_no}</td>
-                                                            <td className="border border-gray-200 py-2 px-3 flex items-center gap-2">
+                                                            <td className="border border-gray-200 px-3 py-2">{student.ht_no}</td>
+                                                            <td className="border border-gray-200 px-3 py-2 flex items-center gap-2">
                                                                 <img
                                                                     src={student.photo_url || "/default-avatar.png"}
                                                                     alt="Profile"
@@ -1266,7 +1260,7 @@ const AdminDashboard = () => {
                                                                 />
                                                                 <span className="text-sm font-medium">{student.student_name}</span>
                                                             </td>
-                                                            <td className="border border-gray-200 py-2 px-3">{student.year}</td>
+                                                            <td className="border border-gray-200 px-3 py-2">{student.year}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -1423,7 +1417,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'src/data/events.json', 'events')} {/* Corrected setter */}
+                                                    onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'src/data/events.json', 'events')}
                                                 >
                                                     <SortableContext
                                                         items={events.map(event => event.id)}
@@ -1533,7 +1527,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'src/data/faculty.json', 'faculty')} {/* Corrected setter */}
+                                                    onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'src/data/faculty.json', 'faculty')}
                                                 >
                                                     <SortableContext
                                                         items={faculty.map(member => member.id)}
@@ -1643,7 +1637,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'src/data/placements.json', 'placements')} {/* Corrected setter */}
+                                                    onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'src/data/placements.json', 'placements')}
                                                 >
                                                     <SortableContext
                                                         items={placements.map(item => item.id)}
@@ -1753,7 +1747,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, achievements, setAchievements, 'src/data/achievements.json', 'achievements')} {/* Corrected setter */}
+                                                    onDragEnd={(event) => handleDragEnd(event, achievements, setAchievements, 'src/data/achievements.json', 'achievements')}
                                                 >
                                                     <SortableContext
                                                         items={achievements.map(item => item.id)}
@@ -1940,7 +1934,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'src/data/gallery.json', 'galleryItems')} {/* Corrected setter */}
+                                                    onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'src/data/gallery.json', 'galleryItems')}
                                                 >
                                                     <SortableContext
                                                         items={gallery.map(item => item.id)}
