@@ -1,17 +1,21 @@
 // src/lib/github-utils.ts
 
 import { Octokit } from "@octokit/rest";
-
-// Polyfill for Buffer in browser
-import { Buffer } from "buffer"; // IMPORTANT: install via `npm i buffer` if not yet
+import { Buffer } from "buffer";
 
 const owner = "theshubhamgundu";
 const repo = "vitsaids";
-const branch = "main";
+const branch = "main"; // This is confirmed correct from your screenshot
+
+// --- ADD THESE CONSOLE.LOGS ---
+console.log("DEBUG: GitHub Owner:", owner);
+console.log("DEBUG: GitHub Repo:", repo);
+console.log("DEBUG: GitHub Branch:", branch);
+console.log("DEBUG: VITE_GITHUB_TOKEN present?", !!import.meta.env.VITE_GITHUB_TOKEN); // Check if it's truthy
+console.log("DEBUG: VITE_GITHUB_TOKEN (first 5 chars):", String(import.meta.env.VITE_GITHUB_TOKEN).substring(0, 5)); // Log first few chars, don't expose full token
+// --- END DEBUG LOGS ---
 
 const octokit = new Octokit({
-  // FIX: Access Vite environment variables using import.meta.env
-  // And ensure your environment variable is named VITE_GITHUB_TOKEN in Vercel
   auth: import.meta.env.VITE_GITHUB_TOKEN,
 });
 
@@ -28,6 +32,7 @@ export async function uploadToGitHubRepo(file: File, path: string, commitMessage
     let sha: string | undefined;
 
     try {
+      // Attempt to get the existing file content and its SHA
       const existing = await octokit.repos.getContent({
         owner,
         repo,
@@ -37,12 +42,15 @@ export async function uploadToGitHubRepo(file: File, path: string, commitMessage
       sha = (existing.data as any).sha;
     } catch (error: any) {
       if (error.status !== 404) {
-        // Only throw if it's not a 404, meaning a genuine error fetching
         console.error(`Error checking existing ${path} for upload:`, error);
         throw error;
       }
-      // If 404, sha remains undefined, which is correct for creating a new file
     }
+
+    // --- ADD THESE CONSOLE.LOGS JUST BEFORE THE API CALL ---
+    console.log("DEBUG: Calling createOrUpdateFileContents for path:", path);
+    console.log("DEBUG: SHA provided (for update)?", sha);
+    // --- END DEBUG LOGS ---
 
     const res = await octokit.repos.createOrUpdateFileContents({
       owner,
@@ -51,7 +59,7 @@ export async function uploadToGitHubRepo(file: File, path: string, commitMessage
       message: commitMessage,
       content: contentEncoded,
       branch,
-      ...(sha && { sha }), // Only include SHA if the file existed
+      ...(sha && { sha }),
     });
 
     return {
@@ -94,27 +102,28 @@ export async function updateGithubContentFile<T = any>(
       });
       existingSha = (existing.data as any).sha;
     } catch (error: any) {
-      // If the file is not found (status 404), that's expected for a new file.
-      // We set existingSha to undefined, so createOrUpdateFileContents creates it.
       if (error.status !== 404) {
         console.error(`Error checking existing ${jsonPath} (non-404 error):`, error);
-        throw error; // Re-throw any other unexpected errors
+        throw error;
       }
-      // If 404, existingSha correctly remains undefined.
     }
 
     const encoded = Buffer.from(JSON.stringify(dataArray, null, 2)).toString("base64");
 
-    // This will create the file if existingSha is undefined (due to 404 from getContent),
-    // or update it if existingSha is provided.
+    // --- ADD THESE CONSOLE.LOGS JUST BEFORE THE API CALL ---
+    console.log("DEBUG: Calling createOrUpdateFileContents for JSON path:", jsonPath);
+    console.log("DEBUG: SHA provided (for update)?", existingSha);
+    console.log("DEBUG: Commit Message:", commitMessage);
+    // --- END DEBUG LOGS ---
+
     await octokit.repos.createOrUpdateFileContents({
       owner,
       repo,
       path: jsonPath,
       message: commitMessage,
       content: encoded,
-      branch, // Always include branch
-      ...(existingSha && { sha: existingSha }), // Only include SHA if the file existed
+      branch,
+      ...(existingSha && { sha: existingSha }),
     });
 
     return { success: true, message: "Content updated successfully" };
@@ -158,6 +167,11 @@ export async function deleteFileFromGithub(filePath: string, commitMessage: stri
     });
 
     const sha = (existing.data as any).sha;
+
+    // --- ADD THESE CONSOLE.LOGS JUST BEFORE THE API CALL ---
+    console.log("DEBUG: Calling deleteFile for path:", filePath);
+    console.log("DEBUG: SHA provided (for deletion)?", sha);
+    // --- END DEBUG LOGS ---
 
     await octokit.repos.deleteFile({
       owner,
