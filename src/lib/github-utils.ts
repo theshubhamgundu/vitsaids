@@ -10,7 +10,9 @@ const repo = "vitsaids";
 const branch = "main";
 
 const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN,
+  // FIX: Access Vite environment variables using import.meta.env
+  // And ensure your environment variable is named VITE_GITHUB_TOKEN in Vercel
+  auth: import.meta.env.VITE_GITHUB_TOKEN,
 });
 
 /**
