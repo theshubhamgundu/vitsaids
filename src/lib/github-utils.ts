@@ -17,6 +17,8 @@ const octokit = new Octokit({
 
 /**
  * Uploads a file (e.g., image) to GitHub
+ * This function correctly handles creating a file if it doesn't exist
+ * or updating it if it does.
  */
 export async function uploadToGitHubRepo(file: File, path: string, commitMessage: string) {
   try {
@@ -34,7 +36,12 @@ export async function uploadToGitHubRepo(file: File, path: string, commitMessage
       });
       sha = (existing.data as any).sha;
     } catch (error: any) {
-      if (error.status !== 404) console.error(`Error checking ${path}:`, error);
+      if (error.status !== 404) {
+        // Only throw if it's not a 404, meaning a genuine error fetching
+        console.error(`Error checking existing ${path} for upload:`, error);
+        throw error;
+      }
+      // If 404, sha remains undefined, which is correct for creating a new file
     }
 
     const res = await octokit.repos.createOrUpdateFileContents({
@@ -44,7 +51,7 @@ export async function uploadToGitHubRepo(file: File, path: string, commitMessage
       message: commitMessage,
       content: contentEncoded,
       branch,
-      ...(sha && { sha }),
+      ...(sha && { sha }), // Only include SHA if the file existed
     });
 
     return {
@@ -65,7 +72,9 @@ export async function uploadToGitHubRepo(file: File, path: string, commitMessage
 }
 
 /**
- * Replaces content in a GitHub .json file
+ * Replaces content in a GitHub .json file.
+ * This function is now refactored to correctly "upsert" (create or update)
+ * the JSON file, handling cases where the file does not yet exist.
  */
 export async function updateGithubContentFile<T = any>(
   dataArray: T[],
@@ -73,24 +82,39 @@ export async function updateGithubContentFile<T = any>(
   commitMessage: string
 ) {
   try {
-    const existing = await octokit.repos.getContent({
-      owner,
-      repo,
-      path: jsonPath,
-      ref: branch,
-    });
+    let existingSha: string | undefined;
 
-    const existingSha = (existing.data as any).sha;
+    try {
+      // Attempt to get the existing file content and its SHA
+      const existing = await octokit.repos.getContent({
+        owner,
+        repo,
+        path: jsonPath,
+        ref: branch,
+      });
+      existingSha = (existing.data as any).sha;
+    } catch (error: any) {
+      // If the file is not found (status 404), that's expected for a new file.
+      // We set existingSha to undefined, so createOrUpdateFileContents creates it.
+      if (error.status !== 404) {
+        console.error(`Error checking existing ${jsonPath} (non-404 error):`, error);
+        throw error; // Re-throw any other unexpected errors
+      }
+      // If 404, existingSha correctly remains undefined.
+    }
+
     const encoded = Buffer.from(JSON.stringify(dataArray, null, 2)).toString("base64");
 
+    // This will create the file if existingSha is undefined (due to 404 from getContent),
+    // or update it if existingSha is provided.
     await octokit.repos.createOrUpdateFileContents({
       owner,
       repo,
       path: jsonPath,
       message: commitMessage,
       content: encoded,
-      sha: existingSha,
-      branch,
+      branch, // Always include branch
+      ...(existingSha && { sha: existingSha }), // Only include SHA if the file existed
     });
 
     return { success: true, message: "Content updated successfully" };
