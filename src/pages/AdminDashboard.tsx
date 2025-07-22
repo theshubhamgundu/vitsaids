@@ -16,7 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import TimetableManager from '@/components/TimetableManager';
 import { useLocation } from 'wouter';
 
-// DND-Kit imports (still needed as DND is managed at the dashboard level for multiple lists)
+// DND-Kit imports
 import {
     DndContext,
     closestCenter,
@@ -35,10 +35,11 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
-// GitHub utilities
+// GitHub utilities - Ensure this path is correct based on your project structure
 import { uploadToGitHubRepo, fetchAndParseJsonFile, updateGithubContentFile, deleteFileFromGithub } from '@/lib/github-utils';
 
 // --- IMPORTS FOR UPLOAD FORMS ---
+// Ensure these paths are correct
 import GalleryUploadForm from '@/components/GalleryUploadForm';
 import EventsUploadForm from '@/components/EventsUploadForm';
 import FacultyUploadForm from '@/components/FacultyUploadForm';
@@ -47,7 +48,7 @@ import AchievementsUploadForm from '@/components/AchievementsUploadForm';
 // --- END IMPORTS ---
 
 
-// Type definitions for our data (these remain in AdminDashboard as it manages the overall state)
+// Type definitions for our data
 interface PendingStudent {
     id: string;
     ht_no: string;
@@ -68,8 +69,8 @@ interface Event {
     date: string;
     time?: string;
     venue?: string;
-    speaker?: string;
     image?: string;
+    speaker?: string; // Added speaker as per schema and forms
 }
 
 interface Faculty {
@@ -98,19 +99,19 @@ interface Placement {
     year: number;
     type: string;
     branch: string;
-    image?: string;
+    image?: string; // Assuming placements can have images as well
 }
 
-// Corrected CertificateItem interface (removed description, as per your schema)
+// Corrected CertificateItem interface to reflect `student_certificates` table
 interface CertificateItem {
     id: string;
-    ht_no: string;
-    certificate_name: string;
-    description?: string; // This column is in student_certificates, added back
-    certificate_url: string;
+    ht_no: string; // From student_certificates
+    certificate_name: string; // From student_certificates 'title'
+    description?: string; // This column is in student_certificates, kept for mapping
+    certificate_url: string; // From student_certificates 'file_url'
     uploaded_at?: string;
     user_id?: string;
-    user_profiles?: {
+    user_profiles?: { // Joined from user_profiles
         student_name: string;
         id: string;
         ht_no: string;
@@ -329,26 +330,33 @@ const AdminDashboard = () => {
     // FINAL CORRECTED loadCertifications:
     // 1. Queries 'student_certificates' table.
     // 2. Uses correct column names from 'student_certificates' schema.
-    // 3. Removed "description" from select string again to match your provided schema for 'student_certificates' (which doesn't have it).
+    // 3. Selects 'description' from 'student_certificates' as it exists in your provided schema.
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         console.log("loadCertifications called with filters:", { certificateSearchHTNO, selectedYearFilterCerts }); // Diagnostic Log
         try {
+            // Updated select string to reflect actual columns in 'student_certificates' and 'user_profiles'
             let query = supabase
-                .from('student_certificates') // CHANGED TABLE NAME
+                .from('student_certificates')
                 .select(`
-                    "id",
-                    "htno",             // Use 'htno' from student_certificates
-                    "title",            // Use 'title' from student_certificates
-                    "file_url",         // Use 'file_url' from student_certificates
-                    "uploaded_at",
-                    "user_id",
-                    user_profiles ("id", "student_name", "ht_no", "email", "year") // user_profiles columns should match user_profiles table
+                    id,
+                    htno,
+                    title,
+                    description,
+                    file_url,
+                    uploaded_at,
+                    user_id,
+                    user_profiles (id, student_name, ht_no, email, year)
                 `);
 
             if (selectedYearFilterCerts !== 'all') {
+                // IMPORTANT: When filtering on a joined table column, it must be explicitly defined
+                // The `user_profiles.year` refers to the aliased relationship column.
                 query = query.eq('user_profiles.year', parseInt(selectedYearFilterCerts));
             }
+
+            // Client-side filtering for `certificateSearchHTNO` happens in a separate useEffect
+            // This ensures the initial load gets all necessary data.
 
             const { data, error } = await query.order('uploaded_at', { ascending: false });
 
@@ -359,7 +367,7 @@ const AdminDashboard = () => {
                     id: cert.id,
                     ht_no: cert.htno, // Map from 'htno' (student_certificates) to 'ht_no' (CertificateItem interface)
                     certificate_name: cert.title, // Map from 'title' to 'certificate_name'
-                    description: cert.description, // Keep description in mapping if you eventually add it or use for display
+                    description: cert.description, // Map 'description'
                     certificate_url: cert.file_url, // Map from 'file_url' to 'certificate_url'
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
@@ -374,7 +382,9 @@ const AdminDashboard = () => {
 
                 console.log("Transformed data:", transformedData); // Diagnostic Log
                 setCertifications(transformedData);
-                if (!certificateSearchHTNO) {
+                // When loadCertifications is called, refresh filteredCertificates as well
+                // The useEffect for filtering will handle applying `certificateSearchHTNO` if it's set
+                if (!certificateSearchHTNO && selectedYearFilterCerts === 'all') {
                     setFilteredCertificates(transformedData);
                 }
             } else {
@@ -387,14 +397,14 @@ const AdminDashboard = () => {
         } finally {
             setIsGlobalLoading(false);
         }
-    }, [toast, selectedYearFilterCerts, certificateSearchHTNO]);
-
+    }, [toast, selectedYearFilterCerts, certificateSearchHTNO]); // Dependencies updated
 
     const loadStats = useCallback(async () => {
         try {
             const { count: studentsCount, error: studentsError } = await supabase.from('user_profiles').select('id', { count: 'exact' }).eq('role', 'student');
             if (studentsError) throw studentsError;
 
+            // Stats related to GitHub-backed data are based on the current state, not refetched
             setStats({
                 totalStudents: studentsCount || 0,
                 activeEvents: events.length || 0,
@@ -431,8 +441,8 @@ const AdminDashboard = () => {
 
             const certificatesChannel = supabase
                 .channel('certificates-changes')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'student_certificates' }, () => { // Changed table name in subscription
-                    console.log("Supabase student_certificates change detected. Reloading certs."); // Diagnostic Log
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'student_certificates' }, (payload) => { // Changed table name in subscription
+                    console.log("Supabase student_certificates change detected. Reloading certs. Payload:", payload); // Diagnostic Log
                     loadCertifications();
                 })
                 .subscribe();
@@ -508,7 +518,7 @@ const AdminDashboard = () => {
             toast({ title: 'Error', description: 'Invalid year format for promotion', variant: 'destructive' });
             return;
         }
-        if (numericYear >= 4) {
+        if (numericYear >= 4) { // Assuming 4th year is final year
             toast({ title: 'Notice', description: 'Student is already in final year or graduated.' });
             return;
         }
@@ -526,9 +536,7 @@ const AdminDashboard = () => {
             console.error('Error promoting student:', error);
             toast({ title: 'Promotion failed', description: error.message || 'Please try again later.', variant: 'destructive' });
         } finally {
-            // Ensure loading state is reset even if toast is triggered before the end of the try block
-            // This might need a separate state or wrapping the entire operation with try/finally
-            // For now, assuming loadAllStudents handles its own loading.
+            // No specific loading state to reset here, as loadAllStudents handles its own.
         }
     };
 
@@ -545,7 +553,7 @@ const AdminDashboard = () => {
             return;
         }
 
-        if (currentYearNum >= 4) {
+        if (currentYearNum >= 4) { // Assuming 4th year is final year
             toast({ title: 'Notice', description: 'Students in 4th Year cannot be promoted further.', variant: 'info' });
             setIsPromoteModalOpen(false);
             setYearToPromote('');
@@ -667,7 +675,7 @@ const AdminDashboard = () => {
     const handleDragEnd = async <T extends { id: string }>(
         event: DragEndEvent,
         dataArray: T[],
-        setDataArray: React.Dispatch<React.SetStateAction<T[]>>,
+        setDataArray: React.Dispatch<React.SetStateAction<T[]>>[], // Changed to array to allow multiple setters
         filePath: string,
         variableName: string
     ) => {
@@ -679,11 +687,13 @@ const AdminDashboard = () => {
 
             if (oldIndex !== -1 && newIndex !== -1) {
                 const newOrderedArray = arrayMove(dataArray, oldIndex, newIndex);
-                setDataArray(newOrderedArray);
+                // Call all setters in the array
+                setDataArray.forEach(setter => setter(newOrderedArray));
 
                 const success = await persistGitHubData(newOrderedArray, filePath, variableName, `Reordered ${variableName}`);
                 if (!success) {
-                    setDataArray(dataArray);
+                    // Revert if persistence fails, call all setters
+                    setDataArray.forEach(setter => setter(dataArray));
                     toast({ title: 'Reorder Failed', description: 'Changes could not be saved to GitHub.', variant: 'destructive' });
                 } else {
                     toast({ title: 'Reordered successfully', description: `Items in ${variableName} have been reordered.` });
@@ -699,9 +709,12 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (eventToDelete.image) {
+                // Determine the path within the GitHub repository
                 const imagePathInRepo = eventToDelete.image.includes('raw.githubusercontent.com')
                     ? eventToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : eventToDelete.image;
+                    : eventToDelete.image.startsWith('src/assets/uploads/') // Check for relative paths used directly in repo
+                        ? eventToDelete.image
+                        : null; // If neither, it might be an external URL not managed by us
 
                 if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete event image: ${eventToDelete.title}`);
@@ -717,7 +730,7 @@ const AdminDashboard = () => {
 
             const success = await persistGitHubData(updatedEvents, 'src/data/events.json', 'events', `Delete event: ${eventToDelete.title}`);
             if (!success) {
-                setEvents(events);
+                setEvents(events); // Revert local state if GitHub update fails
                 toast({ title: 'Error', description: 'Failed to delete event details from GitHub. Please refresh.', variant: 'destructive' });
             } else {
                 toast({ title: 'Event deleted successfully' });
@@ -740,7 +753,9 @@ const AdminDashboard = () => {
             if (facultyToDelete.image) {
                 const imagePathInRepo = facultyToDelete.image.includes('raw.githubusercontent.com')
                     ? facultyToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : facultyToDelete.image;
+                    : facultyToDelete.image.startsWith('src/assets/uploads/')
+                        ? facultyToDelete.image
+                        : null;
 
                  if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete faculty image: ${facultyToDelete.name}`);
@@ -779,7 +794,9 @@ const AdminDashboard = () => {
             if (itemToDelete.image) {
                 const imagePathInRepo = itemToDelete.image.includes('raw.githubusercontent.com')
                     ? itemToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : itemToDelete.image;
+                    : itemToDelete.image.startsWith('src/assets/uploads/')
+                        ? itemToDelete.image
+                        : null;
 
                  if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete gallery image: ${itemToDelete.title}`);
@@ -817,7 +834,9 @@ const AdminDashboard = () => {
             if (itemToDelete.image) {
                 const imagePathInRepo = itemToDelete.image.includes('raw.githubusercontent.com')
                     ? itemToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : itemToDelete.image;
+                    : itemToDelete.image.startsWith('src/assets/uploads/')
+                        ? itemToDelete.image
+                        : null;
 
                  if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete placement image: ${itemToDelete.student_name}`);
@@ -856,7 +875,9 @@ const AdminDashboard = () => {
             if (itemToDelete.certificate_url) {
                 const filePathInRepo = itemToDelete.certificate_url.includes('raw.githubusercontent.com')
                     ? itemToDelete.certificate_url.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : itemToDelete.certificate_url;
+                    : itemToDelete.certificate_url.startsWith('src/assets/uploads/')
+                        ? itemToDelete.certificate_url
+                        : null;
 
                  if (filePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(filePathInRepo, `Delete achievement certificate: ${itemToDelete.title}`);
@@ -928,7 +949,12 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (certificateUrl) {
+                // Supabase storage paths for certificates are typically like 'bucket_name/path/to/file.pdf'
+                // The `certificate_url` from Supabase's `getPublicUrl` might already be a direct URL.
+                // We need the path *within* the 'certificates' bucket.
+                // Assuming 'certificateUrl' might look like `https://[your-project-ref].supabase.co/storage/v1/object/public/certificates/user_id/cert_name.pdf`
                 const pathWithinBucket = certificateUrl.split('certificates/')[1];
+
                 if (pathWithinBucket) {
                     const { error: storageError } = await supabase.storage.from('certificates').remove([pathWithinBucket]);
                     if (storageError) {
@@ -939,13 +965,13 @@ const AdminDashboard = () => {
             }
 
             const { error } = await supabase
-                .from('student_certificates') // Changed table name for delete
+                .from('student_certificates') // Corrected table name for delete
                 .delete()
                 .eq('id', certId);
 
             if (!error) {
                 toast({ title: "Certificate deleted successfully" });
-                loadCertifications();
+                loadCertifications(); // Reload certificates to update UI
             } else {
                 toast({ title: 'Error deleting certificate', description: error.message, variant: 'destructive' });
             }
@@ -1044,6 +1070,7 @@ const AdminDashboard = () => {
         RESULTS: 'results',
         TIMETABLE: 'timetable',
         GALLERY: 'gallery',
+        NOTIFICATIONS: 'notifications', // Added notifications tab
     };
 
 
@@ -1132,7 +1159,7 @@ const AdminDashboard = () => {
                 </div>
 
                 <Tabs defaultValue={TAB_VALUES.STUDENTS} className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-3 lg:grid-cols-10 gap-1">
+                    <TabsList className="grid w-full grid-cols-3 lg:grid-cols-11 gap-1"> {/* Adjusted grid-cols to 11 */}
                         <TabsTrigger value={TAB_VALUES.STUDENTS} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <Users className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Students</span>
@@ -1172,6 +1199,10 @@ const AdminDashboard = () => {
                         <TabsTrigger value={TAB_VALUES.GALLERY} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <Image className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Gallery</span>
+                        </TabsTrigger>
+                        <TabsTrigger value={TAB_VALUES.NOTIFICATIONS} className="flex items-center space-x-1 text-xs lg:text-sm"> {/* New Notifications Tab */}
+                            <User className="w-3 h-3 lg:w-4 lg:h-4" /> {/* Using User icon for notifications */}
+                            <span>Notify</span>
                         </TabsTrigger>
                     </TabsList>
 
@@ -1275,6 +1306,7 @@ const AdminDashboard = () => {
                                     />
                                     <Select value={selectedYearFilterCerts} onValueChange={(value) => {
                                         setSelectedYearFilterCerts(value);
+                                        // No need to call handleSearchCertificates here, useEffect will react
                                     }}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Filter by Year" />
@@ -1296,7 +1328,8 @@ const AdminDashboard = () => {
                                         onClick={() => {
                                             setCertificateSearchHTNO('');
                                             setSelectedYearFilterCerts('all');
-                                            loadCertifications(); // Re-load all certs from DB without filters
+                                            // Trigger reload from DB to reset all filters cleanly
+                                            loadCertifications();
                                             toast({ title: 'Filters cleared, showing all certificates.' });
                                         }}
                                         disabled={!certificateSearchHTNO && selectedYearFilterCerts === 'all'}
@@ -1346,8 +1379,9 @@ const AdminDashboard = () => {
                                                                         size="sm"
                                                                         variant="outline"
                                                                     >
+                                                                        {/* Ensure the getPublicUrl is correctly used with the full path if needed */}
                                                                         <a
-                                                                            href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl}
+                                                                            href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl || cert.certificate_url}
                                                                             target="_blank"
                                                                             rel="noopener noreferrer"
                                                                         >
@@ -1393,66 +1427,65 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {events.length > 0 ? (
+                                            {events.length > 0 ? (<div className="overflow-x-auto">
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'src/data/events.json', 'events')}
+                                                    onDragEnd={(event) => handleDragEnd(event, events, [setEvents], 'src/data/events.json', 'events')}
                                                 >
                                                     <SortableContext
                                                         items={events.map(event => event.id)}
                                                         strategy={verticalListSortingStrategy}
                                                     >
-                                                        <div className="overflow-x-auto">
-                                                            <table className="w-full border-collapse border border-gray-200">
-                                                                <thead>
-                                                                    <tr className="bg-gray-50">
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Venue</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {events.map((event) => (
-                                                                        <SortableItem key={event.id} id={event.id}>
-                                                                            <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                                <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                                </td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{event.title}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{new Date(event.date).toLocaleDateString()}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{event.venue || 'N/A'}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">
-                                                                                    <div className="flex space-x-2">
-                                                                                        <EventsUploadForm
-                                                                                            isEdit={true}
-                                                                                            initialData={event}
-                                                                                            onUploadSuccess={loadEvents}
-                                                                                            events={events}
-                                                                                            setEvents={setEvents}
-                                                                                            isUploading={isUploading}
-                                                                                            setIsUploading={setIsUploading}
-                                                                                            isUpdating={isUpdating}
-                                                                                            setIsUpdating={setIsUpdating}
-                                                                                            persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                                persistGitHubData(dataArray as Event[], filePath, variableName, commitMessage)
-                                                                                            }
-                                                                                        />
-                                                                                        <Button size="sm" variant="destructive" onClick={() => handleDeleteEvent(event)} disabled={isDeleting}>
-                                                                                            <Trash2 className="w-4 h-4" />
-                                                                                        </Button>
-                                                                                    </div>
-                                                                                </td>
-                                                                            </tr>
-                                                                        </SortableItem>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
+                                                        <table className="w-full border-collapse border border-gray-200">
+                                                            <thead>
+                                                                <tr className="bg-gray-50">
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Venue</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {events.map((event) => (
+                                                                    <SortableItem key={event.id} id={event.id}>
+                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                            </td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{event.title}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{new Date(event.date).toLocaleDateString()}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{event.venue || 'N/A'}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                                <div className="flex space-x-2">
+                                                                                    <EventsUploadForm
+                                                                                        isEdit={true}
+                                                                                        initialData={event}
+                                                                                        onUploadSuccess={loadEvents}
+                                                                                        events={events}
+                                                                                        setEvents={setEvents}
+                                                                                        isUploading={isUploading}
+                                                                                        setIsUploading={setIsUploading}
+                                                                                        isUpdating={isUpdating}
+                                                                                        setIsUpdating={setIsUpdating}
+                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                            persistGitHubData(dataArray as Event[], filePath, variableName, commitMessage)
+                                                                                        }
+                                                                                    />
+                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeleteEvent(event)} disabled={isDeleting}>
+                                                                                        <Trash2 className="w-4 h-4" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    </SortableItem>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
                                                     </SortableContext>
                                                 </DndContext>
+                                                </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1504,66 +1537,65 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {faculty.length > 0 ? (
+                                            {faculty.length > 0 ? (<div className="overflow-x-auto">
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'src/data/faculty.json', 'faculty')}
+                                                    onDragEnd={(event) => handleDragEnd(event, faculty, [setFaculty], 'src/data/faculty.json', 'faculty')}
                                                 >
                                                     <SortableContext
                                                         items={faculty.map(member => member.id)}
                                                         strategy={verticalListSortingStrategy}
                                                     >
-                                                        <div className="overflow-x-auto">
-                                                            <table className="w-full border-collapse border border-gray-200">
-                                                                <thead>
-                                                                    <tr className="bg-gray-50">
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Name</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Designation</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Department</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {faculty.map((member) => (
-                                                                        <SortableItem key={member.id} id={member.id}>
-                                                                            <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                                <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                                </td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{member.name}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{member.designation}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{member.department || 'N/A'}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">
-                                                                                    <div className="flex space-x-2">
-                                                                                        <FacultyUploadForm
-                                                                                            isEdit={true}
-                                                                                            initialData={member}
-                                                                                            onUploadSuccess={loadFaculty}
-                                                                                            faculty={faculty}
-                                                                                            setFaculty={setFaculty}
-                                                                                            isUploading={isUploading}
-                                                                                            setIsUploading={setIsUploading}
-                                                                                            isUpdating={isUpdating}
-                                                                                            setIsUpdating={setIsUpdating}
-                                                                                            persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                                persistGitHubData(dataArray as Faculty[], filePath, variableName, commitMessage)
-                                                                                            }
-                                                                                        />
-                                                                                        <Button size="sm" variant="destructive" onClick={() => handleDeleteFaculty(member)} disabled={isDeleting}>
-                                                                                            <Trash2 className="w-4 h-4" />
-                                                                                        </Button>
-                                                                                    </div>
-                                                                                </td>
-                                                                            </tr>
-                                                                        </SortableItem>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
+                                                        <table className="w-full border-collapse border border-gray-200">
+                                                            <thead>
+                                                                <tr className="bg-gray-50">
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Name</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Designation</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Department</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {faculty.map((member) => (
+                                                                    <SortableItem key={member.id} id={member.id}>
+                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                            </td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{member.name}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{member.designation}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{member.department || 'N/A'}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                                <div className="flex space-x-2">
+                                                                                    <FacultyUploadForm
+                                                                                        isEdit={true}
+                                                                                        initialData={member}
+                                                                                        onUploadSuccess={loadFaculty}
+                                                                                        faculty={faculty}
+                                                                                        setFaculty={setFaculty}
+                                                                                        isUploading={isUploading}
+                                                                                        setIsUploading={setIsUploading}
+                                                                                        isUpdating={isUpdating}
+                                                                                        setIsUpdating={setIsUpdating}
+                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                            persistGitHubData(dataArray as Faculty[], filePath, variableName, commitMessage)
+                                                                                        }
+                                                                                    />
+                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeleteFaculty(member)} disabled={isDeleting}>
+                                                                                        <Trash2 className="w-4 h-4" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    </SortableItem>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
                                                     </SortableContext>
                                                 </DndContext>
+                                                </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <GraduationCap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1615,66 +1647,65 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {placements.length > 0 ? (
+                                            {placements.length > 0 ? (<div className="overflow-x-auto">
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'src/data/placements.json', 'placements')}
+                                                    onDragEnd={(event) => handleDragEnd(event, placements, [setPlacements], 'src/data/placements.json', 'placements')}
                                                 >
                                                     <SortableContext
                                                         items={placements.map(item => item.id)}
                                                         strategy={verticalListSortingStrategy}
                                                     >
-                                                        <div className="overflow-x-auto">
-                                                            <table className="w-full border-collapse border border-gray-200">
-                                                                <thead>
-                                                                    <tr className="bg-gray-50">
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Company</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {placements.map((placement) => (
-                                                                        <SortableItem key={placement.id} id={placement.id}>
-                                                                            <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                                <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                                </td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{placement.student_name}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{placement.company}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">
-                                                                                    <div className="flex space-x-2">
-                                                                                        <PlacementsUploadForm
-                                                                                            isEdit={true}
-                                                                                            initialData={placement}
-                                                                                            onUploadSuccess={loadPlacements}
-                                                                                            placements={placements}
-                                                                                            setPlacements={setPlacements}
-                                                                                            isUploading={isUploading}
-                                                                                            setIsUploading={setIsUploading}
-                                                                                            isUpdating={isUpdating}
-                                                                                            setIsUpdating={setIsUpdating}
-                                                                                            persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                                persistGitHubData(dataArray as Placement[], filePath, variableName, commitMessage)
-                                                                                            }
-                                                                                        />
-                                                                                        <Button size="sm" variant="destructive" onClick={() => handleDeletePlacement(placement)} disabled={isDeleting}>
-                                                                                            <Trash2 className="w-4 h-4" />
-                                                                                        </Button>
-                                                                                    </div>
-                                                                                </td>
-                                                                            </tr>
-                                                                        </SortableItem>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
+                                                        <table className="w-full border-collapse border border-gray-200">
+                                                            <thead>
+                                                                <tr className="bg-gray-50">
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Company</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {placements.map((placement) => (
+                                                                    <SortableItem key={placement.id} id={placement.id}>
+                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                            </td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{placement.student_name}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{placement.company}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                                <div className="flex space-x-2">
+                                                                                    <PlacementsUploadForm
+                                                                                        isEdit={true}
+                                                                                        initialData={placement}
+                                                                                        onUploadSuccess={loadPlacements}
+                                                                                        placements={placements}
+                                                                                        setPlacements={setPlacements}
+                                                                                        isUploading={isUploading}
+                                                                                        setIsUploading={setIsUploading}
+                                                                                        isUpdating={isUpdating}
+                                                                                        setIsUpdating={setIsUpdating}
+                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                            persistGitHubData(dataArray as Placement[], filePath, variableName, commitMessage)
+                                                                                        }
+                                                                                    />
+                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeletePlacement(placement)} disabled={isDeleting}>
+                                                                                        <Trash2 className="w-4 h-4" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    </SortableItem>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
                                                     </SortableContext>
                                                 </DndContext>
+                                                </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <TrendingUp className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1726,64 +1757,63 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {achievements.length > 0 ? (
+                                            {achievements.length > 0 ? (<div className="overflow-x-auto">
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, achievements, setAchievements, 'src/data/achievements.json', 'achievements')}
+                                                    onDragEnd={(event) => handleDragEnd(event, achievements, [setAchievements], 'src/data/achievements.json', 'achievements')}
                                                 >
                                                     <SortableContext
                                                         items={achievements.map(item => item.id)}
                                                         strategy={verticalListSortingStrategy}
                                                     >
-                                                        <div className="overflow-x-auto">
-                                                            <table className="w-full border-collapse border border-gray-200">
-                                                                <thead>
-                                                                    <tr className="bg-gray-50">
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
-                                                                        <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {achievements.map((item) => (
-                                                                        <SortableItem key={item.id} id={item.id}>
-                                                                            <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                                <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                                    <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                                </td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{item.title}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</td>
-                                                                                <td className="border border-gray-200 px-4 py-2">
-                                                                                    <div className="flex space-x-2">
-                                                                                        <AchievementsUploadForm
-                                                                                            isEdit={true}
-                                                                                            initialData={item}
-                                                                                            onUploadSuccess={loadAchievements}
-                                                                                            achievements={achievements}
-                                                                                            setAchievements={setAchievements}
-                                                                                            isUploading={isUploading}
-                                                                                            setIsUploading={setIsUploading}
-                                                                                            isUpdating={isUpdating}
-                                                                                            setIsUpdating={setIsUpdating}
-                                                                                            persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                                persistGitHubData(dataArray as Achievement[], filePath, variableName, commitMessage)
-                                                                                            }
-                                                                                        />
-                                                                                        <Button size="sm" variant="destructive" onClick={() => handleDeleteAchievement(item)} disabled={isDeleting}>
-                                                                                            <Trash2 className="w-4 h-4" />
-                                                                                        </Button>
-                                                                                    </div>
-                                                                                </td>
-                                                                            </tr>
-                                                                        </SortableItem>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
+                                                        <table className="w-full border-collapse border border-gray-200">
+                                                            <thead>
+                                                                <tr className="bg-gray-50">
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
+                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {achievements.map((item) => (
+                                                                    <SortableItem key={item.id} id={item.id}>
+                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
+                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
+                                                                            </td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{item.title}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</td>
+                                                                            <td className="border border-gray-200 px-4 py-2">
+                                                                                <div className="flex space-x-2">
+                                                                                    <AchievementsUploadForm
+                                                                                        isEdit={true}
+                                                                                        initialData={item}
+                                                                                        onUploadSuccess={loadAchievements}
+                                                                                        achievements={achievements}
+                                                                                        setAchievements={setAchievements}
+                                                                                        isUploading={isUploading}
+                                                                                        setIsUploading={setIsUploading}
+                                                                                        isUpdating={isUpdating}
+                                                                                        setIsUpdating={setIsUpdating}
+                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
+                                                                                            persistGitHubData(dataArray as Achievement[], filePath, variableName, commitMessage)
+                                                                                        }
+                                                                                    />
+                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeleteAchievement(item)} disabled={isDeleting}>
+                                                                                        <Trash2 className="w-4 h-4" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    </SortableItem>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
                                                     </SortableContext>
                                                 </DndContext>
+                                                </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1914,11 +1944,11 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {gallery.length > 0 ? (
+                                            {gallery.length > 0 ? (<div className="overflow-x-auto">
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'src/data/gallery.json', 'galleryItems')}
+                                                    onDragEnd={(event) => handleDragEnd(event, gallery, [setGallery], 'src/data/gallery.json', 'galleryItems')}
                                                 >
                                                     <SortableContext
                                                         items={gallery.map(item => item.id)}
@@ -1966,6 +1996,7 @@ const AdminDashboard = () => {
                                                         </div>
                                                     </SortableContext>
                                                 </DndContext>
+                                                </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -2002,6 +2033,50 @@ const AdminDashboard = () => {
                                 </div>
                             </div>
                         </div>
+                    </TabsContent>
+
+                    {/* NEW: Notifications Tab Content (Supabase Backed) */}
+                    <TabsContent value={TAB_VALUES.NOTIFICATIONS}>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center space-x-2">
+                                    <User className="w-5 h-5" />
+                                    <span>Post Notification</span>
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <Label htmlFor="notification-title">Notification Title</Label>
+                                <Input
+                                    id="notification-title"
+                                    placeholder="e.g., Important Update"
+                                    value={notificationTitle}
+                                    onChange={(e) => setNotificationTitle(e.target.value)}
+                                />
+
+                                <Label htmlFor="notification-message">Notification Message</Label>
+                                <Textarea
+                                    id="notification-message"
+                                    placeholder="Enter your message here..."
+                                    value={notificationMessage}
+                                    onChange={(e) => setNotificationMessage(e.target.value)}
+                                />
+
+                                <Button
+                                    onClick={postNotification}
+                                    className="flex items-center space-x-1"
+                                    disabled={isUploading || !notificationTitle || !notificationMessage}
+                                >
+                                    {isUploading ? 'Posting...' : 'Post Notification'}
+                                    <Upload className="w-4 h-4" />
+                                </Button>
+                                {(!notificationTitle || !notificationMessage) && (
+                                    <p className="text-sm text-red-500">Please enter both a title and a message to post.</p>
+                                )}
+                                <p className="text-sm text-gray-500">
+                                    Notifications will be visible to all students on their dashboards.
+                                </p>
+                            </CardContent>
+                        </Card>
                     </TabsContent>
                 </Tabs>
 
