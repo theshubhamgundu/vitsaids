@@ -31,7 +31,7 @@ import {
     sortableKeyboardCoordinates,
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { useSortable } from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable'; // Correct import syntax already present
 import { CSS } from '@dnd-kit/utilities';
 import { arrayMove } from '@dnd-kit/sortable';
 
@@ -102,13 +102,13 @@ interface Placement {
     image?: string; // Assuming placements can have images as well
 }
 
-// Corrected CertificateItem interface to reflect `student_certificates` table
+// Corrected CertificateItem interface to reflect `student_certificates` table and mapping
 interface CertificateItem {
     id: string;
-    ht_no: string; // From student_certificates
-    certificate_name: string; // From student_certificates 'title'
-    description?: string; // This column is in student_certificates, kept for mapping
-    certificate_url: string; // From student_certificates 'file_url'
+    ht_no: string; // Mapped from `htno` in `student_certificates`
+    certificate_name: string; // Mapped from `title` in `student_certificates`
+    description?: string; // From `description` in `student_certificates`
+    certificate_url: string; // Mapped from `file_url` in `student_certificates`
     uploaded_at?: string;
     user_id?: string;
     user_profiles?: { // Joined from user_profiles
@@ -197,6 +197,9 @@ const AdminDashboard = () => {
     const [filteredCertificates, setFilteredCertificates] = useState<CertificateItem[]>([]);
     const [selectedYearFilterCerts, setSelectedYearFilterCerts] = useState<string>('all');
 
+    // State for managing active tab
+    const [activeTab, setActiveTab] = useState('students'); // Default tab
+
     const sensors = useSensors(
         useSensor(PointerSensor),
         useSensor(KeyboardSensor, {
@@ -279,7 +282,7 @@ const AdminDashboard = () => {
         try {
             const data = await fetchAndParseJsonFile<Faculty[]>('src/data/faculty.json');
             setFaculty(data || []);
-        }  catch (error: any) {
+        } catch (error: any) {
             console.error('Error loading faculty:', error);
             toast({ title: 'Error loading faculty', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
         } finally {
@@ -292,7 +295,7 @@ const AdminDashboard = () => {
         try {
             const data = await fetchAndParseJsonFile<Placement[]>('src/data/placements.json');
             setPlacements(data || []);
-        }  catch (error: any) {
+        } catch (error: any) {
             console.error('Error loading placements:', error);
             toast({ title: 'Error loading placements', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
         } finally {
@@ -337,7 +340,7 @@ const AdminDashboard = () => {
         try {
             // Updated select string to reflect actual columns in 'student_certificates' and 'user_profiles'
             let query = supabase
-                .from('student_certificates')
+                .from('student_certificates') // Corrected table name
                 .select(`
                     id,
                     htno,
@@ -350,13 +353,8 @@ const AdminDashboard = () => {
                 `);
 
             if (selectedYearFilterCerts !== 'all') {
-                // IMPORTANT: When filtering on a joined table column, it must be explicitly defined
-                // The `user_profiles.year` refers to the aliased relationship column.
                 query = query.eq('user_profiles.year', parseInt(selectedYearFilterCerts));
             }
-
-            // Client-side filtering for `certificateSearchHTNO` happens in a separate useEffect
-            // This ensures the initial load gets all necessary data.
 
             const { data, error } = await query.order('uploaded_at', { ascending: false });
 
@@ -383,7 +381,6 @@ const AdminDashboard = () => {
                 console.log("Transformed data:", transformedData); // Diagnostic Log
                 setCertifications(transformedData);
                 // When loadCertifications is called, refresh filteredCertificates as well
-                // The useEffect for filtering will handle applying `certificateSearchHTNO` if it's set
                 if (!certificateSearchHTNO && selectedYearFilterCerts === 'all') {
                     setFilteredCertificates(transformedData);
                 }
@@ -441,7 +438,7 @@ const AdminDashboard = () => {
 
             const certificatesChannel = supabase
                 .channel('certificates-changes')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'student_certificates' }, (payload) => { // Changed table name in subscription
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'student_certificates' }, (payload) => { // Corrected table name in subscription
                     console.log("Supabase student_certificates change detected. Reloading certs. Payload:", payload); // Diagnostic Log
                     loadCertifications();
                 })
@@ -672,10 +669,11 @@ const AdminDashboard = () => {
         setIsPhotoLoading(false);
     };
 
+    // Corrected handleDragEnd signature and usage
     const handleDragEnd = async <T extends { id: string }>(
         event: DragEndEvent,
         dataArray: T[],
-        setDataArray: React.Dispatch<React.SetStateAction<T[]>>[], // Changed to array to allow multiple setters
+        setDataArray: React.Dispatch<React.SetStateAction<T[]>>, // Changed to single setter
         filePath: string,
         variableName: string
     ) => {
@@ -687,13 +685,13 @@ const AdminDashboard = () => {
 
             if (oldIndex !== -1 && newIndex !== -1) {
                 const newOrderedArray = arrayMove(dataArray, oldIndex, newIndex);
-                // Call all setters in the array
-                setDataArray.forEach(setter => setter(newOrderedArray));
+                // Call the single setter directly
+                setDataArray(newOrderedArray);
 
                 const success = await persistGitHubData(newOrderedArray, filePath, variableName, `Reordered ${variableName}`);
                 if (!success) {
-                    // Revert if persistence fails, call all setters
-                    setDataArray.forEach(setter => setter(dataArray));
+                    // Revert if persistence fails, call the single setter
+                    setDataArray(dataArray);
                     toast({ title: 'Reorder Failed', description: 'Changes could not be saved to GitHub.', variant: 'destructive' });
                 } else {
                     toast({ title: 'Reordered successfully', description: `Items in ${variableName} have been reordered.` });
@@ -757,7 +755,7 @@ const AdminDashboard = () => {
                         ? facultyToDelete.image
                         : null;
 
-                 if (imagePathInRepo) {
+                   if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete faculty image: ${facultyToDelete.name}`);
                     if (!deleteResult.success) {
                         console.warn(`Failed to delete image for faculty ${facultyToDelete.name}: ${deleteResult.message}`);
@@ -798,7 +796,7 @@ const AdminDashboard = () => {
                         ? itemToDelete.image
                         : null;
 
-                 if (imagePathInRepo) {
+                   if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete gallery image: ${itemToDelete.title}`);
                     if (!deleteResult.success) {
                         console.warn(`Failed to delete image for gallery item ${itemToDelete.title}: ${deleteResult.message}`);
@@ -838,7 +836,7 @@ const AdminDashboard = () => {
                         ? itemToDelete.image
                         : null;
 
-                 if (imagePathInRepo) {
+                   if (imagePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete placement image: ${itemToDelete.student_name}`);
                     if (!deleteResult.success) {
                         console.warn(`Failed to delete image for placement ${itemToDelete.student_name}: ${deleteResult.message}`);
@@ -879,7 +877,7 @@ const AdminDashboard = () => {
                         ? itemToDelete.certificate_url
                         : null;
 
-                 if (filePathInRepo) {
+                   if (filePathInRepo) {
                     const deleteResult = await deleteFileFromGithub(filePathInRepo, `Delete achievement certificate: ${itemToDelete.title}`);
                     if (!deleteResult.success) {
                         console.warn(`Failed to delete certificate for achievement ${itemToDelete.title}: ${deleteResult.message}`);
@@ -949,14 +947,11 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (certificateUrl) {
-                // Supabase storage paths for certificates are typically like 'bucket_name/path/to/file.pdf'
-                // The `certificate_url` from Supabase's `getPublicUrl` might already be a direct URL.
-                // We need the path *within* the 'certificates' bucket.
-                // Assuming 'certificateUrl' might look like `https://[your-project-ref].supabase.co/storage/v1/object/public/certificates/user_id/cert_name.pdf`
-                const pathWithinBucket = certificateUrl.split('certificates/')[1];
+                // Assuming 'certificateUrl' might look like `https://[your-project-ref].supabase.co/storage/v1/object/public/certifications/user_id/cert_name.pdf`
+                const pathWithinBucket = certificateUrl.split('certifications/')[1]; // Corrected bucket name
 
                 if (pathWithinBucket) {
-                    const { error: storageError } = await supabase.storage.from('certificates').remove([pathWithinBucket]);
+                    const { error: storageError } = await supabase.storage.from('certifications').remove([pathWithinBucket]); // Corrected bucket name
                     if (storageError) {
                         console.warn('Error deleting certificate file from Supabase storage:', storageError);
                         toast({ title: 'Warning', description: 'Could not delete file from Supabase storage. Record deleted from DB.', variant: 'destructive' });
@@ -1158,8 +1153,8 @@ const AdminDashboard = () => {
                     </Card>
                 </div>
 
-                <Tabs defaultValue={TAB_VALUES.STUDENTS} className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-3 lg:grid-cols-11 gap-1"> {/* Adjusted grid-cols to 11 */}
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6"> {/* Controlled Tabs */}
+                    <TabsList className="grid w-full grid-cols-3 lg:grid-cols-11 gap-1">
                         <TabsTrigger value={TAB_VALUES.STUDENTS} className="flex items-center space-x-1 text-xs lg:text-sm">
                             <Users className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Students</span>
@@ -1200,8 +1195,8 @@ const AdminDashboard = () => {
                             <Image className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Gallery</span>
                         </TabsTrigger>
-                        <TabsTrigger value={TAB_VALUES.NOTIFICATIONS} className="flex items-center space-x-1 text-xs lg:text-sm"> {/* New Notifications Tab */}
-                            <User className="w-3 h-3 lg:w-4 lg:h-4" /> {/* Using User icon for notifications */}
+                        <TabsTrigger value={TAB_VALUES.NOTIFICATIONS} className="flex items-center space-x-1 text-xs lg:text-sm">
+                            <User className="w-3 h-3 lg:w-4 lg:h-4" />
                             <span>Notify</span>
                         </TabsTrigger>
                     </TabsList>
@@ -1306,7 +1301,6 @@ const AdminDashboard = () => {
                                     />
                                     <Select value={selectedYearFilterCerts} onValueChange={(value) => {
                                         setSelectedYearFilterCerts(value);
-                                        // No need to call handleSearchCertificates here, useEffect will react
                                     }}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Filter by Year" />
@@ -1328,8 +1322,7 @@ const AdminDashboard = () => {
                                         onClick={() => {
                                             setCertificateSearchHTNO('');
                                             setSelectedYearFilterCerts('all');
-                                            // Trigger reload from DB to reset all filters cleanly
-                                            loadCertifications();
+                                            loadCertifications(); // Trigger reload from DB to reset all filters cleanly
                                             toast({ title: 'Filters cleared, showing all certificates.' });
                                         }}
                                         disabled={!certificateSearchHTNO && selectedYearFilterCerts === 'all'}
@@ -1379,9 +1372,8 @@ const AdminDashboard = () => {
                                                                         size="sm"
                                                                         variant="outline"
                                                                     >
-                                                                        {/* Ensure the getPublicUrl is correctly used with the full path if needed */}
                                                                         <a
-                                                                            href={supabase.storage.from('certificates').getPublicUrl(cert.certificate_url).data.publicUrl || cert.certificate_url}
+                                                                            href={supabase.storage.from('certifications').getPublicUrl(cert.certificate_url).data.publicUrl || cert.certificate_url} // Corrected bucket name
                                                                             target="_blank"
                                                                             rel="noopener noreferrer"
                                                                         >
@@ -1431,7 +1423,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, events, [setEvents], 'src/data/events.json', 'events')}
+                                                    onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'src/data/events.json', 'events')} {/* Corrected setter */}
                                                 >
                                                     <SortableContext
                                                         items={events.map(event => event.id)}
@@ -1485,7 +1477,7 @@ const AdminDashboard = () => {
                                                         </table>
                                                     </SortableContext>
                                                 </DndContext>
-                                                </div>
+                                            </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1541,7 +1533,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, faculty, [setFaculty], 'src/data/faculty.json', 'faculty')}
+                                                    onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'src/data/faculty.json', 'faculty')} {/* Corrected setter */}
                                                 >
                                                     <SortableContext
                                                         items={faculty.map(member => member.id)}
@@ -1595,7 +1587,7 @@ const AdminDashboard = () => {
                                                         </table>
                                                     </SortableContext>
                                                 </DndContext>
-                                                </div>
+                                            </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <GraduationCap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1651,7 +1643,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, placements, [setPlacements], 'src/data/placements.json', 'placements')}
+                                                    onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'src/data/placements.json', 'placements')} {/* Corrected setter */}
                                                 >
                                                     <SortableContext
                                                         items={placements.map(item => item.id)}
@@ -1705,7 +1697,7 @@ const AdminDashboard = () => {
                                                         </table>
                                                     </SortableContext>
                                                 </DndContext>
-                                                </div>
+                                            </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <TrendingUp className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1761,7 +1753,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, achievements, [setAchievements], 'src/data/achievements.json', 'achievements')}
+                                                    onDragEnd={(event) => handleDragEnd(event, achievements, setAchievements, 'src/data/achievements.json', 'achievements')} {/* Corrected setter */}
                                                 >
                                                     <SortableContext
                                                         items={achievements.map(item => item.id)}
@@ -1813,7 +1805,7 @@ const AdminDashboard = () => {
                                                         </table>
                                                     </SortableContext>
                                                 </DndContext>
-                                                </div>
+                                            </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1948,7 +1940,7 @@ const AdminDashboard = () => {
                                                 <DndContext
                                                     sensors={sensors}
                                                     collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, gallery, [setGallery], 'src/data/gallery.json', 'galleryItems')}
+                                                    onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'src/data/gallery.json', 'galleryItems')} {/* Corrected setter */}
                                                 >
                                                     <SortableContext
                                                         items={gallery.map(item => item.id)}
@@ -1996,7 +1988,7 @@ const AdminDashboard = () => {
                                                         </div>
                                                     </SortableContext>
                                                 </DndContext>
-                                                </div>
+                                            </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
