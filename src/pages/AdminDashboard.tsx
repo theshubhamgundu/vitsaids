@@ -108,7 +108,7 @@ interface CertificateItem {
     ht_no: string; // Mapped from `htno` in `student_certificates`
     certificate_name: string; // Mapped from `title` in `student_certificates`
     description?: string; // From `description` in `student_certificates`
-    certificate_url: string; // Mapped from `file_url` in `student_certificates`
+    certificate_url: string; // Mapped from `file_url` in `student_certificates` (NOW ASSUMED TO BE PATH WITHIN BUCKET)
     uploaded_at?: string;
     user_id?: string;
     user_profiles?: { // Joined from user_profiles
@@ -361,7 +361,8 @@ const AdminDashboard = () => {
                     ht_no: cert.htno, // Map from 'htno' (student_certificates) to 'ht_no' (CertificateItem interface)
                     certificate_name: cert.title, // Map from 'title' to 'certificate_name'
                     description: cert.description, // Map 'description'
-                    certificate_url: cert.file_url, // Map from 'file_url' to 'certificate_url'
+                    // IMPORTANT: Assuming cert.file_url from DB will now be the path within the bucket
+                    certificate_url: cert.file_url, // This is expected to be 'folder/filename.ext'
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
                     user_profiles: cert.user_profiles ? {
@@ -667,7 +668,7 @@ const AdminDashboard = () => {
     const handleDragEnd = async <T extends { id: string }>(
         event: DragEndEvent,
         dataArray: T[],
-        setDataArray: React.Dispatch<React.SetStateAction<T[]>>, // Changed to single setter
+        setDataArray: React.Dispatch<React.SetStateAction<T[]>>,
         filePath: string,
         variableName: string
     ) => {
@@ -679,12 +680,10 @@ const AdminDashboard = () => {
 
             if (oldIndex !== -1 && newIndex !== -1) {
                 const newOrderedArray = arrayMove(dataArray, oldIndex, newIndex);
-                // Call the single setter directly
                 setDataArray(newOrderedArray);
 
                 const success = await persistGitHubData(newOrderedArray, filePath, variableName, `Reordered ${variableName}`);
                 if (!success) {
-                    // Revert if persistence fails, call the single setter
                     setDataArray(dataArray);
                     toast({ title: 'Reorder Failed', description: 'Changes could not be saved to GitHub.', variant: 'destructive' });
                 } else {
@@ -917,6 +916,7 @@ const AdminDashboard = () => {
         }
 
         if (certificateSearchHTNO) {
+            // Updated to check against `ht_no` in the CertificateItem interface and user_profiles fields
             currentFiltered = currentFiltered.filter(cert =>
                 cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) || // Search against mapped ht_no
                 (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
@@ -941,20 +941,22 @@ const AdminDashboard = () => {
         setIsDeleting(true);
         try {
             if (certificateUrl) {
-                // Assuming 'certificateUrl' might look like `https://[your-project-ref].supabase.co/storage/v1/object/public/certifications/user_id/cert_name.pdf`
-                const pathWithinBucket = certificateUrl.split('certifications/')[1]; // Corrected bucket name
+                // IMPORTANT: Assuming certificateUrl now contains ONLY the path within the 'certifications' bucket
+                // (e.g., '23891A7228/1753105852209-Shubham.png')
+                const pathToRemove = certificateUrl;
 
-                if (pathWithinBucket) {
-                    const { error: storageError } = await supabase.storage.from('certifications').remove([pathWithinBucket]); // Corrected bucket name
-                    if (storageError) {
-                        console.warn('Error deleting certificate file from Supabase storage:', storageError);
-                        toast({ title: 'Warning', description: 'Could not delete file from Supabase storage. Record deleted from DB.', variant: 'destructive' });
-                    }
+                // Diagnostic log: What path is being sent to Supabase Storage for removal?
+                console.log("Attempting to remove certificate from path:", pathToRemove);
+
+                const { error: storageError } = await supabase.storage.from('certifications').remove([pathToRemove]);
+                if (storageError) {
+                    console.warn('Error deleting certificate file from Supabase storage:', storageError);
+                    toast({ title: 'Warning', description: 'Could not delete file from Supabase storage. Record deleted from DB.', variant: 'destructive' });
                 }
             }
 
             const { error } = await supabase
-                .from('student_certificates') // Corrected table name for delete
+                .from('student_certificates')
                 .delete()
                 .eq('id', certId);
 
@@ -1367,7 +1369,8 @@ const AdminDashboard = () => {
                                                                         variant="outline"
                                                                     >
                                                                         <a
-                                                                            href={supabase.storage.from('certifications').getPublicUrl(cert.certificate_url).data.publicUrl || cert.certificate_url} // Corrected bucket name
+                                                                            // This will now correctly use the path from DB with getPublicUrl
+                                                                            href={supabase.storage.from('certifications').getPublicUrl(cert.certificate_url).data.publicUrl}
                                                                             target="_blank"
                                                                             rel="noopener noreferrer"
                                                                         >
