@@ -1,8 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import formidable from "formidable";
+import formidable, { File as FormidableFile } from "formidable";
 import fs from "fs";
 import { Octokit } from "octokit";
 
+// Disable Next.js body parser
 export const config = {
   api: {
     bodyParser: false,
@@ -89,15 +90,14 @@ const uploadToGitHub = async ({
 
 const uploadImageAndAppendData = async (
   type: string,
-  file: File,
+  file: FormidableFile,
   metadata: any
 ): Promise<{ success: boolean; message: string }> => {
   try {
     const { folder, dataPath } = getPaths(type);
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const ext = file.name.split(".").pop();
+    const buffer = await fs.promises.readFile(file.filepath);
+    const ext = file.originalFilename?.split(".").pop() || "jpg";
     const fileName = `${Date.now()}.${ext}`;
     const imagePath = `${folder}${fileName}`;
 
@@ -108,7 +108,7 @@ const uploadImageAndAppendData = async (
       message: `Add ${type} image: ${fileName}`,
     });
 
-    // Update JSON metadata
+    // Fetch existing JSON metadata
     const existingRes = await octokit.rest.repos.getContent({
       owner: REPO_OWNER,
       repo: REPO_NAME,
@@ -129,6 +129,7 @@ const uploadImageAndAppendData = async (
     const newEntry = { ...metadata, image: publicUrl };
     const updatedData = [newEntry, ...existingData];
 
+    // Upload updated JSON
     await octokit.rest.repos.createOrUpdateFileContents({
       owner: REPO_OWNER,
       repo: REPO_NAME,
@@ -148,7 +149,7 @@ const uploadImageAndAppendData = async (
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
-    return res.status(405).json({ success: false, message: "Method not allowed" });
+    return res.status(405).json({ success: false, message: "Method Not Allowed" });
   }
 
   const form = formidable({ multiples: false });
@@ -160,25 +161,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const type = fields.type?.[0] || fields.type;
-    const metadataJson = fields.metadata?.[0] || fields.metadata;
-    const fileData = files.image || files.file;
+    const metadataRaw = fields.metadata?.[0] || fields.metadata;
+    const file = files.image || files.file;
 
-    if (!type || !metadataJson || !fileData) {
+    if (!type || !metadataRaw || !file) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
     let metadata;
     try {
-      metadata = typeof metadataJson === "string" ? JSON.parse(metadataJson) : metadataJson;
-    } catch (e) {
+      metadata = typeof metadataRaw === "string" ? JSON.parse(metadataRaw) : metadataRaw;
+    } catch {
       return res.status(400).json({ success: false, message: "Invalid metadata JSON" });
     }
 
-    const filePath = Array.isArray(fileData) ? fileData[0].filepath : fileData.filepath;
-    const fileBuffer = await fs.promises.readFile(filePath);
-    const fakeFile = new File([fileBuffer], "upload.webp", { type: "image/webp" });
+    const fileData = Array.isArray(file) ? file[0] : file;
 
-    const result = await uploadImageAndAppendData(type as string, fakeFile, metadata);
+    const result = await uploadImageAndAppendData(type as string, fileData, metadata);
     return res.status(result.success ? 200 : 500).json(result);
   });
 }
