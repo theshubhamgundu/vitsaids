@@ -2,22 +2,20 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import formidable, { File as FormidableFile } from "formidable";
 import fs from "fs";
 import { Octokit } from "octokit";
+import sharp from "sharp";
 
-// Disable default body parsing
 export const config = {
   api: {
     bodyParser: false,
   },
 };
 
-// GitHub setup
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN!;
 const REPO_OWNER = "theshubhamgundu";
 const REPO_NAME = "vitsaids";
 const BRANCH = "main";
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
-// Dynamic path resolver
 const getPaths = (type: string) => {
   switch (type) {
     case "gallery":
@@ -35,7 +33,6 @@ const getPaths = (type: string) => {
   }
 };
 
-// Helper to fetch SHA for updates
 const getFileSHA = async (path: string) => {
   try {
     const { data } = await octokit.rest.repos.getContent({
@@ -44,16 +41,16 @@ const getFileSHA = async (path: string) => {
       path,
       ref: BRANCH,
     });
-
     if (!("sha" in data)) return null;
     return data.sha;
   } catch (error) {
-    console.error("SHA fetch error for", path, error);
+    if ((error as any).status !== 404) {
+      console.error("SHA fetch error for", path, error);
+    }
     return null;
   }
 };
 
-// Upload file or JSON to GitHub
 const uploadToGitHub = async ({
   path,
   content,
@@ -75,7 +72,6 @@ const uploadToGitHub = async ({
   });
 };
 
-// Main upload logic
 const uploadImageAndAppendData = async (
   type: string,
   file: FormidableFile,
@@ -83,33 +79,35 @@ const uploadImageAndAppendData = async (
 ): Promise<{ success: boolean; message: string }> => {
   try {
     const { folder, dataPath } = getPaths(type);
-
     const buffer = await fs.promises.readFile(file.filepath);
-    const ext = file.originalFilename?.split(".").pop() || "jpg";
-    const fileName = `${Date.now()}.${ext}`;
+    const optimized = await sharp(buffer).resize({ width: 1200 }).webp({ quality: 80 }).toBuffer();
+
+    const fileName = `${Date.now()}.webp`;
     const imagePath = `${folder}${fileName}`;
 
-    // Upload image to GitHub
     await uploadToGitHub({
       path: imagePath,
-      content: buffer.toString("base64"),
+      content: optimized.toString("base64"),
       message: `Add ${type} image: ${fileName}`,
     });
 
-    // Fetch and update metadata JSON
-    const existingRes = await octokit.rest.repos.getContent({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-      path: dataPath,
-      ref: BRANCH,
-    });
-
-    const jsonSha = "sha" in existingRes.data ? existingRes.data.sha : undefined;
-    const jsonContent = "content" in existingRes.data ? existingRes.data.content : undefined;
-
-    const existingData = jsonContent
-      ? JSON.parse(Buffer.from(jsonContent, "base64").toString("utf-8"))
-      : [];
+    let existingData: any[] = [];
+    let sha: string | undefined = undefined;
+    try {
+      const { data } = await octokit.rest.repos.getContent({
+        owner: REPO_OWNER,
+        repo: REPO_NAME,
+        path: dataPath,
+        ref: BRANCH,
+      });
+      if ("content" in data) {
+        const decoded = Buffer.from(data.content, "base64").toString("utf-8");
+        existingData = JSON.parse(decoded);
+        sha = data.sha;
+      }
+    } catch (err: any) {
+      if (err.status !== 404) throw err;
+    }
 
     const publicUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/${imagePath}`;
     const newEntry = { ...metadata, image: publicUrl };
@@ -128,22 +126,13 @@ const uploadImageAndAppendData = async (
   }
 };
 
-// API Handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  console.log("Received method:", req.method);
-
-  // Optional CORS (useful if called from external client)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end(); // Preflight
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ success: false, message: "Method Not Allowed" });
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ success: false, message: "Method Not Allowed" });
 
   const form = formidable({ multiples: false });
 
