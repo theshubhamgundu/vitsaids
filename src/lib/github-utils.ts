@@ -117,3 +117,21 @@ export async function updateGithubContentFile<T = any>(
     return { success: false, message: err.message || "Content update failed" };
   }
 }
+// ... other exports ...
+export async function fetchAndParseJsonFile<T = any[]>(jsonPath: string): Promise<T | null> {
+  try {
+    const res = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: jsonPath,
+      ref: branch,
+    });
+
+    const raw = (res.data as any).content;
+    const json = Buffer.from(raw, "base64").toString("utf-8");
+    return JSON.parse(json);
+  } catch (err: any) {
+    console.error(`Failed to fetch ${jsonPath}:`, err);
+    return null;
+  }
+}
