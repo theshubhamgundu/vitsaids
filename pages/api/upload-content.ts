@@ -16,23 +16,6 @@ const REPO_NAME = "vitsaids";
 const BRANCH = "main";
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
-const getPaths = (type: string) => {
-  switch (type) {
-    case "gallery":
-      return { folder: "public/gallery/", dataPath: "src/data/gallery.json" };
-    case "events":
-      return { folder: "public/events/", dataPath: "src/data/events.json" };
-    case "faculty":
-      return { folder: "public/faculty/", dataPath: "src/data/faculty.json" };
-    case "placements":
-      return { folder: "public/placements/", dataPath: "src/data/placements.json" };
-    case "achievements":
-      return { folder: "public/achievements/", dataPath: "src/data/achievements.json" };
-    default:
-      throw new Error("Invalid content type");
-  }
-};
-
 const getFileSHA = async (path: string) => {
   try {
     const { data } = await octokit.rest.repos.getContent({
@@ -73,31 +56,32 @@ const uploadToGitHub = async ({
 };
 
 const uploadImageAndAppendData = async (
-  type: string,
+  githubPath: string,
+  jsonPath: string,
   file: FormidableFile,
   metadata: any
 ): Promise<{ success: boolean; message: string }> => {
   try {
-    const { folder, dataPath } = getPaths(type);
     const buffer = await fs.promises.readFile(file.filepath);
     const optimized = await sharp(buffer).resize({ width: 1200 }).webp({ quality: 80 }).toBuffer();
 
     const fileName = `${Date.now()}.webp`;
-    const imagePath = `${folder}${fileName}`;
+    const imagePath = `${githubPath}/${fileName}`;
 
     await uploadToGitHub({
       path: imagePath,
       content: optimized.toString("base64"),
-      message: `Add ${type} image: ${fileName}`,
+      message: `Add image: ${fileName}`,
     });
 
     let existingData: any[] = [];
     let sha: string | undefined = undefined;
+
     try {
       const { data } = await octokit.rest.repos.getContent({
         owner: REPO_OWNER,
         repo: REPO_NAME,
-        path: dataPath,
+        path: jsonPath,
         ref: BRANCH,
       });
       if ("content" in data) {
@@ -114,14 +98,14 @@ const uploadImageAndAppendData = async (
     const updatedData = [newEntry, ...existingData];
 
     await uploadToGitHub({
-      path: dataPath,
+      path: jsonPath,
       content: Buffer.from(JSON.stringify(updatedData, null, 2)).toString("base64"),
-      message: `Update ${type} metadata`,
+      message: `Update metadata: ${fileName}`,
     });
 
-    return { success: true, message: `${type} uploaded successfully` };
+    return { success: true, message: `Upload successful` };
   } catch (error) {
-    console.error(`Upload failed for ${type}:`, error);
+    console.error(`Upload failed:`, error);
     return { success: false, message: "Upload failed" };
   }
 };
@@ -142,11 +126,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ success: false, message: "Form parsing failed" });
     }
 
-    const type = fields.type?.[0] || fields.type;
+    const githubPath = fields.githubPath?.[0] || fields.githubPath;
+    const jsonPath = fields.jsonPath?.[0] || fields.jsonPath;
     const metadataRaw = fields.metadata?.[0] || fields.metadata;
-    const file = files.image || files.file;
+    const file = files.imageFile || files.image || files.file;
 
-    if (!type || !metadataRaw || !file) {
+    if (!githubPath || !jsonPath || !metadataRaw || !file) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
@@ -159,7 +144,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const fileData = Array.isArray(file) ? file[0] : file;
 
-    const result = await uploadImageAndAppendData(type as string, fileData, metadata);
+    const result = await uploadImageAndAppendData(githubPath, jsonPath, fileData, metadata);
     return res.status(result.success ? 200 : 500).json(result);
   });
 }
