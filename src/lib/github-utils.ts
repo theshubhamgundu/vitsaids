@@ -1,18 +1,19 @@
-// src/lib/github-utils.ts
-
 import { Octokit } from "@octokit/rest";
 import { Buffer } from "buffer";
 
 const owner = "theshubhamgundu";
 const repo = "vitsaids";
-const branch = "main"; // This is confirmed correct from your screenshot
+const branch = "main";
 
-// --- ADD THESE CONSOLE.LOGS ---
+// --- DEBUG LOGS ---
 console.log("DEBUG: GitHub Owner:", owner);
 console.log("DEBUG: GitHub Repo:", repo);
 console.log("DEBUG: GitHub Branch:", branch);
-console.log("DEBUG: VITE_GITHUB_TOKEN present?", !!import.meta.env.VITE_GITHUB_TOKEN); // Check if it's truthy
-console.log("DEBUG: VITE_GITHUB_TOKEN (first 5 chars):", String(import.meta.env.VITE_GITHUB_TOKEN).substring(0, 5)); // Log first few chars, don't expose full token
+console.log("DEBUG: VITE_GITHUB_TOKEN present?", !!import.meta.env.VITE_GITHUB_TOKEN);
+console.log(
+  "DEBUG: VITE_GITHUB_TOKEN (first 5 chars):",
+  String(import.meta.env.VITE_GITHUB_TOKEN).substring(0, 5)
+);
 // --- END DEBUG LOGS ---
 
 const octokit = new Octokit({
@@ -20,19 +21,22 @@ const octokit = new Octokit({
 });
 
 /**
- * Uploads a file (e.g., image) to GitHub
- * This function correctly handles creating a file if it doesn't exist
- * or updating it if it does.
+ * Uploads a file (e.g., image) to GitHub.
+ * Handles creation if the file does not exist, or update if it does.
  */
-export async function uploadToGitHubRepo(file: File, path: string, commitMessage: string) {
+export async function uploadToGitHubRepo(
+  file: File,
+  path: string,
+  commitMessage: string
+) {
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
     const contentEncoded = buffer.toString("base64");
 
-    let sha: string | undefined;
+    let sha: string | undefined = undefined;
 
     try {
-      // Attempt to get the existing file content and its SHA
+      // Attempt to get the existing file's SHA
       const existing = await octokit.repos.getContent({
         owner,
         repo,
@@ -41,17 +45,32 @@ export async function uploadToGitHubRepo(file: File, path: string, commitMessage
       });
       sha = (existing.data as any).sha;
     } catch (error: any) {
+      // 404 means file does not exist, which is fine if we're creating
       if (error.status !== 404) {
+        // If error is not 404, something else went wrong (like folder missing)
+        if (
+          error.message &&
+          (error.message.includes("No such file or directory") ||
+            error.message.includes("Not Found"))
+        ) {
+          return {
+            success: false,
+            message:
+              "Directory does not exist in the repository. Please create the directory and push it to GitHub first.",
+            downloadUrl: null,
+          };
+        }
         console.error(`Error checking existing ${path} for upload:`, error);
         throw error;
       }
     }
 
-    // --- ADD THESE CONSOLE.LOGS JUST BEFORE THE API CALL ---
+    // --- DEBUG LOGS BEFORE API CALL ---
     console.log("DEBUG: Calling createOrUpdateFileContents for path:", path);
     console.log("DEBUG: SHA provided (for update)?", sha);
     // --- END DEBUG LOGS ---
 
+    // GitHub cannot create directories! Ensure the destination folder exists in your repo.
     const res = await octokit.repos.createOrUpdateFileContents({
       owner,
       repo,
@@ -59,7 +78,7 @@ export async function uploadToGitHubRepo(file: File, path: string, commitMessage
       message: commitMessage,
       content: contentEncoded,
       branch,
-      ...(sha && { sha }),
+      ...(sha ? { sha } : {}),
     });
 
     return {
@@ -71,6 +90,19 @@ export async function uploadToGitHubRepo(file: File, path: string, commitMessage
     };
   } catch (err: any) {
     console.error(`Upload error for ${path}:`, err);
+    if (
+      err.status === 404 &&
+      err.message &&
+      (err.message.includes("No such file or directory") ||
+        err.message.includes("Not Found"))
+    ) {
+      return {
+        success: false,
+        message:
+          "Directory does not exist in the repository. Please create the directory and push it to GitHub first.",
+        downloadUrl: null,
+      };
+    }
     return {
       success: false,
       message: err.message || "Upload failed",
@@ -80,9 +112,8 @@ export async function uploadToGitHubRepo(file: File, path: string, commitMessage
 }
 
 /**
- * Replaces content in a GitHub .json file.
- * This function is now refactored to correctly "upsert" (create or update)
- * the JSON file, handling cases where the file does not yet exist.
+ * Upserts (creates or updates) a GitHub .json file.
+ * Handles the case where the file does not yet exist.
  */
 export async function updateGithubContentFile<T = any>(
   dataArray: T[],
@@ -90,10 +121,10 @@ export async function updateGithubContentFile<T = any>(
   commitMessage: string
 ) {
   try {
-    let existingSha: string | undefined;
+    let existingSha: string | undefined = undefined;
 
     try {
-      // Attempt to get the existing file content and its SHA
+      // Attempt to get the existing file's SHA
       const existing = await octokit.repos.getContent({
         owner,
         repo,
@@ -103,18 +134,33 @@ export async function updateGithubContentFile<T = any>(
       existingSha = (existing.data as any).sha;
     } catch (error: any) {
       if (error.status !== 404) {
-        console.error(`Error checking existing ${jsonPath} (non-404 error):`, error);
+        if (
+          error.message &&
+          (error.message.includes("No such file or directory") ||
+            error.message.includes("Not Found"))
+        ) {
+          return {
+            success: false,
+            message:
+              "Directory does not exist in the repository. Please create the directory and push it to GitHub first.",
+          };
+        }
+        console.error(
+          `Error checking existing ${jsonPath} (non-404 error):`,
+          error
+        );
         throw error;
       }
     }
 
-    const encoded = Buffer.from(JSON.stringify(dataArray, null, 2)).toString("base64");
+    const encoded = Buffer.from(
+      JSON.stringify(dataArray, null, 2)
+    ).toString("base64");
 
-    // --- ADD THESE CONSOLE.LOGS JUST BEFORE THE API CALL ---
+    // --- DEBUG LOGS BEFORE API CALL ---
     console.log("DEBUG: Calling createOrUpdateFileContents for JSON path:", jsonPath);
     console.log("DEBUG: SHA provided (for update)?", existingSha);
     console.log("DEBUG: Commit Message:", commitMessage);
-    // --- END DEBUG LOGS ---
 
     await octokit.repos.createOrUpdateFileContents({
       owner,
@@ -123,20 +169,34 @@ export async function updateGithubContentFile<T = any>(
       message: commitMessage,
       content: encoded,
       branch,
-      ...(existingSha && { sha: existingSha }),
+      ...(existingSha ? { sha: existingSha } : {}),
     });
 
     return { success: true, message: "Content updated successfully" };
   } catch (err: any) {
     console.error(`Update error for ${jsonPath}:`, err);
+    if (
+      err.status === 404 &&
+      err.message &&
+      (err.message.includes("No such file or directory") ||
+        err.message.includes("Not Found"))
+    ) {
+      return {
+        success: false,
+        message:
+          "Directory does not exist in the repository. Please create the directory and push it to GitHub first.",
+      };
+    }
     return { success: false, message: err.message || "Content update failed" };
   }
 }
 
 /**
- * Fetches and parses JSON from GitHub
+ * Fetches and parses JSON from GitHub.
  */
-export async function fetchAndParseJsonFile<T = any[]>(jsonPath: string): Promise<T | null> {
+export async function fetchAndParseJsonFile<T = any[]>(
+  jsonPath: string
+): Promise<T | null> {
   try {
     const res = await octokit.repos.getContent({
       owner,
@@ -155,9 +215,12 @@ export async function fetchAndParseJsonFile<T = any[]>(jsonPath: string): Promis
 }
 
 /**
- * Deletes file from GitHub
+ * Deletes a file from GitHub.
  */
-export async function deleteFileFromGithub(filePath: string, commitMessage: string) {
+export async function deleteFileFromGithub(
+  filePath: string,
+  commitMessage: string
+) {
   try {
     const existing = await octokit.repos.getContent({
       owner,
@@ -168,10 +231,9 @@ export async function deleteFileFromGithub(filePath: string, commitMessage: stri
 
     const sha = (existing.data as any).sha;
 
-    // --- ADD THESE CONSOLE.LOGS JUST BEFORE THE API CALL ---
+    // --- DEBUG LOGS BEFORE API CALL ---
     console.log("DEBUG: Calling deleteFile for path:", filePath);
     console.log("DEBUG: SHA provided (for deletion)?", sha);
-    // --- END DEBUG LOGS ---
 
     await octokit.repos.deleteFile({
       owner,
@@ -186,8 +248,14 @@ export async function deleteFileFromGithub(filePath: string, commitMessage: stri
   } catch (err: any) {
     console.error(`Deletion error for ${filePath}:`, err);
     if (err.status === 404) {
-      return { success: true, message: `${filePath} not found. Already deleted.` };
+      return {
+        success: true,
+        message: `${filePath} not found. Already deleted.`,
+      };
     }
-    return { success: false, message: err.message || "File deletion failed" };
+    return {
+      success: false,
+      message: err.message || "File deletion failed",
+    };
   }
 }
