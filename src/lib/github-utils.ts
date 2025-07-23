@@ -1,4 +1,6 @@
-// ... existing imports and config ...
+import { Octokit } from "@octokit/rest";
+import { Buffer } from "buffer";
+
 const owner = "theshubhamgundu";
 const repo = "vitsaids";
 const branch = "main";
@@ -7,11 +9,14 @@ const octokit = new Octokit({
   auth: import.meta.env.VITE_GITHUB_TOKEN,
 });
 
-// Add this helper function to log all critical info
 function logGithubVars(context: string, vars: Record<string, any>) {
   console.log(`[GITHUB DEBUG: ${context}]`, JSON.stringify(vars, null, 2));
 }
 
+/**
+ * Uploads a file (e.g., image) to GitHub.
+ * Handles both creation and update cases.
+ */
 export async function uploadToGitHubRepo(
   file: File,
   path: string,
@@ -61,6 +66,19 @@ export async function uploadToGitHubRepo(
     };
   } catch (err: any) {
     logGithubVars('uploadToGitHubRepo: final catch', { path, error: err.message });
+    if (
+      err.status === 404 &&
+      err.message &&
+      (err.message.includes("No such file or directory") ||
+        err.message.includes("Not Found"))
+    ) {
+      return {
+        success: false,
+        message:
+          "Directory does not exist in the repository. Please create the directory and push it to GitHub first.",
+        downloadUrl: null,
+      };
+    }
     return {
       success: false,
       message: err.message || "Upload failed",
@@ -69,6 +87,10 @@ export async function uploadToGitHubRepo(
   }
 }
 
+/**
+ * Upserts (creates or updates) a GitHub .json file.
+ * Handles the case where the file does not yet exist.
+ */
 export async function updateGithubContentFile<T = any>(
   dataArray: T[],
   jsonPath: string,
@@ -114,11 +136,28 @@ export async function updateGithubContentFile<T = any>(
     return { success: true, message: "Content updated successfully" };
   } catch (err: any) {
     logGithubVars('updateGithubContentFile: final catch', { jsonPath, error: err.message });
+    if (
+      err.status === 404 &&
+      err.message &&
+      (err.message.includes("No such file or directory") ||
+        err.message.includes("Not Found"))
+    ) {
+      return {
+        success: false,
+        message:
+          "Directory does not exist in the repository. Please create the directory and push it to GitHub first.",
+      };
+    }
     return { success: false, message: err.message || "Content update failed" };
   }
 }
-// ... other exports ...
-export async function fetchAndParseJsonFile<T = any[]>(jsonPath: string): Promise<T | null> {
+
+/**
+ * Fetches and parses JSON from GitHub.
+ */
+export async function fetchAndParseJsonFile<T = any[]>(
+  jsonPath: string
+): Promise<T | null> {
   try {
     const res = await octokit.repos.getContent({
       owner,
@@ -131,7 +170,51 @@ export async function fetchAndParseJsonFile<T = any[]>(jsonPath: string): Promis
     const json = Buffer.from(raw, "base64").toString("utf-8");
     return JSON.parse(json);
   } catch (err: any) {
-    console.error(`Failed to fetch ${jsonPath}:`, err);
+    logGithubVars('fetchAndParseJsonFile: final catch', { jsonPath, error: err.message });
     return null;
+  }
+}
+
+/**
+ * Deletes a file from GitHub.
+ */
+export async function deleteFileFromGithub(
+  filePath: string,
+  commitMessage: string
+) {
+  try {
+    const existing = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: filePath,
+      ref: branch,
+    });
+
+    const sha = (existing.data as any).sha;
+
+    logGithubVars('deleteFileFromGithub: before delete', { owner, repo, branch, filePath, sha, commitMessage });
+
+    await octokit.repos.deleteFile({
+      owner,
+      repo,
+      path: filePath,
+      message: commitMessage,
+      sha,
+      branch,
+    });
+
+    return { success: true, message: `File ${filePath} deleted.` };
+  } catch (err: any) {
+    logGithubVars('deleteFileFromGithub: final catch', { filePath, error: err.message });
+    if (err.status === 404) {
+      return {
+        success: true,
+        message: `${filePath} not found. Already deleted.`,
+      };
+    }
+    return {
+      success: false,
+      message: err.message || "File deletion failed",
+    };
   }
 }
