@@ -28,3 +28,5 @@ export const supabase = createClient<Database>(AUTH_SUPABASE_URL, AUTH_SUPABASE_
 
 // 📦 Upload Supabase client (for gallery/events/etc.)
 export const supabaseUpload = createClient(UPLOAD_SUPABASE_URL, UPLOAD_SUPABASE_ANON_KEY);
+console.log('AUTH SUPABASE URL:', process.env.NEXT_PUBLIC_AUTH_SUPABASE_URL);
+console.log('AUTH SUPABASE KEY:', process.env.NEXT_PUBLIC_AUTH_SUPABASE_ANON_KEY);
