@@ -1,5 +1,6 @@
+'use client';
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // ✅ CORRECT: Use the shared Supabase client
 import { Session, User } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import { useLocation } from 'wouter';
@@ -270,8 +271,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setNeedsProfileCreation(false);
             const currentWindowPath = window.location.pathname;
             const isPublicOrAuthPage = currentWindowPath === '/' || currentWindowPath.startsWith('/public') ||
-                                       currentWindowPath.startsWith('/student-onboarding') ||
-                                       currentWindowPath.startsWith('/complete-profile');
+                                         currentWindowPath.startsWith('/student-onboarding') ||
+                                         currentWindowPath.startsWith('/complete-profile');
             if (!isPublicOrAuthPage) {
                 console.log('[Auth] No user session and not on public/auth page. Redirecting to homepage.');
                 setLocation('/');
@@ -493,9 +494,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
 
             console.log('[Auth] signUp formData:', formData);
-
-            // Destructure formData for explicit insert
-            // const { student_name, ht_no, year: formYear, phone, address, emergency_no } = formData; // REMOVE THIS LINE
 
             // 1. Create the user in Supabase Auth
             console.log('[Auth] Calling supabase.auth.signUp for email:', email);
