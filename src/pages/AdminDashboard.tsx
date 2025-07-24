@@ -32,11 +32,7 @@ import { uploadFile, deleteFile, fetchAllEntries, addEntry, updateEntry, deleteE
 // --- IMPORTS FOR UPLOAD FORMS ---
 // IMPORTANT: These forms MUST be updated to use the new SupabaseDataManager functions (uploadFile, addEntry, updateEntry)
 // For now, I'm assuming their props might change to reflect this.
-import GalleryUploadForm from '@/components/GalleryUploadForm';
-import EventsUploadForm from '@/components/EventsUploadForm';
-import FacultyUploadForm from '@/components/FacultyUploadForm';
-import PlacementsUploadForm from '@/components/PlacementsUploadForm';
-import AchievementsUploadForm from '@/components/AchievementsUploadForm';
+import ContentUploader from '@/components/ContentUploader';
 // --- END IMPORTS ---
 
 // Import SearchBar component
