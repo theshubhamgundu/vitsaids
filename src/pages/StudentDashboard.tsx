@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react'; // Adde
 import { useAuth } from '@/contexts/AuthContext';
 import { supabaseNew } from '@/integrations/supabase/supabaseNew'; // Correct import nameimport { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
+import { useLocation } from 'wouter'; // Add this line
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
