@@ -17,16 +17,15 @@ import { supabaseNew } from '@/integrations/supabase/supabaseNew'; // 👈 NEW D
 import TimetableManager from '@/components/TimetableManager';
 import { useLocation } from 'wouter';
 
-// Updated imports to pass the correct client to the data manager functions
 import { uploadFile, deleteFile, fetchAllEntries, addEntry, updateEntry, deleteEntry } from '@/lib/SupabaseDataManager';
 
-// Assuming these forms are separate components that will use the new `supabaseNew` client for their uploads.
-import ContentUploader from '@/components/ContentUploader';
-import EventsUploadForm from '@/components/EventsUploadForm';
-import FacultyUploadForm from '@/components/FacultyUploadForm';
-import PlacementsUploadForm from '@/components/PlacementsUploadForm';
-import AchievementsUploadForm from '@/components/AchievementsUploadForm';
-import GalleryUploadForm from '@/components/GalleryUploadForm';
+// REMOVED: Imports for the deleted forms
+// import ContentUploader from '@/components/ContentUploader';
+// import EventsUploadForm from '@/components/EventsUploadForm';
+// import FacultyUploadForm from '@/components/FacultyUploadForm';
+// import PlacementsUploadForm from '@/components/PlacementsUploadForm';
+// import AchievementsUploadForm from '@/components/AchievementsUploadForm';
+// import GalleryUploadForm from '@/components/GalleryUploadForm';
 
 import SearchBar from '@/components/SearchBar';
 
@@ -165,7 +164,9 @@ const AdminDashboard = () => {
 
     const [activeTab, setActiveTab] = useState('students');
 
-    const sensors = useSensors();
+    // DND-Kit sensors - still used if you want to implement DND for student list if it grows large
+    // const sensors = useSensors( // Removed useSensor, useSensors as they are not used with DndContext anymore
+    // );
 
     const loadAllStudents = useCallback(async () => {
         setIsGlobalLoading(true);
@@ -213,10 +214,11 @@ const AdminDashboard = () => {
         setFilteredStudents(currentFilteredStudents);
     }, [allStudents, selectedYearFilter, studentSearchTerm]);
 
+
     const loadEvents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // Using new supabaseNew client for events
+            // NEW: Fetch from Supabase Table 'events' using supabaseNew
             const data = await fetchAllEntries<Event>('events', supabaseNew);
             setEvents(data || []);
         } catch (error: any) {
@@ -230,7 +232,7 @@ const AdminDashboard = () => {
     const loadFaculty = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // Using new supabaseNew client for faculty
+            // NEW: Fetch from Supabase Table 'faculty' using supabaseNew
             const data = await fetchAllEntries<Faculty>('faculty', supabaseNew);
             setFaculty(data || []);
         } catch (error: any) {
@@ -244,7 +246,7 @@ const AdminDashboard = () => {
     const loadPlacements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // Using new supabaseNew client for placements
+            // NEW: Fetch from Supabase Table 'placements' using supabaseNew
             const data = await fetchAllEntries<Placement>('placements', supabaseNew);
             setPlacements(data || []);
         } catch (error: any) {
@@ -258,7 +260,7 @@ const AdminDashboard = () => {
     const loadGallery = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // Using new supabaseNew client for gallery
+            // NEW: Fetch from Supabase Table 'gallery' using supabaseNew
             const data = await fetchAllEntries<GalleryItem>('gallery', supabaseNew);
             setGallery(data || []);
         } catch (error: any) {
@@ -272,7 +274,7 @@ const AdminDashboard = () => {
     const loadAchievements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // Using new supabaseNew client for achievements
+            // NEW: Fetch from Supabase Table 'achievements' using supabaseNew
             const data = await fetchAllEntries<Achievement>('achievements', supabaseNew);
             setAchievements(data || []);
         } catch (error: any) {
@@ -283,11 +285,11 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
+
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         console.log("loadCertifications called with filters:", { certificateSearchHTNO, selectedYearFilterCerts });
         try {
-            // Using supabaseOld for certifications
             let query = supabaseOld
                 .from('student_certificates')
                 .select(`
@@ -315,8 +317,8 @@ const AdminDashboard = () => {
                     ht_no: cert.htno,
                     certificate_name: cert.title,
                     description: cert.description,
-                    certificate_url: supabaseOld.storage.from('certifications').getPublicUrl(cert.file_url).data.publicUrl,
-                    file_path: cert.file_url,
+                    certificate_url: supabaseOld.storage.from('certifications').getPublicUrl(cert.file_url).data.publicUrl, // Get public URL here
+                    file_path: cert.file_url, // Keep original file_path for deletion
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
                     user_profiles: cert.user_profiles ? {
@@ -329,6 +331,7 @@ const AdminDashboard = () => {
                 }));
 
                 setCertifications(transformedData);
+                // Apply client-side filter initially if search term/year filter is present
                 const initialFiltered = transformedData.filter(cert => {
                     const matchesYear = selectedYearFilterCerts === 'all' || cert.user_profiles?.year === parseInt(selectedYearFilterCerts);
                     const matchesSearch = !certificateSearchHTNO ||
@@ -347,14 +350,14 @@ const AdminDashboard = () => {
         } finally {
             setIsGlobalLoading(false);
         }
-    }, [toast, certificateSearchHTNO, selectedYearFilterCerts]);
+    }, [toast, certificateSearchHTNO, selectedYearFilterCerts]); // Depend on filters to reload if they change
 
     const loadStats = useCallback(async () => {
         try {
-            // Using supabaseOld for student count
             const { count: studentsCount, error: studentsError } = await supabaseOld.from('user_profiles').select('id', { count: 'exact' }).eq('role', 'student');
             if (studentsError) throw studentsError;
 
+            // NEW: Use lengths of state arrays that are populated from Supabase Tables
             setStats({
                 totalStudents: studentsCount || 0,
                 activeEvents: events.length || 0,
@@ -362,6 +365,7 @@ const AdminDashboard = () => {
                 placements: placements.length || 0,
                 totalAchievements: achievements.length || 0,
             });
+
         } catch (error: any) {
             console.error('Error loading stats:', error);
             toast({ title: 'Error loading dashboard stats', description: error.message || 'Please try again later.', variant: 'destructive' });
@@ -380,11 +384,10 @@ const AdminDashboard = () => {
             loadCertifications();
             loadStats();
 
-            // Realtime subscriptions for old DB tables
             const studentsChannel = supabaseOld
                 .channel('students-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, () => {
-                    console.log("Supabase (Old) user_profiles change detected. Reloading students.");
+                    console.log("Supabase user_profiles change detected. Reloading students.");
                     loadAllStudents();
                     loadStats();
                 })
@@ -393,42 +396,42 @@ const AdminDashboard = () => {
             const certificatesChannel = supabaseOld
                 .channel('certificates-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'student_certificates' }, (payload) => {
-                    console.log("Supabase (Old) student_certificates change detected. Reloading certs. Payload:", payload);
+                    console.log("Supabase student_certificates change detected. Reloading certs. Payload:", payload);
                     loadCertifications();
                 })
                 .subscribe();
 
-            // Realtime subscriptions for new DB tables
+            // NEW: Realtime subscriptions for other tables
             const eventsChannel = supabaseNew.channel('events-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-                    console.log("Supabase (New) events change detected. Reloading events.");
+                    console.log("Supabase events change detected. Reloading events.");
                     loadEvents();
                     loadStats();
                 }).subscribe();
 
             const facultyChannel = supabaseNew.channel('faculty-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'faculty' }, () => {
-                    console.log("Supabase (New) faculty change detected. Reloading faculty.");
+                    console.log("Supabase faculty change detected. Reloading faculty.");
                     loadFaculty();
                     loadStats();
                 }).subscribe();
 
             const placementsChannel = supabaseNew.channel('placements-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'placements' }, () => {
-                    console.log("Supabase (New) placements change detected. Reloading placements.");
+                    console.log("Supabase placements change detected. Reloading placements.");
                     loadPlacements();
                     loadStats();
                 }).subscribe();
 
             const galleryChannel = supabaseNew.channel('gallery-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery' }, () => {
-                    console.log("Supabase (New) gallery change detected. Reloading gallery.");
+                    console.log("Supabase gallery change detected. Reloading gallery.");
                     loadGallery();
                 }).subscribe();
 
             const achievementsChannel = supabaseNew.channel('achievements-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'achievements' }, () => {
-                    console.log("Supabase (New) achievements change detected. Reloading achievements.");
+                    console.log("Supabase achievements change detected. Reloading achievements.");
                     loadAchievements();
                     loadStats();
                 }).subscribe();
@@ -448,6 +451,8 @@ const AdminDashboard = () => {
         }
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadStats]);
 
+    // This useEffect handles the *client-side filtering* based on search/year input
+    // for certificates table.
     useEffect(() => {
         let currentFiltered = certifications;
 
@@ -467,6 +472,7 @@ const AdminDashboard = () => {
 
         setFilteredCertificates(currentFiltered);
     }, [certificateSearchHTNO, certifications, selectedYearFilterCerts]);
+
 
     if (loading || isGlobalLoading || !userProfile) {
         return (
@@ -512,7 +518,6 @@ const AdminDashboard = () => {
         const confirmPromotion = window.confirm(`Promote this student to year ${nextYear}?`);
         if (!confirmPromotion) return;
         try {
-            // Using supabaseOld for student promotion
             const result = await updateEntry<PendingStudent>('user_profiles', studentId, { year: nextYear }, supabaseOld);
             if (result) {
                 toast({ title: `Student promoted to year ${nextYear}` });
@@ -526,6 +531,7 @@ const AdminDashboard = () => {
         }
     };
 
+
     const handleBulkPromote = async () => {
         if (!yearToPromote) {
             toast({ title: 'Error', description: 'Please select a year to promote.', variant: 'destructive' });
@@ -533,13 +539,20 @@ const AdminDashboard = () => {
         }
 
         const currentYearNum = parseInt(yearToPromote);
-        if (isNaN(currentYearNum) || currentYearNum < 1 || currentYearNum > 3) {
+        if (isNaN(currentYearNum)) {
             toast({ title: 'Error', description: 'Invalid year selected for promotion.', variant: 'destructive' });
             return;
         }
 
+        if (currentYearNum >= 4) {
+            toast({ title: 'Notice', description: 'Students in 4th Year cannot be promoted further.', variant: 'info' });
+            setIsPromoteModalOpen(false);
+            setYearToPromote('');
+            return;
+        }
+
         const nextYear = currentYearNum + 1;
-        const confirmBulkPromotion = window.confirm(`Are you sure you want to promote ALL students currently in year ${currentYearNum} to year ${nextYear}? This action cannot be undone.`);
+        const confirmBulkPromotion = window.confirm(`Are you sure you want to promote ALL students currently in ${currentYearNum}st/nd/rd Year to ${nextYear}th Year? This action cannot be undone.`);
 
         if (!confirmBulkPromotion) {
             return;
@@ -547,7 +560,7 @@ const AdminDashboard = () => {
 
         setIsUpdating(true);
         try {
-            // Using supabaseOld for bulk promotion
+            // Using direct supabaseOld client for bulk operation
             const { error } = await supabaseOld
                 .from('user_profiles')
                 .update({ year: nextYear })
@@ -574,7 +587,6 @@ const AdminDashboard = () => {
     const updateStudent = async (studentData: Partial<PendingStudent>) => {
         setIsUpdating(true);
         try {
-            // Using supabaseOld for student updates
             const result = await updateEntry<PendingStudent>('user_profiles', studentData.id!, studentData, supabaseOld);
             if (result) {
                 toast({ title: "Student details updated successfully" });
@@ -605,7 +617,6 @@ const AdminDashboard = () => {
         setIsPhotoLoading(true);
 
         const folderPath = `profiles/${viewingStudent.id}/photo.jpg`;
-        // Using supabaseOld for profile photo upload
         const { publicUrl, filePath, error: uploadError } = await uploadFile('profile_photos', newProfilePhotoFile, folderPath, supabaseOld);
 
         if (uploadError || !publicUrl) {
@@ -616,7 +627,6 @@ const AdminDashboard = () => {
         }
 
         try {
-            // Using supabaseOld for updating student profile
             const result = await updateEntry<PendingStudent>('user_profiles', viewingStudent.id, { photo_url: publicUrl }, supabaseOld);
             if (result) {
                 toast({ title: '✅ Profile photo updated successfully' });
@@ -624,6 +634,7 @@ const AdminDashboard = () => {
                 loadAllStudents();
                 setViewingStudent(prev => prev ? { ...prev, photo_url: publicUrl } : null);
             } else {
+                // If DB update fails, try to delete the uploaded file
                 await deleteFile('profile_photos', filePath!, supabaseOld);
                 toast({ title: 'Error updating photo', description: 'Failed to link photo to student profile in database. File uploaded but not saved.', variant: 'destructive' });
             }
@@ -641,13 +652,19 @@ const AdminDashboard = () => {
         setIsPhotoLoading(false);
     };
 
+    // REMOVED handleDragEnd for dynamic content types (events, faculty, etc.)
+    // because drag-and-drop reordering for relational databases needs an explicit
+    // 'order_index' column and more complex logic to update multiple rows.
+    // If you need this, you'd add an 'order_index' column to each table and
+    // then re-implement this logic to update those indices.
+
     const handleDeleteEvent = async (eventToDelete: Event) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the event "${eventToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
 
         setIsDeleting(true);
         try {
-            // Using new supabaseNew client for events
+            // Delete image from storage first using supabaseNew
             if (eventToDelete.image_path) {
                 const { success, error } = await deleteFile('events', eventToDelete.image_path, supabaseNew);
                 if (error) {
@@ -655,6 +672,8 @@ const AdminDashboard = () => {
                     toast({ title: 'Image Deletion Warning', description: `Could not delete event image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
+
+            // Then delete record from table using supabaseNew
             const { success, error } = await deleteEntry('events', eventToDelete.id, supabaseNew);
             if (success) {
                 toast({ title: 'Event deleted successfully' });
@@ -677,7 +696,6 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
-            // Using new supabaseNew client for faculty
             if (facultyToDelete.image_path) {
                 const { success, error } = await deleteFile('faculty', facultyToDelete.image_path, supabaseNew);
                 if (error) {
@@ -685,6 +703,7 @@ const AdminDashboard = () => {
                     toast({ title: 'Image Deletion Warning', description: `Could not delete faculty image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
+
             const { success, error } = await deleteEntry('faculty', facultyToDelete.id, supabaseNew);
             if (success) {
                 toast({ title: 'Faculty member deleted successfully' });
@@ -707,7 +726,6 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
-            // Using new supabaseNew client for gallery
             if (itemToDelete.image_path) {
                 const { success, error } = await deleteFile('gallery', itemToDelete.image_path, supabaseNew);
                 if (error) {
@@ -715,6 +733,7 @@ const AdminDashboard = () => {
                     toast({ title: 'Image Deletion Warning', description: `Could not delete gallery image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
+
             const { success, error } = await deleteEntry('gallery', itemToDelete.id, supabaseNew);
             if (success) {
                 toast({ title: 'Gallery item deleted successfully' });
@@ -736,7 +755,6 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
-            // Using new supabaseNew client for placements
             if (itemToDelete.image_path) {
                 const { success, error } = await deleteFile('placements', itemToDelete.image_path, supabaseNew);
                 if (error) {
@@ -744,6 +762,7 @@ const AdminDashboard = () => {
                     toast({ title: 'Image Deletion Warning', description: `Could not delete placement image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
+
             const { success, error } = await deleteEntry('placements', itemToDelete.id, supabaseNew);
             if (success) {
                 toast({ title: 'Placement record deleted successfully' });
@@ -766,7 +785,6 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
-            // Using new supabaseNew client for achievements
             if (itemToDelete.file_path) {
                 const { success, error } = await deleteFile('achievements', itemToDelete.file_path, supabaseNew);
                 if (error) {
@@ -774,6 +792,7 @@ const AdminDashboard = () => {
                     toast({ title: 'File Deletion Warning', description: `Could not delete achievement file from storage: ${error.message}`, variant: 'warning' });
                 }
             }
+
             const { success, error } = await deleteEntry('achievements', itemToDelete.id, supabaseNew);
             if (success) {
                 toast({ title: 'Achievement deleted successfully' });
@@ -790,18 +809,22 @@ const AdminDashboard = () => {
         }
     };
 
+
     const handleSearchCertificates = () => {
         console.log("handleSearchCertificates triggered. This function is now mostly handled by useEffect for dynamic filtering.");
+        // The filtering logic is now in the useEffect hook.
+        // This function can remain to trigger a re-evaluation or for future complex search logic.
+        // For simple input-based filtering, the useEffect reacting to `certificateSearchHTNO` and `selectedYearFilterCerts` is sufficient.
         toast({ title: 'Filters applied.' });
     };
 
-    const deleteCertification = async (certId: string, certificateFilePath: string) => {
+
+    const deleteCertification = async (certId: string, certificateFilePath: string) => { // Renamed param for clarity
         const confirmDelete = window.confirm("Are you sure you want to delete this certificate? This action cannot be undone.");
         if (!confirmDelete) return;
 
         setIsDeleting(true);
         try {
-            // Using supabaseOld for certificate deletion
             if (certificateFilePath) {
                 const { error: storageError } = await supabaseOld.storage.from('certifications').remove([certificateFilePath]);
                 if (storageError) {
@@ -829,6 +852,7 @@ const AdminDashboard = () => {
         }
     };
 
+
     const uploadResult = async () => {
         if (!resultFile || !resultTitle) {
             toast({ title: 'Error', description: 'Please provide a title and choose a file', variant: 'destructive' });
@@ -836,8 +860,7 @@ const AdminDashboard = () => {
         }
         setIsUploading(true);
 
-        const folderPath = 'public_results';
-        // Using new supabaseNew client for results upload
+        const folderPath = 'public_results'; // Or any specific folder within the 'results' bucket
         const { publicUrl, filePath, error: uploadError } = await uploadFile('results', resultFile, folderPath, supabaseNew);
 
         if (uploadError || !publicUrl) {
@@ -848,9 +871,10 @@ const AdminDashboard = () => {
         }
 
         try {
-            // Using new supabaseNew client for results table
+            // Assume you have a 'results' table in Supabase
             const { error: dbError } = await supabaseNew.from('results').insert([{ title: resultTitle, file_url: publicUrl, file_path: filePath }]);
             if (dbError) {
+                // If DB insert fails, clean up the uploaded file
                 await deleteFile('results', filePath!, supabaseNew);
                 throw dbError;
             }
@@ -872,7 +896,6 @@ const AdminDashboard = () => {
         }
         setIsUploading(true);
         try {
-            // Using new supabaseNew client for notifications
             const { error } = await supabaseNew.from('notifications').insert([{ title: notificationTitle, message: notificationMessage }]);
             if (error) {
                 toast({ title: 'Error posting notification', description: error.message, variant: 'destructive' });
@@ -904,6 +927,7 @@ const AdminDashboard = () => {
         });
     };
 
+
     const handleResultsFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         setResultFile(file);
@@ -922,6 +946,7 @@ const AdminDashboard = () => {
         GALLERY: 'gallery',
         NOTIFICATIONS: 'notifications',
     };
+
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -963,7 +988,7 @@ const AdminDashboard = () => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-gray-600">Active Events</p>
-                                    <p className="text-3xl font-bold text-green-600">{events.length}</p>
+                                    <p className="text-3xl font-bold text-green-600">{stats.activeEvents}</p>
                                 </div>
                                 <Calendar className="w-8 h-8 text-green-600" />
                             </div>
@@ -975,7 +1000,7 @@ const AdminDashboard = () => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-gray-600">Faculty Members</p>
-                                    <p className="text-3xl font-bold text-purple-600">{faculty.length}</p>
+                                    <p className="text-3xl font-bold text-purple-600">{stats.facultyMembers}</p>
                                 </div>
                                 <GraduationCap className="w-8 h-8 text-purple-600" />
                             </div>
@@ -987,7 +1012,7 @@ const AdminDashboard = () => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-gray-600">Placements</p>
-                                    <p className="text-3xl font-bold text-orange-600">{placements.length}</p>
+                                    <p className="text-3xl font-bold text-orange-600">{stats.placements}</p>
                                 </div>
                                 <TrendingUp className="w-8 h-8 text-orange-600" />
                             </div>
@@ -999,7 +1024,7 @@ const AdminDashboard = () => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-gray-600">Total Achievements</p>
-                                    <p className="text-3xl font-bold text-yellow-600">{achievements.length}</p>
+                                    <p className="text-3xl font-bold text-yellow-600">{stats.totalAchievements}</p>
                                 </div>
                                 <Trophy className="w-8 h-8 text-yellow-600" />
                             </div>
@@ -1303,7 +1328,8 @@ const AdminDashboard = () => {
                                                                     <td className="border border-gray-200 px-4 py-2">{event.venue || 'N/A'}</td>
                                                                     <td className="border border-gray-200 px-4 py-2">
                                                                         <div className="flex space-x-2">
-                                                                            <EventsUploadForm
+                                                                            {/* These components are removed. Replace with direct input or remove feature */}
+                                                                            {/* <EventsUploadForm
                                                                                 isEdit={true}
                                                                                 initialData={event}
                                                                                 onUploadSuccess={loadEvents}
@@ -1311,7 +1337,7 @@ const AdminDashboard = () => {
                                                                                 setIsUploading={setIsUploading}
                                                                                 isUpdating={isUpdating}
                                                                                 setIsUpdating={setIsUpdating}
-                                                                            />
+                                                                            /> */}
                                                                             <Button size="sm" variant="destructive" onClick={() => handleDeleteEvent(event)} disabled={isDeleting}>
                                                                                 <Trash2 className="w-4 h-4" />
                                                                             </Button>
@@ -1341,13 +1367,15 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="p-0">
-                                            <EventsUploadForm
+                                            {/* These components are removed. Replace with direct input or remove feature */}
+                                            {/* <EventsUploadForm
                                                 onUploadSuccess={loadEvents}
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
                                                 setIsUpdating={setIsUpdating}
-                                            />
+                                            /> */}
+                                            <p className="text-sm text-red-500">Event upload form is missing. Add relevant inputs and logic here.</p>
                                         </CardContent>
                                     </Card>
                                 </div>
@@ -1387,7 +1415,8 @@ const AdminDashboard = () => {
                                                                     <td className="border border-gray-200 px-4 py-2">{member.department || 'N/A'}</td>
                                                                     <td className="border border-gray-200 px-4 py-2">
                                                                         <div className="flex space-x-2">
-                                                                            <FacultyUploadForm
+                                                                            {/* These components are removed. Replace with direct input or remove feature */}
+                                                                            {/* <FacultyUploadForm
                                                                                 isEdit={true}
                                                                                 initialData={member}
                                                                                 onUploadSuccess={loadFaculty}
@@ -1395,7 +1424,7 @@ const AdminDashboard = () => {
                                                                                 setIsUploading={setIsUploading}
                                                                                 isUpdating={isUpdating}
                                                                                 setIsUpdating={setIsUpdating}
-                                                                            />
+                                                                            /> */}
                                                                             <Button size="sm" variant="destructive" onClick={() => handleDeleteFaculty(member)} disabled={isDeleting}>
                                                                                 <Trash2 className="w-4 h-4" />
                                                                             </Button>
@@ -1425,13 +1454,15 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="p-0">
-                                            <FacultyUploadForm
+                                            {/* These components are removed. Replace with direct input or remove feature */}
+                                            {/* <FacultyUploadForm
                                                 onUploadSuccess={loadFaculty}
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
                                                 setIsUpdating={setIsUpdating}
-                                            />
+                                            /> */}
+                                            <p className="text-sm text-red-500">Faculty upload form is missing. Add relevant inputs and logic here.</p>
                                         </CardContent>
                                     </Card>
                                 </div>
@@ -1471,7 +1502,8 @@ const AdminDashboard = () => {
                                                                     <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
                                                                     <td className="border border-gray-200 px-4 py-2">
                                                                         <div className="flex space-x-2">
-                                                                            <PlacementsUploadForm
+                                                                            {/* These components are removed. Replace with direct input or remove feature */}
+                                                                            {/* <PlacementsUploadForm
                                                                                 isEdit={true}
                                                                                 initialData={placement}
                                                                                 onUploadSuccess={loadPlacements}
@@ -1479,7 +1511,7 @@ const AdminDashboard = () => {
                                                                                 setIsUploading={setIsUploading}
                                                                                 isUpdating={isUpdating}
                                                                                 setIsUpdating={setIsUpdating}
-                                                                            />
+                                                                            /> */}
                                                                             <Button size="sm" variant="destructive" onClick={() => handleDeletePlacement(placement)} disabled={isDeleting}>
                                                                                 <Trash2 className="w-4 h-4" />
                                                                             </Button>
@@ -1509,13 +1541,15 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="p-0">
-                                            <PlacementsUploadForm
+                                            {/* These components are removed. Replace with direct input or remove feature */}
+                                            {/* <PlacementsUploadForm
                                                 onUploadSuccess={loadPlacements}
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
                                                 setIsUpdating={setIsUpdating}
-                                            />
+                                            /> */}
+                                            <p className="text-sm text-red-500">Placement upload form is missing. Add relevant inputs and logic here.</p>
                                         </CardContent>
                                     </Card>
                                 </div>
@@ -1553,7 +1587,8 @@ const AdminDashboard = () => {
                                                                     <td className="border border-gray-200 px-4 py-2">{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</td>
                                                                     <td className="border border-gray-200 px-4 py-2">
                                                                         <div className="flex space-x-2">
-                                                                            <AchievementsUploadForm
+                                                                            {/* These components are removed. Replace with direct input or remove feature */}
+                                                                            {/* <AchievementsUploadForm
                                                                                 isEdit={true}
                                                                                 initialData={item}
                                                                                 onUploadSuccess={loadAchievements}
@@ -1561,7 +1596,7 @@ const AdminDashboard = () => {
                                                                                 setIsUploading={setIsUploading}
                                                                                 isUpdating={isUpdating}
                                                                                 setIsUpdating={setIsUpdating}
-                                                                            />
+                                                                            /> */}
                                                                             <Button size="sm" variant="destructive" onClick={() => handleDeleteAchievement(item)} disabled={isDeleting}>
                                                                                 <Trash2 className="w-4 h-4" />
                                                                             </Button>
@@ -1591,13 +1626,15 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="p-0">
-                                            <AchievementsUploadForm
+                                            {/* These components are removed. Replace with direct input or remove feature */}
+                                            {/* <AchievementsUploadForm
                                                 onUploadSuccess={loadAchievements}
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
                                                 setIsUpdating={setIsUpdating}
-                                            />
+                                            /> */}
+                                            <p className="text-sm text-red-500">Achievement upload form is missing. Add relevant inputs and logic here.</p>
                                         </CardContent>
                                     </Card>
                                 </div>
@@ -1706,7 +1743,8 @@ const AdminDashboard = () => {
                                                                 <h3 className="font-semibold">{item.title}</h3>
                                                                 <p className="text-gray-500 text-xs truncate">{item.description}</p>
                                                                 <div className="flex justify-end space-x-2 mt-2">
-                                                                    <GalleryUploadForm
+                                                                    {/* These components are removed. Replace with direct input or remove feature */}
+                                                                    {/* <GalleryUploadForm
                                                                         isEdit={true}
                                                                         initialData={item}
                                                                         onUploadSuccess={loadGallery}
@@ -1714,7 +1752,7 @@ const AdminDashboard = () => {
                                                                         setIsUploading={setIsUploading}
                                                                         isUpdating={isUpdating}
                                                                         setIsUpdating={setIsUpdating}
-                                                                    />
+                                                                    /> */}
                                                                     <Button
                                                                         size="sm"
                                                                         variant="destructive"
@@ -1747,13 +1785,15 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="p-0">
-                                            <GalleryUploadForm
+                                            {/* These components are removed. Replace with direct input or remove feature */}
+                                            {/* <GalleryUploadForm
                                                 onUploadSuccess={loadGallery}
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
                                                 setIsUpdating={setIsUpdating}
-                                            />
+                                            /> */}
+                                            <p className="text-sm text-red-500">Gallery upload form is missing. Add relevant inputs and logic here.</p>
                                         </CardContent>
                                     </Card>
                                 </div>
@@ -1942,6 +1982,7 @@ const AdminDashboard = () => {
                         </DialogHeader>
                         {viewingStudent && (
                             <div className="grid gap-4 py-4">
+                                {/* Profile Photo Display */}
                                 <div className="flex flex-col items-center mb-4 space-y-2">
                                     {isPhotoLoading ? (
                                         <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
@@ -1958,6 +1999,7 @@ const AdminDashboard = () => {
                                     <span className="text-sm text-gray-500">Profile Photo</span>
                                 </div>
 
+                                {/* Photo Upload Option */}
                                 <div className="grid grid-cols-4 items-center gap-2">
                                     <Label htmlFor="photo-upload" className="text-right">
                                         Update Photo
@@ -1976,6 +2018,7 @@ const AdminDashboard = () => {
                                     </Button>
                                 )}
 
+                                {/* Student Details */}
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4">
                                     <div className="font-semibold">H.T No.:</div>
                                     <div>{viewingStudent.ht_no}</div>
