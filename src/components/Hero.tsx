@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Users, Calendar, GraduationCap, Trophy, BookOpen, MapPin, Phone, Mail, Eye, Target, Image } from 'lucide-react';
-import { supabaseOld } from '@/integrations/supabase/supabaseOld'; // Or supabaseNew, depending on its purpose
+import { supabaseNew } from '@/integrations/supabase/supabaseNew'; // Changed to supabaseNew for content data
 
 const Hero = () => {
   const [selectedSection, setSelectedSection] = useState(null);
@@ -26,12 +25,12 @@ const Hero = () => {
 
   const loadEvents = async () => {
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabaseNew // Changed to supabaseNew
         .from('events')
         .select('*')
         .order('date', { ascending: false })
         .limit(5);
-      
+
       if (!error && data) {
         setEvents(data);
       }
@@ -42,12 +41,12 @@ const Hero = () => {
 
   const loadFaculty = async () => {
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabaseNew // Changed to supabaseNew
         .from('faculty')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(5);
-      
+
       if (!error && data) {
         setFaculty(data);
       }
@@ -58,12 +57,12 @@ const Hero = () => {
 
   const loadPlacements = async () => {
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabaseNew // Changed to supabaseNew
         .from('placements')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(10);
-      
+
       if (!error && data) {
         setPlacements(data);
       }
@@ -74,12 +73,12 @@ const Hero = () => {
 
   const loadGallery = async () => {
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabaseNew // Changed to supabaseNew
         .from('gallery')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(6);
-      
+
       if (!error && data) {
         setGallery(data);
       }
@@ -137,14 +136,14 @@ const Hero = () => {
   return (
     <section className="relative py-20 bg-gradient-to-br from-blue-50 via-white to-purple-50 overflow-hidden">
       {/* Background Pattern */}
-      <div 
+      <div
         className="absolute inset-0 opacity-5"
         style={{
           backgroundImage: `radial-gradient(circle, #3b82f6 1px, transparent 1px)`,
           backgroundSize: '20px 20px'
         }}
       />
-      
+
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
@@ -154,22 +153,22 @@ const Hero = () => {
             </span>
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Shaping the future through artificial intelligence and data science innovation. 
+            Shaping the future through artificial intelligence and data science innovation.
             Join us in exploring the frontiers of technology and creating tomorrow's solutions.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg"
               onClick={() => setShowVisionMission(true)}
             >
               <Eye className="w-5 h-5 mr-2" />
               Vision & Mission
             </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
+            <Button
+              size="lg"
+              variant="outline"
               className="border-blue-600 text-blue-600 hover:bg-blue-50 px-8 py-3 text-lg"
               onClick={() => setShowProgramOutcomes(true)}
             >
@@ -184,7 +183,7 @@ const Hero = () => {
           {Object.entries(sections).map(([key, section]) => {
             const IconComponent = section.icon;
             return (
-              <Card 
+              <Card
                 key={key}
                 className="hover:shadow-lg transition-all duration-300 cursor-pointer group hover:scale-105"
                 onClick={() => openSection(key)}
@@ -249,7 +248,7 @@ const Hero = () => {
               )}
             </DialogTitle>
           </DialogHeader>
-          
+
           {selectedSection && (
             <div className="space-y-4">
               {selectedSection === 'events' && (
@@ -270,7 +269,7 @@ const Hero = () => {
                   )}
                 </div>
               )}
-              
+
               {selectedSection === 'faculty' && (
                 <div className="grid gap-4">
                   {sections.faculty.data.length > 0 ? sections.faculty.data.map((member, index) => (
@@ -288,7 +287,7 @@ const Hero = () => {
                   )}
                 </div>
               )}
-              
+
               {selectedSection === 'placements' && (
                 <div className="overflow-x-auto">
                   {sections.placements.data.length > 0 ? (
@@ -321,7 +320,7 @@ const Hero = () => {
                   )}
                 </div>
               )}
-              
+
               {selectedSection === 'gallery' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {sections.gallery.data.length > 0 ? sections.gallery.data.map((item, index) => (
@@ -355,7 +354,7 @@ const Hero = () => {
               <span>Vision & Mission</span>
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-6">
             <div>
               <h3 className="text-xl font-bold text-blue-600 mb-4">Vision</h3>
@@ -363,7 +362,7 @@ const Hero = () => {
                 To empower individuals to acquire advanced knowledge and skills with cutting edge combination in Artificial Intelligence and Data Science with Analytical Visualization Technologies to address the challenges of the society and contribute to the nation building.
               </p>
             </div>
-            
+
             <div>
               <h3 className="text-xl font-bold text-purple-600 mb-4">Mission</h3>
               <ul className="space-y-3 text-gray-700">
@@ -398,12 +397,12 @@ const Hero = () => {
               <span>Program Outcomes</span>
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             <p className="text-gray-600 mb-6">
               Our Artificial Intelligence & Data Science program is designed to achieve the following 12 Program Outcomes:
             </p>
-            
+
             <Accordion type="single" collapsible className="w-full">
               {programOutcomes.map((outcome) => (
                 <AccordionItem key={outcome.id} value={outcome.id}>
