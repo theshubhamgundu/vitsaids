@@ -12,6 +12,17 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
+  // ADD THIS DEFINE BLOCK TO EXPOSE NEXT_PUBLIC_ VARIABLES
+  define: {
+    // These lines expose the environment variables to the client-side code
+    // They will be accessible via `process.env.NEXT_PUBLIC_SUPABASE_URL` etc.
+    // Ensure these variables are set in your Vercel environment.
+    'process.env.NEXT_PUBLIC_SUPABASE_URL': JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    'process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY': JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    // If supabaseNew also uses NEXT_PUBLIC_ (instead of VITE_ prefix) and needs to be exposed similarly, add them here too:
+    // 'process.env.NEXT_PUBLIC_NEW_SUPABASE_URL': JSON.stringify(process.env.NEXT_PUBLIC_NEW_SUPABASE_URL),
+    // 'process.env.NEXT_PUBLIC_NEW_SUPABASE_ANON_KEY': JSON.stringify(process.env.NEXT_PUBLIC_NEW_SUPABASE_ANON_KEY),
+  },
   plugins: [
     react(),
     mode === "development" && componentTagger(),
