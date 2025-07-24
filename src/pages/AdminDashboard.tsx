@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
-import { useAuth } from '@/contexts/Auth/AuthContext'; // Adjusted import path based on common project structure
+import { useAuth } from '@/contexts/AuthContext'; // Adjusted import path based on common project structure
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
