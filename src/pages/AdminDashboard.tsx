@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
-import { useAuth } from '@/contexts/AuthContext'; // Adjusted import path based on common project structure
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -7,40 +7,30 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Upload, Clock, FileText, Search, MoreVertical, User, X } from 'lucide-react'; // Removed GripVertical since DND is removed for dynamic content
+import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Upload, Clock, FileText, Search, MoreVertical, User, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabaseOld } from '@/integrations/supabase/supabaseOld'; // 👈 OLD DB: students, certificates, profiles
+import { supabase } from '@/integrations/supabase/client';         // 👈 NEW DB: faculty, gallery, events, etc.
 import TimetableManager from '@/components/TimetableManager';
 import { useLocation } from 'wouter';
 
-// REMOVED: DND-Kit imports as direct reordering of relational data is complex and not part of core request
-// import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
-// import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
-// import { useSortable } from '@dnd-kit/sortable';
-// import { CSS } from '@dnd-kit/utilities';
-// import { arrayMove } from '@dnd-kit/sortable';
-
-// REMOVED: GitHub utilities import
-// import { uploadToGitHubRepo, fetchAndParseJsonFile, updateGithubContentFile, deleteFileFromGithub } from '@/lib/github-utils';
-
-// NEW: Supabase content utilities
 import { uploadFile, deleteFile, fetchAllEntries, addEntry, updateEntry, deleteEntry } from '@/lib/SupabaseDataManager';
 
-// --- IMPORTS FOR UPLOAD FORMS ---
-// IMPORTANT: These forms MUST be updated to use the new SupabaseDataManager functions (uploadFile, addEntry, updateEntry)
-// For now, I'm assuming their props might change to reflect this.
+// Assuming these forms are separate components that will use the new `supabase` client for their uploads.
+// I'll make sure their props are aligned with this new logic.
 import ContentUploader from '@/components/ContentUploader';
-// --- END IMPORTS ---
+import EventsUploadForm from '@/components/EventsUploadForm';
+import FacultyUploadForm from '@/components/FacultyUploadForm';
+import PlacementsUploadForm from '@/components/PlacementsUploadForm';
+import AchievementsUploadForm from '@/components/AchievementsUploadForm';
+import GalleryUploadForm from '@/components/GalleryUploadForm';
 
-// Import SearchBar component
 import SearchBar from '@/components/SearchBar';
 
-
 // Type definitions for our data (matching Supabase table columns)
-// Ensure these match your actual Supabase table schemas
 interface PendingStudent {
     id: string;
     ht_no: string;
@@ -50,7 +40,7 @@ interface PendingStudent {
     phone?: string;
     address?: string;
     emergency_no?: string;
-    photo_url?: string; // This is the public URL from Supabase Storage
+    photo_url?: string;
     email?: string;
 }
 
@@ -61,8 +51,8 @@ interface Event {
     date: string;
     time?: string;
     venue?: string;
-    image_url?: string; // Storing public URL from Supabase Storage
-    image_path?: string; // Storing path in bucket for deletion
+    image_url?: string;
+    image_path?: string;
     speaker?: string;
 }
 
@@ -74,16 +64,16 @@ interface Faculty {
     bio?: string;
     expertise?: string;
     publications?: string;
-    image_url?: string; // Storing public URL from Supabase Storage
-    image_path?: string; // Storing path in bucket for deletion
+    image_url?: string;
+    image_path?: string;
 }
 
 interface GalleryItem {
     id: string;
     title: string;
     description?: string;
-    image_url: string; // Storing public URL from Supabase Storage
-    image_path?: string; // Storing path in bucket for deletion
+    image_url: string;
+    image_path?: string;
 }
 
 interface Placement {
@@ -94,8 +84,8 @@ interface Placement {
     year: number;
     type: string;
     branch: string;
-    image_url?: string; // Storing public URL from Supabase Storage (for student photo if applicable)
-    image_path?: string; // Storing path in bucket for deletion
+    image_url?: string;
+    image_path?: string;
 }
 
 interface CertificateItem {
@@ -103,8 +93,8 @@ interface CertificateItem {
     ht_no: string;
     certificate_name: string;
     description?: string;
-    certificate_url: string; // public URL from Supabase Storage (for the certificate file itself)
-    file_path?: string; // path within 'certifications' bucket (for deletion)
+    certificate_url: string;
+    file_path?: string;
     uploaded_at?: string;
     user_id?: string;
     user_profiles?: {
@@ -121,8 +111,8 @@ interface Achievement {
     title: string;
     description?: string;
     date?: string;
-    certificate_url?: string; // public URL from Supabase Storage
-    file_path?: string; // path within bucket for deletion
+    certificate_url?: string;
+    file_path?: string;
 }
 
 const AdminDashboard = () => {
@@ -175,27 +165,21 @@ const AdminDashboard = () => {
 
     const [activeTab, setActiveTab] = useState('students');
 
-    // DND-Kit sensors - still used if you want to implement DND for student list if it grows large
-    const sensors = useSensors(
-        // useSensor(PointerSensor), // PointerSensor would be used if DND was enabled for a list
-        // useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, })
-    );
-
-    // REMOVED persistGitHubData as GitHub is no longer used for dynamic content
+    const sensors = useSensors();
 
     const loadAllStudents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            let query = supabase.from('user_profiles').select('*').eq('role', 'student');
+            // Using supabaseOld for students
+            let query = supabaseOld.from('user_profiles').select('*').eq('role', 'student');
             const { data, error } = await query.order('student_name', { ascending: true });
             if (error) throw error;
 
             const studentsWithPhotos = await Promise.all(data.map(async (student: PendingStudent) => {
                 const photoPath = `profiles/${student.id}/photo.jpg`;
-                const { data: publicUrlData, error: storageError } = supabase.storage.from("profile_photos").getPublicUrl(photoPath);
+                const { data: publicUrlData, error: storageError } = supabaseOld.storage.from("profile_photos").getPublicUrl(photoPath);
 
                 if (storageError || !publicUrlData?.publicUrl) {
-                    console.warn(`Could not get public URL for student ${student.id}'s photo:`, storageError?.message || 'No public URL found.');
                     return { ...student, photo_url: '/default-avatar.png' };
                 }
                 return { ...student, photo_url: publicUrlData.publicUrl };
@@ -229,11 +213,10 @@ const AdminDashboard = () => {
         setFilteredStudents(currentFilteredStudents);
     }, [allStudents, selectedYearFilter, studentSearchTerm]);
 
-
     const loadEvents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // NEW: Fetch from Supabase Table 'events'
+            // Using new supabase client for events
             const data = await fetchAllEntries<Event>('events');
             setEvents(data || []);
         } catch (error: any) {
@@ -247,7 +230,7 @@ const AdminDashboard = () => {
     const loadFaculty = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // NEW: Fetch from Supabase Table 'faculty'
+            // Using new supabase client for faculty
             const data = await fetchAllEntries<Faculty>('faculty');
             setFaculty(data || []);
         } catch (error: any) {
@@ -261,7 +244,7 @@ const AdminDashboard = () => {
     const loadPlacements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // NEW: Fetch from Supabase Table 'placements'
+            // Using new supabase client for placements
             const data = await fetchAllEntries<Placement>('placements');
             setPlacements(data || []);
         } catch (error: any) {
@@ -275,7 +258,7 @@ const AdminDashboard = () => {
     const loadGallery = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // NEW: Fetch from Supabase Table 'gallery'
+            // Using new supabase client for gallery
             const data = await fetchAllEntries<GalleryItem>('gallery');
             setGallery(data || []);
         } catch (error: any) {
@@ -289,7 +272,7 @@ const AdminDashboard = () => {
     const loadAchievements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // NEW: Fetch from Supabase Table 'achievements'
+            // Using new supabase client for achievements
             const data = await fetchAllEntries<Achievement>('achievements');
             setAchievements(data || []);
         } catch (error: any) {
@@ -300,12 +283,12 @@ const AdminDashboard = () => {
         }
     }, [toast]);
 
-
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
         console.log("loadCertifications called with filters:", { certificateSearchHTNO, selectedYearFilterCerts });
         try {
-            let query = supabase
+            // Using supabaseOld for certifications
+            let query = supabaseOld
                 .from('student_certificates')
                 .select(`
                     id,
@@ -332,8 +315,8 @@ const AdminDashboard = () => {
                     ht_no: cert.htno,
                     certificate_name: cert.title,
                     description: cert.description,
-                    certificate_url: supabase.storage.from('certifications').getPublicUrl(cert.file_url).data.publicUrl, // Get public URL here
-                    file_path: cert.file_url, // Keep original file_path for deletion
+                    certificate_url: supabaseOld.storage.from('certifications').getPublicUrl(cert.file_url).data.publicUrl,
+                    file_path: cert.file_url,
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
                     user_profiles: cert.user_profiles ? {
@@ -346,7 +329,6 @@ const AdminDashboard = () => {
                 }));
 
                 setCertifications(transformedData);
-                // Apply client-side filter initially if search term/year filter is present
                 const initialFiltered = transformedData.filter(cert => {
                     const matchesYear = selectedYearFilterCerts === 'all' || cert.user_profiles?.year === parseInt(selectedYearFilterCerts);
                     const matchesSearch = !certificateSearchHTNO ||
@@ -365,14 +347,14 @@ const AdminDashboard = () => {
         } finally {
             setIsGlobalLoading(false);
         }
-    }, [toast, certificateSearchHTNO, selectedYearFilterCerts]); // Depend on filters to reload if they change
+    }, [toast, certificateSearchHTNO, selectedYearFilterCerts]);
 
     const loadStats = useCallback(async () => {
         try {
-            const { count: studentsCount, error: studentsError } = await supabase.from('user_profiles').select('id', { count: 'exact' }).eq('role', 'student');
+            // Using supabaseOld for student count
+            const { count: studentsCount, error: studentsError } = await supabaseOld.from('user_profiles').select('id', { count: 'exact' }).eq('role', 'student');
             if (studentsError) throw studentsError;
 
-            // NEW: Use lengths of state arrays that are populated from Supabase Tables
             setStats({
                 totalStudents: studentsCount || 0,
                 activeEvents: events.length || 0,
@@ -380,7 +362,6 @@ const AdminDashboard = () => {
                 placements: placements.length || 0,
                 totalAchievements: achievements.length || 0,
             });
-
         } catch (error: any) {
             console.error('Error loading stats:', error);
             toast({ title: 'Error loading dashboard stats', description: error.message || 'Please try again later.', variant: 'destructive' });
@@ -399,61 +380,62 @@ const AdminDashboard = () => {
             loadCertifications();
             loadStats();
 
-            const studentsChannel = supabase
+            // Realtime subscriptions for old DB tables
+            const studentsChannel = supabaseOld
                 .channel('students-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, () => {
-                    console.log("Supabase user_profiles change detected. Reloading students.");
+                    console.log("Supabase (Old) user_profiles change detected. Reloading students.");
                     loadAllStudents();
                     loadStats();
                 })
                 .subscribe();
 
-            const certificatesChannel = supabase
+            const certificatesChannel = supabaseOld
                 .channel('certificates-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'student_certificates' }, (payload) => {
-                    console.log("Supabase student_certificates change detected. Reloading certs. Payload:", payload);
+                    console.log("Supabase (Old) student_certificates change detected. Reloading certs. Payload:", payload);
                     loadCertifications();
                 })
                 .subscribe();
 
-            // NEW: Realtime subscriptions for other tables
+            // Realtime subscriptions for new DB tables
             const eventsChannel = supabase.channel('events-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-                    console.log("Supabase events change detected. Reloading events.");
+                    console.log("Supabase (New) events change detected. Reloading events.");
                     loadEvents();
                     loadStats();
                 }).subscribe();
 
             const facultyChannel = supabase.channel('faculty-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'faculty' }, () => {
-                    console.log("Supabase faculty change detected. Reloading faculty.");
+                    console.log("Supabase (New) faculty change detected. Reloading faculty.");
                     loadFaculty();
                     loadStats();
                 }).subscribe();
 
             const placementsChannel = supabase.channel('placements-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'placements' }, () => {
-                    console.log("Supabase placements change detected. Reloading placements.");
+                    console.log("Supabase (New) placements change detected. Reloading placements.");
                     loadPlacements();
                     loadStats();
                 }).subscribe();
 
             const galleryChannel = supabase.channel('gallery-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery' }, () => {
-                    console.log("Supabase gallery change detected. Reloading gallery.");
+                    console.log("Supabase (New) gallery change detected. Reloading gallery.");
                     loadGallery();
                 }).subscribe();
 
             const achievementsChannel = supabase.channel('achievements-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'achievements' }, () => {
-                    console.log("Supabase achievements change detected. Reloading achievements.");
+                    console.log("Supabase (New) achievements change detected. Reloading achievements.");
                     loadAchievements();
                     loadStats();
                 }).subscribe();
 
             return () => {
-                supabase.removeChannel(studentsChannel);
-                supabase.removeChannel(certificatesChannel);
+                supabaseOld.removeChannel(studentsChannel);
+                supabaseOld.removeChannel(certificatesChannel);
                 supabase.removeChannel(eventsChannel);
                 supabase.removeChannel(facultyChannel);
                 supabase.removeChannel(placementsChannel);
@@ -466,8 +448,6 @@ const AdminDashboard = () => {
         }
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadStats]);
 
-    // This useEffect handles the *client-side filtering* based on search/year input
-    // for certificates table.
     useEffect(() => {
         let currentFiltered = certifications;
 
@@ -487,7 +467,6 @@ const AdminDashboard = () => {
 
         setFilteredCertificates(currentFiltered);
     }, [certificateSearchHTNO, certifications, selectedYearFilterCerts]);
-
 
     if (loading || isGlobalLoading || !userProfile) {
         return (
@@ -533,7 +512,8 @@ const AdminDashboard = () => {
         const confirmPromotion = window.confirm(`Promote this student to year ${nextYear}?`);
         if (!confirmPromotion) return;
         try {
-            const result = await updateEntry<PendingStudent>('user_profiles', studentId, { year: nextYear });
+            // Using supabaseOld for student promotion
+            const result = await updateEntry<PendingStudent>('user_profiles', studentId, { year: nextYear }, supabaseOld);
             if (result) {
                 toast({ title: `Student promoted to year ${nextYear}` });
                 loadAllStudents();
@@ -546,7 +526,6 @@ const AdminDashboard = () => {
         }
     };
 
-
     const handleBulkPromote = async () => {
         if (!yearToPromote) {
             toast({ title: 'Error', description: 'Please select a year to promote.', variant: 'destructive' });
@@ -554,20 +533,13 @@ const AdminDashboard = () => {
         }
 
         const currentYearNum = parseInt(yearToPromote);
-        if (isNaN(currentYearNum)) {
+        if (isNaN(currentYearNum) || currentYearNum < 1 || currentYearNum > 3) {
             toast({ title: 'Error', description: 'Invalid year selected for promotion.', variant: 'destructive' });
             return;
         }
 
-        if (currentYearNum >= 4) {
-            toast({ title: 'Notice', description: 'Students in 4th Year cannot be promoted further.', variant: 'info' });
-            setIsPromoteModalOpen(false);
-            setYearToPromote('');
-            return;
-        }
-
         const nextYear = currentYearNum + 1;
-        const confirmBulkPromotion = window.confirm(`Are you sure you want to promote ALL students currently in ${currentYearNum}st/nd/rd Year to ${nextYear}th Year? This action cannot be undone.`);
+        const confirmBulkPromotion = window.confirm(`Are you sure you want to promote ALL students currently in year ${currentYearNum} to year ${nextYear}? This action cannot be undone.`);
 
         if (!confirmBulkPromotion) {
             return;
@@ -575,8 +547,8 @@ const AdminDashboard = () => {
 
         setIsUpdating(true);
         try {
-            // Using direct supabase client for bulk operation
-            const { error } = await supabase
+            // Using supabaseOld for bulk promotion
+            const { error } = await supabaseOld
                 .from('user_profiles')
                 .update({ year: nextYear })
                 .eq('year', currentYearNum)
@@ -602,7 +574,8 @@ const AdminDashboard = () => {
     const updateStudent = async (studentData: Partial<PendingStudent>) => {
         setIsUpdating(true);
         try {
-            const result = await updateEntry<PendingStudent>('user_profiles', studentData.id!, studentData);
+            // Using supabaseOld for student updates
+            const result = await updateEntry<PendingStudent>('user_profiles', studentData.id!, studentData, supabaseOld);
             if (result) {
                 toast({ title: "Student details updated successfully" });
                 setEditingStudent(null);
@@ -631,8 +604,9 @@ const AdminDashboard = () => {
 
         setIsPhotoLoading(true);
 
-        const folderPath = `profiles/${viewingStudent.id}`;
-        const { publicUrl, filePath, error: uploadError } = await uploadFile('profile_photos', newProfilePhotoFile, folderPath);
+        const folderPath = `profiles/${viewingStudent.id}/photo.jpg`;
+        // Using supabaseOld for profile photo upload
+        const { publicUrl, filePath, error: uploadError } = await uploadFile('profile_photos', newProfilePhotoFile, folderPath, supabaseOld);
 
         if (uploadError || !publicUrl) {
             console.error('Error uploading profile photo:', uploadError);
@@ -642,15 +616,15 @@ const AdminDashboard = () => {
         }
 
         try {
-            const result = await updateEntry<PendingStudent>('user_profiles', viewingStudent.id, { photo_url: publicUrl });
+            // Using supabaseOld for updating student profile
+            const result = await updateEntry<PendingStudent>('user_profiles', viewingStudent.id, { photo_url: publicUrl }, supabaseOld);
             if (result) {
                 toast({ title: '✅ Profile photo updated successfully' });
                 setNewProfilePhotoFile(null);
                 loadAllStudents();
                 setViewingStudent(prev => prev ? { ...prev, photo_url: publicUrl } : null);
             } else {
-                // If DB update fails, try to delete the uploaded file
-                await deleteFile('profile_photos', filePath!);
+                await deleteFile('profile_photos', filePath!, supabaseOld);
                 toast({ title: 'Error updating photo', description: 'Failed to link photo to student profile in database. File uploaded but not saved.', variant: 'destructive' });
             }
         } catch (error: any) {
@@ -667,29 +641,21 @@ const AdminDashboard = () => {
         setIsPhotoLoading(false);
     };
 
-    // REMOVED handleDragEnd for dynamic content types (events, faculty, etc.)
-    // because drag-and-drop reordering for relational databases needs an explicit
-    // 'order_index' column and more complex logic to update multiple rows.
-    // If you need this, you'd add an 'order_index' column to each table and
-    // then re-implement this logic to update those indices.
-
     const handleDeleteEvent = async (eventToDelete: Event) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the event "${eventToDelete.title}"? This cannot be undone.`);
         if (!confirmDelete) return;
 
         setIsDeleting(true);
         try {
-            // Delete image from storage first
+            // Using new supabase client for events
             if (eventToDelete.image_path) {
-                const { success, error } = await deleteFile('events', eventToDelete.image_path);
+                const { success, error } = await deleteFile('events', eventToDelete.image_path, supabase);
                 if (error) {
                     console.warn(`Failed to delete event image ${eventToDelete.image_path}:`, error.message);
                     toast({ title: 'Image Deletion Warning', description: `Could not delete event image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
-
-            // Then delete record from table
-            const { success, error } = await deleteEntry('events', eventToDelete.id);
+            const { success, error } = await deleteEntry('events', eventToDelete.id, supabase);
             if (success) {
                 toast({ title: 'Event deleted successfully' });
                 loadEvents();
@@ -711,15 +677,15 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
+            // Using new supabase client for faculty
             if (facultyToDelete.image_path) {
-                const { success, error } = await deleteFile('faculty', facultyToDelete.image_path);
+                const { success, error } = await deleteFile('faculty', facultyToDelete.image_path, supabase);
                 if (error) {
                     console.warn(`Failed to delete faculty image ${facultyToDelete.image_path}:`, error.message);
                     toast({ title: 'Image Deletion Warning', description: `Could not delete faculty image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
-
-            const { success, error } = await deleteEntry('faculty', facultyToDelete.id);
+            const { success, error } = await deleteEntry('faculty', facultyToDelete.id, supabase);
             if (success) {
                 toast({ title: 'Faculty member deleted successfully' });
                 loadFaculty();
@@ -741,15 +707,15 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
+            // Using new supabase client for gallery
             if (itemToDelete.image_path) {
-                const { success, error } = await deleteFile('gallery', itemToDelete.image_path);
+                const { success, error } = await deleteFile('gallery', itemToDelete.image_path, supabase);
                 if (error) {
                     console.warn(`Failed to delete gallery image ${itemToDelete.image_path}:`, error.message);
                     toast({ title: 'Image Deletion Warning', description: `Could not delete gallery image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
-
-            const { success, error } = await deleteEntry('gallery', itemToDelete.id);
+            const { success, error } = await deleteEntry('gallery', itemToDelete.id, supabase);
             if (success) {
                 toast({ title: 'Gallery item deleted successfully' });
                 loadGallery();
@@ -770,15 +736,15 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
+            // Using new supabase client for placements
             if (itemToDelete.image_path) {
-                const { success, error } = await deleteFile('placements', itemToDelete.image_path);
+                const { success, error } = await deleteFile('placements', itemToDelete.image_path, supabase);
                 if (error) {
                     console.warn(`Failed to delete placement image ${itemToDelete.image_path}:`, error.message);
                     toast({ title: 'Image Deletion Warning', description: `Could not delete placement image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
-
-            const { success, error } = await deleteEntry('placements', itemToDelete.id);
+            const { success, error } = await deleteEntry('placements', itemToDelete.id, supabase);
             if (success) {
                 toast({ title: 'Placement record deleted successfully' });
                 loadPlacements();
@@ -800,15 +766,15 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
+            // Using new supabase client for achievements
             if (itemToDelete.file_path) {
-                const { success, error } = await deleteFile('achievements', itemToDelete.file_path);
+                const { success, error } = await deleteFile('achievements', itemToDelete.file_path, supabase);
                 if (error) {
                     console.warn(`Failed to delete achievement file ${itemToDelete.file_path}:`, error.message);
                     toast({ title: 'File Deletion Warning', description: `Could not delete achievement file from storage: ${error.message}`, variant: 'warning' });
                 }
             }
-
-            const { success, error } = await deleteEntry('achievements', itemToDelete.id);
+            const { success, error } = await deleteEntry('achievements', itemToDelete.id, supabase);
             if (success) {
                 toast({ title: 'Achievement deleted successfully' });
                 loadAchievements();
@@ -824,31 +790,27 @@ const AdminDashboard = () => {
         }
     };
 
-
     const handleSearchCertificates = () => {
         console.log("handleSearchCertificates triggered. This function is now mostly handled by useEffect for dynamic filtering.");
-        // The filtering logic is now in the useEffect hook.
-        // This function can remain to trigger a re-evaluation or for future complex search logic.
-        // For simple input-based filtering, the useEffect reacting to `certificateSearchHTNO` and `selectedYearFilterCerts` is sufficient.
         toast({ title: 'Filters applied.' });
     };
 
-
-    const deleteCertification = async (certId: string, certificateFilePath: string) => { // Renamed param for clarity
+    const deleteCertification = async (certId: string, certificateFilePath: string) => {
         const confirmDelete = window.confirm("Are you sure you want to delete this certificate? This action cannot be undone.");
         if (!confirmDelete) return;
 
         setIsDeleting(true);
         try {
+            // Using supabaseOld for certificate deletion
             if (certificateFilePath) {
-                const { error: storageError } = await supabase.storage.from('certifications').remove([certificateFilePath]);
+                const { error: storageError } = await supabaseOld.storage.from('certifications').remove([certificateFilePath]);
                 if (storageError) {
                     console.warn('Error deleting certificate file from Supabase storage:', storageError);
                     toast({ title: 'Warning', description: 'Could not delete file from Supabase storage. Record deleted from DB.', variant: 'destructive' });
                 }
             }
 
-            const { error } = await supabase
+            const { error } = await supabaseOld
                 .from('student_certificates')
                 .delete()
                 .eq('id', certId);
@@ -867,7 +829,6 @@ const AdminDashboard = () => {
         }
     };
 
-
     const uploadResult = async () => {
         if (!resultFile || !resultTitle) {
             toast({ title: 'Error', description: 'Please provide a title and choose a file', variant: 'destructive' });
@@ -875,8 +836,9 @@ const AdminDashboard = () => {
         }
         setIsUploading(true);
 
-        const folderPath = 'public_results'; // Or any specific folder within the 'results' bucket
-        const { publicUrl, filePath, error: uploadError } = await uploadFile('results', resultFile, folderPath);
+        const folderPath = 'public_results';
+        // Using new supabase client for results upload
+        const { publicUrl, filePath, error: uploadError } = await uploadFile('results', resultFile, folderPath, supabase);
 
         if (uploadError || !publicUrl) {
             console.error('Error uploading result file:', uploadError);
@@ -886,11 +848,10 @@ const AdminDashboard = () => {
         }
 
         try {
-            // Assume you have a 'results' table in Supabase
+            // Using new supabase client for results table
             const { error: dbError } = await supabase.from('results').insert([{ title: resultTitle, file_url: publicUrl, file_path: filePath }]);
             if (dbError) {
-                // If DB insert fails, clean up the uploaded file
-                await deleteFile('results', filePath!);
+                await deleteFile('results', filePath!, supabase);
                 throw dbError;
             }
             toast({ title: '✅ Result uploaded successfully' });
@@ -911,6 +872,7 @@ const AdminDashboard = () => {
         }
         setIsUploading(true);
         try {
+            // Using new supabase client for notifications
             const { error } = await supabase.from('notifications').insert([{ title: notificationTitle, message: notificationMessage }]);
             if (error) {
                 toast({ title: 'Error posting notification', description: error.message, variant: 'destructive' });
@@ -942,7 +904,6 @@ const AdminDashboard = () => {
         });
     };
 
-
     const handleResultsFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         setResultFile(file);
@@ -962,7 +923,6 @@ const AdminDashboard = () => {
         NOTIFICATIONS: 'notifications',
     };
 
-
     return (
         <div className="min-h-screen bg-gray-50">
             <header className="bg-white shadow-sm border-b">
@@ -973,7 +933,7 @@ const AdminDashboard = () => {
                             <p className="text-sm text-gray-600">Welcome back, {user?.email} (Admin).</p>
                         </div>
                         <Button
-                            onClick={userProfile?.role === 'admin' ? () => supabase.auth.signOut() : () => setLocation('/login')}
+                            onClick={userProfile?.role === 'admin' ? () => supabaseOld.auth.signOut() : () => setLocation('/login')}
                             variant="outline"
                             className="flex items-center space-x-2"
                         >
@@ -1095,7 +1055,7 @@ const AdminDashboard = () => {
                         </TabsTrigger>
                     </TabsList>
 
-                    {/* Students Tab Content (Supabase Backed) */}
+                    {/* Students Tab Content (SupabaseOld Backed) */}
                     <TabsContent value={TAB_VALUES.STUDENTS}>
                         <Card>
                             <CardHeader>
@@ -1188,7 +1148,7 @@ const AdminDashboard = () => {
                         </Card>
                     </TabsContent>
 
-                    {/* Certifications Tab Content (Supabase Backed) */}
+                    {/* Certifications Tab Content (SupabaseOld Backed) */}
                     <TabsContent value={TAB_VALUES.CERTIFICATIONS}>
                         <Card>
                             <CardHeader>
@@ -1219,7 +1179,6 @@ const AdminDashboard = () => {
                                             <SelectItem value="4">4th Year</SelectItem>
                                         </SelectContent>
                                     </Select>
-
                                     <Button onClick={handleSearchCertificates}>
                                         <Search className="w-4 h-4 mr-2" /> Apply Filters
                                     </Button>
@@ -1228,7 +1187,6 @@ const AdminDashboard = () => {
                                         onClick={() => {
                                             setCertificateSearchHTNO('');
                                             setSelectedYearFilterCerts('all');
-                                            // Re-fetch to ensure full reset if initial load had filters
                                             loadCertifications();
                                             toast({ title: 'Filters cleared, showing all certificates.' });
                                         }}
@@ -1280,7 +1238,7 @@ const AdminDashboard = () => {
                                                                         variant="outline"
                                                                     >
                                                                         <a
-                                                                            href={cert.certificate_url} // This is already the public URL
+                                                                            href={cert.certificate_url}
                                                                             target="_blank"
                                                                             rel="noopener noreferrer"
                                                                         >
@@ -1291,7 +1249,7 @@ const AdminDashboard = () => {
                                                                 <Button
                                                                     size="sm"
                                                                     variant="destructive"
-                                                                    onClick={() => deleteCertification(cert.id, cert.file_path!)} // Pass file_path for deletion
+                                                                    onClick={() => deleteCertification(cert.id, cert.file_path!)}
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
                                                                 </Button>
@@ -1313,7 +1271,7 @@ const AdminDashboard = () => {
                         </Card>
                     </TabsContent>
 
-                    {/* Events Tab Content (Supabase Table Backed) */}
+                    {/* Events Tab Content (Supabase Backed) */}
                     <TabsContent value={TAB_VALUES.EVENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
@@ -1345,14 +1303,10 @@ const AdminDashboard = () => {
                                                                     <td className="border border-gray-200 px-4 py-2">{event.venue || 'N/A'}</td>
                                                                     <td className="border border-gray-200 px-4 py-2">
                                                                         <div className="flex space-x-2">
-                                                                            {/* Assuming EventsUploadForm has an 'isEdit' mode and takes initialData */}
                                                                             <EventsUploadForm
                                                                                 isEdit={true}
                                                                                 initialData={event}
-                                                                                onUploadSuccess={loadEvents} // Callback to reload events after edit
-                                                                                // You might need to pass uploadFile and updateEntry to these forms
-                                                                                // e.g., uploadFile={uploadFile} updateEntry={updateEntry}
-                                                                                // and the forms themselves would handle their state and interaction with SupabaseDataManager
+                                                                                onUploadSuccess={loadEvents}
                                                                                 isUploading={isUploading}
                                                                                 setIsUploading={setIsUploading}
                                                                                 isUpdating={isUpdating}
@@ -1387,9 +1341,8 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="p-0">
-                                            {/* Assuming EventsUploadForm takes a callback to trigger reload and handle own state */}
                                             <EventsUploadForm
-                                                onUploadSuccess={loadEvents} // Callback to reload events after new upload
+                                                onUploadSuccess={loadEvents}
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
@@ -1402,7 +1355,7 @@ const AdminDashboard = () => {
                         </div>
                     </TabsContent>
 
-                    {/* Faculty Tab Content (Supabase Table Backed) */}
+                    {/* Faculty Tab Content (Supabase Backed) */}
                     <TabsContent value={TAB_VALUES.FACULTY}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
@@ -1486,7 +1439,7 @@ const AdminDashboard = () => {
                         </div>
                     </TabsContent>
 
-                    {/* Placements Tab Content (Supabase Table Backed) */}
+                    {/* Placements Tab Content (Supabase Backed) */}
                     <TabsContent value={TAB_VALUES.PLACEMENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
@@ -1570,7 +1523,7 @@ const AdminDashboard = () => {
                         </div>
                     </TabsContent>
 
-                    {/* Achievements Tab Content (Supabase Table Backed) */}
+                    {/* Achievements Tab Content (Supabase Backed) */}
                     <TabsContent value={TAB_VALUES.ACHIEVEMENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
@@ -1731,7 +1684,7 @@ const AdminDashboard = () => {
                         </Card>
                     </TabsContent>
 
-                    {/* Gallery Tab Content (Supabase Table Backed) */}
+                    {/* Gallery Tab Content (Supabase Backed) */}
                     <TabsContent value={TAB_VALUES.GALLERY}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
@@ -1853,7 +1806,7 @@ const AdminDashboard = () => {
                     </TabsContent>
                 </Tabs>
 
-                {/* Edit Student Dialog (Supabase Backed) */}
+                {/* Edit Student Dialog (SupabaseOld Backed) */}
                 <Dialog open={!!editingStudent} onOpenChange={() => setEditingStudent(null)}>
                     <DialogContent className="sm:max-w-[425px]">
                         <DialogHeader>
@@ -1949,7 +1902,7 @@ const AdminDashboard = () => {
                     </DialogContent>
                 </Dialog>
 
-                {/* Promote Students Modal (Supabase Backed) */}
+                {/* Promote Students Modal (SupabaseOld Backed) */}
                 <Dialog open={isPromoteModalOpen} onOpenChange={setIsPromoteModalOpen}>
                     <DialogContent className="sm:max-w-[425px]">
                         <DialogHeader>
@@ -1981,7 +1934,7 @@ const AdminDashboard = () => {
                     </DialogContent>
                 </Dialog>
 
-                {/* Student Detail View Dialog (Supabase Backed) */}
+                {/* Student Detail View Dialog (SupabaseOld Backed) */}
                 <Dialog open={!!viewingStudent} onOpenChange={() => { setViewingStudent(null); setNewProfilePhotoFile(null); }}>
                     <DialogContent className="sm:max-w-[500px]">
                         <DialogHeader>
@@ -1989,7 +1942,6 @@ const AdminDashboard = () => {
                         </DialogHeader>
                         {viewingStudent && (
                             <div className="grid gap-4 py-4">
-                                {/* Profile Photo Display */}
                                 <div className="flex flex-col items-center mb-4 space-y-2">
                                     {isPhotoLoading ? (
                                         <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
@@ -2006,7 +1958,6 @@ const AdminDashboard = () => {
                                     <span className="text-sm text-gray-500">Profile Photo</span>
                                 </div>
 
-                                {/* Photo Upload Option */}
                                 <div className="grid grid-cols-4 items-center gap-2">
                                     <Label htmlFor="photo-upload" className="text-right">
                                         Update Photo
@@ -2025,7 +1976,6 @@ const AdminDashboard = () => {
                                     </Button>
                                 )}
 
-                                {/* Student Details */}
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4">
                                     <div className="font-semibold">H.T No.:</div>
                                     <div>{viewingStudent.ht_no}</div>
