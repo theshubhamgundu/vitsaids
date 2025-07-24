@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Users, Calendar, GraduationCap, Trophy, BookOpen, MapPin, Phone, Mail, Eye, Target, Image } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabaseOld } from '@/integrations/supabase/supabaseOld'; // Or supabaseNew, depending on its purpose
 
 const Hero = () => {
   const [selectedSection, setSelectedSection] = useState(null);
