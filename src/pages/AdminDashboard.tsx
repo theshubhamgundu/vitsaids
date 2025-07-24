@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/Auth/AuthContext'; // Adjusted import path based on common project structure
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Upload, Clock, FileText, Search, MoreVertical, User, X, GripVertical } from 'lucide-react';
+import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Upload, Clock, FileText, Search, MoreVertical, User, X } from 'lucide-react'; // Removed GripVertical since DND is removed for dynamic content
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
@@ -16,30 +16,22 @@ import { supabase } from '@/integrations/supabase/client';
 import TimetableManager from '@/components/TimetableManager';
 import { useLocation } from 'wouter';
 
-// DND-Kit imports
-import {
-    DndContext,
-    closestCenter,
-    KeyboardSensor,
-    PointerSensor,
-    useSensor,
-    useSensors,
-    DragEndEvent,
-} from '@dnd-kit/core';
-import {
-    SortableContext,
-    sortableKeyboardCoordinates,
-    verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { arrayMove } from '@dnd-kit/sortable';
+// REMOVED: DND-Kit imports as direct reordering of relational data is complex and not part of core request
+// import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+// import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+// import { useSortable } from '@dnd-kit/sortable';
+// import { CSS } from '@dnd-kit/utilities';
+// import { arrayMove } from '@dnd-kit/sortable';
 
-// GitHub utilities - Ensure this path is correct based on your project structure
-import { uploadToGitHubRepo, fetchAndParseJsonFile, updateGithubContentFile, deleteFileFromGithub } from '@/lib/github-utils';
+// REMOVED: GitHub utilities import
+// import { uploadToGitHubRepo, fetchAndParseJsonFile, updateGithubContentFile, deleteFileFromGithub } from '@/lib/github-utils';
+
+// NEW: Supabase content utilities
+import { uploadFile, deleteFile, fetchAllEntries, addEntry, updateEntry, deleteEntry } from '@/lib/SupabaseDataManager';
 
 // --- IMPORTS FOR UPLOAD FORMS ---
-// Ensure these paths are correct
+// IMPORTANT: These forms MUST be updated to use the new SupabaseDataManager functions (uploadFile, addEntry, updateEntry)
+// For now, I'm assuming their props might change to reflect this.
 import GalleryUploadForm from '@/components/GalleryUploadForm';
 import EventsUploadForm from '@/components/EventsUploadForm';
 import FacultyUploadForm from '@/components/FacultyUploadForm';
@@ -47,8 +39,12 @@ import PlacementsUploadForm from '@/components/PlacementsUploadForm';
 import AchievementsUploadForm from '@/components/AchievementsUploadForm';
 // --- END IMPORTS ---
 
+// Import SearchBar component
+import SearchBar from '@/components/SearchBar';
 
-// Type definitions for our data
+
+// Type definitions for our data (matching Supabase table columns)
+// Ensure these match your actual Supabase table schemas
 interface PendingStudent {
     id: string;
     ht_no: string;
@@ -58,7 +54,7 @@ interface PendingStudent {
     phone?: string;
     address?: string;
     emergency_no?: string;
-    photo_url?: string;
+    photo_url?: string; // This is the public URL from Supabase Storage
     email?: string;
 }
 
@@ -69,8 +65,9 @@ interface Event {
     date: string;
     time?: string;
     venue?: string;
-    image?: string;
-    speaker?: string; // Added speaker as per schema and forms
+    image_url?: string; // Storing public URL from Supabase Storage
+    image_path?: string; // Storing path in bucket for deletion
+    speaker?: string;
 }
 
 interface Faculty {
@@ -81,14 +78,16 @@ interface Faculty {
     bio?: string;
     expertise?: string;
     publications?: string;
-    image?: string;
+    image_url?: string; // Storing public URL from Supabase Storage
+    image_path?: string; // Storing path in bucket for deletion
 }
 
 interface GalleryItem {
     id: string;
     title: string;
     description?: string;
-    image: string;
+    image_url: string; // Storing public URL from Supabase Storage
+    image_path?: string; // Storing path in bucket for deletion
 }
 
 interface Placement {
@@ -99,19 +98,20 @@ interface Placement {
     year: number;
     type: string;
     branch: string;
-    image?: string; // Assuming placements can have images as well
+    image_url?: string; // Storing public URL from Supabase Storage (for student photo if applicable)
+    image_path?: string; // Storing path in bucket for deletion
 }
 
-// Corrected CertificateItem interface to reflect `student_certificates` table and mapping
 interface CertificateItem {
     id: string;
-    ht_no: string; // Mapped from `htno` in `student_certificates`
-    certificate_name: string; // Mapped from `title` in `student_certificates`
-    description?: string; // From `description` in `student_certificates`
-    certificate_url: string; // Mapped from `file_url` in `student_certificates` (NOW ASSUMED TO BE PATH WITHIN BUCKET)
+    ht_no: string;
+    certificate_name: string;
+    description?: string;
+    certificate_url: string; // public URL from Supabase Storage (for the certificate file itself)
+    file_path?: string; // path within 'certifications' bucket (for deletion)
     uploaded_at?: string;
     user_id?: string;
-    user_profiles?: { // Joined from user_profiles
+    user_profiles?: {
         student_name: string;
         id: string;
         ht_no: string;
@@ -125,32 +125,9 @@ interface Achievement {
     title: string;
     description?: string;
     date?: string;
-    certificate_url?: string;
+    certificate_url?: string; // public URL from Supabase Storage
+    file_path?: string; // path within bucket for deletion
 }
-
-
-const SortableItem = ({ id, children }: { id: string; children: React.ReactNode }) => {
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-    } = useSortable({ id });
-
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        touchAction: 'none',
-    };
-
-    return (
-        <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-            {children}
-        </div>
-    );
-};
-
 
 const AdminDashboard = () => {
     const { toast } = useToast();
@@ -181,6 +158,9 @@ const AdminDashboard = () => {
     const [editingStudent, setEditingStudent] = useState<PendingStudent | null>(null);
     const [viewingStudent, setViewingStudent] = useState<PendingStudent | null>(null);
     const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all');
+    const [studentSearchTerm, setStudentSearchTerm] = useState<string>('');
+    const [filteredStudents, setFilteredStudents] = useState<PendingStudent[]>([]);
+
     const [newProfilePhotoFile, setNewProfilePhotoFile] = useState<File | null>(null);
     const [isPhotoLoading, setIsPhotoLoading] = useState(false);
 
@@ -197,49 +177,20 @@ const AdminDashboard = () => {
     const [filteredCertificates, setFilteredCertificates] = useState<CertificateItem[]>([]);
     const [selectedYearFilterCerts, setSelectedYearFilterCerts] = useState<string>('all');
 
-    // State for managing active tab
-    const [activeTab, setActiveTab] = useState('students'); // Default tab
+    const [activeTab, setActiveTab] = useState('students');
 
+    // DND-Kit sensors - still used if you want to implement DND for student list if it grows large
     const sensors = useSensors(
-        useSensor(PointerSensor),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        })
+        // useSensor(PointerSensor), // PointerSensor would be used if DND was enabled for a list
+        // useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates, })
     );
 
-    const persistGitHubData = useCallback(async <T extends { id: string }>(
-        dataArray: T[],
-        filePath: string,
-        variableName: string,
-        commitMessage: string
-    ) => {
-        setIsUpdating(true);
-        try {
-            const result = await updateGithubContentFile(dataArray, filePath, commitMessage);
-            if (result.success) {
-                toast({ title: 'Success', description: `${variableName} data saved to GitHub.` });
-                return true;
-            } else {
-                console.error(`Error saving ${variableName} data to GitHub:`, result.message);
-                toast({ title: 'Persistence Error', description: `Failed to save ${variableName} data: ${result.message}`, variant: 'destructive' });
-                return false;
-            }
-        } catch (error: any) {
-            console.error(`Unexpected error during persistence of ${variableName} data to GitHub:`, error);
-            toast({ title: 'Persistence Error', description: `Unexpected error: ${error.message}`, variant: 'destructive' });
-            return false;
-        } finally {
-            setIsUpdating(false);
-        }
-    }, [toast]);
+    // REMOVED persistGitHubData as GitHub is no longer used for dynamic content
 
     const loadAllStudents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
             let query = supabase.from('user_profiles').select('*').eq('role', 'student');
-            if (selectedYearFilter !== 'all') {
-                query = query.eq('year', parseInt(selectedYearFilter));
-            }
             const { data, error } = await query.order('student_name', { ascending: true });
             if (error) throw error;
 
@@ -261,17 +212,37 @@ const AdminDashboard = () => {
         } finally {
             setIsGlobalLoading(false);
         }
-    }, [selectedYearFilter, toast]);
+    }, [toast]);
+
+    useEffect(() => {
+        let currentFilteredStudents = allStudents;
+
+        if (selectedYearFilter !== 'all') {
+            currentFilteredStudents = currentFilteredStudents.filter(student =>
+                student.year === parseInt(selectedYearFilter)
+            );
+        }
+
+        if (studentSearchTerm) {
+            currentFilteredStudents = currentFilteredStudents.filter(student =>
+                student.student_name.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
+                student.ht_no.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
+                (student.email && student.email.toLowerCase().includes(studentSearchTerm.toLowerCase()))
+            );
+        }
+        setFilteredStudents(currentFilteredStudents);
+    }, [allStudents, selectedYearFilter, studentSearchTerm]);
 
 
     const loadEvents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            const data = await fetchAndParseJsonFile<Event[]>('src/data/events.json');
+            // NEW: Fetch from Supabase Table 'events'
+            const data = await fetchAllEntries<Event>('events');
             setEvents(data || []);
         } catch (error: any) {
             console.error('Error loading events:', error);
-            toast({ title: 'Error loading events', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
+            toast({ title: 'Error loading events', description: error.message || 'Please check Supabase "events" table.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -280,11 +251,12 @@ const AdminDashboard = () => {
     const loadFaculty = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            const data = await fetchAndParseJsonFile<Faculty[]>('src/data/faculty.json');
+            // NEW: Fetch from Supabase Table 'faculty'
+            const data = await fetchAllEntries<Faculty>('faculty');
             setFaculty(data || []);
         } catch (error: any) {
             console.error('Error loading faculty:', error);
-            toast({ title: 'Error loading faculty', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
+            toast({ title: 'Error loading faculty', description: error.message || 'Please check Supabase "faculty" table.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -293,11 +265,12 @@ const AdminDashboard = () => {
     const loadPlacements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            const data = await fetchAndParseJsonFile<Placement[]>('src/data/placements.json');
+            // NEW: Fetch from Supabase Table 'placements'
+            const data = await fetchAllEntries<Placement>('placements');
             setPlacements(data || []);
         } catch (error: any) {
             console.error('Error loading placements:', error);
-            toast({ title: 'Error loading placements', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
+            toast({ title: 'Error loading placements', description: error.message || 'Please check Supabase "placements" table.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -306,11 +279,12 @@ const AdminDashboard = () => {
     const loadGallery = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            const data = await fetchAndParseJsonFile<GalleryItem[]>('src/data/gallery.json');
+            // NEW: Fetch from Supabase Table 'gallery'
+            const data = await fetchAllEntries<GalleryItem>('gallery');
             setGallery(data || []);
         } catch (error: any) {
             console.error('Error loading gallery:', error);
-            toast({ title: 'Error loading gallery', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
+            toast({ title: 'Error loading gallery', description: error.message || 'Please check Supabase "gallery" table.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -319,11 +293,12 @@ const AdminDashboard = () => {
     const loadAchievements = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            const data = await fetchAndParseJsonFile<Achievement[]>('src/data/achievements.json');
+            // NEW: Fetch from Supabase Table 'achievements'
+            const data = await fetchAllEntries<Achievement>('achievements');
             setAchievements(data || []);
         } catch (error: any) {
             console.error('Error loading achievements:', error);
-            toast({ title: 'Error loading achievements', description: error.message || 'Please check GitHub data.', variant: 'destructive' });
+            toast({ title: 'Error loading achievements', description: error.message || 'Please check Supabase "achievements" table.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -332,10 +307,10 @@ const AdminDashboard = () => {
 
     const loadCertifications = useCallback(async () => {
         setIsGlobalLoading(true);
-        console.log("loadCertifications called with filters:", { certificateSearchHTNO, selectedYearFilterCerts }); // Diagnostic Log
+        console.log("loadCertifications called with filters:", { certificateSearchHTNO, selectedYearFilterCerts });
         try {
             let query = supabase
-                .from('student_certificates') // Corrected table name
+                .from('student_certificates')
                 .select(`
                     id,
                     htno,
@@ -353,16 +328,16 @@ const AdminDashboard = () => {
 
             const { data, error } = await query.order('uploaded_at', { ascending: false });
 
-            console.log("Supabase query result:", { data, error }); // Diagnostic Log
+            console.log("Supabase student_certificates query result:", { data, error });
 
             if (!error && data) {
                 const transformedData: CertificateItem[] = data.map((cert: any) => ({
                     id: cert.id,
-                    ht_no: cert.htno, // Map from 'htno' (student_certificates) to 'ht_no' (CertificateItem interface)
-                    certificate_name: cert.title, // Map from 'title' to 'certificate_name'
-                    description: cert.description, // Map 'description'
-                    // IMPORTANT: Assuming cert.file_url from DB will now be the path within the bucket
-                    certificate_url: cert.file_url, // This is expected to be 'folder/filename.ext'
+                    ht_no: cert.htno,
+                    certificate_name: cert.title,
+                    description: cert.description,
+                    certificate_url: supabase.storage.from('certifications').getPublicUrl(cert.file_url).data.publicUrl, // Get public URL here
+                    file_path: cert.file_url, // Keep original file_path for deletion
                     uploaded_at: cert.uploaded_at,
                     user_id: cert.user_id,
                     user_profiles: cert.user_profiles ? {
@@ -374,13 +349,18 @@ const AdminDashboard = () => {
                     } : undefined
                 }));
 
-                console.log("Transformed data:", transformedData); // Diagnostic Log
                 setCertifications(transformedData);
-                if (!certificateSearchHTNO && selectedYearFilterCerts === 'all') {
-                    setFilteredCertificates(transformedData);
-                }
+                // Apply client-side filter initially if search term/year filter is present
+                const initialFiltered = transformedData.filter(cert => {
+                    const matchesYear = selectedYearFilterCerts === 'all' || cert.user_profiles?.year === parseInt(selectedYearFilterCerts);
+                    const matchesSearch = !certificateSearchHTNO ||
+                        cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
+                        (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
+                        (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()));
+                    return matchesYear && matchesSearch;
+                });
+                setFilteredCertificates(initialFiltered);
             } else {
-                console.error('Error loading certificates:', error);
                 toast({ title: 'Error loading certificates', description: error?.message || 'Unknown error', variant: 'destructive' });
             }
         } catch (error) {
@@ -389,14 +369,14 @@ const AdminDashboard = () => {
         } finally {
             setIsGlobalLoading(false);
         }
-    }, [toast, selectedYearFilterCerts, certificateSearchHTNO]);
+    }, [toast, certificateSearchHTNO, selectedYearFilterCerts]); // Depend on filters to reload if they change
 
     const loadStats = useCallback(async () => {
         try {
             const { count: studentsCount, error: studentsError } = await supabase.from('user_profiles').select('id', { count: 'exact' }).eq('role', 'student');
             if (studentsError) throw studentsError;
 
-            // Stats related to GitHub-backed data are based on the current state, not refetched
+            // NEW: Use lengths of state arrays that are populated from Supabase Tables
             setStats({
                 totalStudents: studentsCount || 0,
                 activeEvents: events.length || 0,
@@ -412,7 +392,7 @@ const AdminDashboard = () => {
     }, [toast, events.length, faculty.length, placements.length, achievements.length]);
 
     useEffect(() => {
-        console.log("AdminDashboard useEffect triggered. Loading:", loading, " UserProfile:", userProfile); // Diagnostic Log
+        console.log("AdminDashboard useEffect triggered. Loading:", loading, " UserProfile:", userProfile);
         if (!loading && userProfile?.role === 'admin') {
             loadAllStudents();
             loadEvents();
@@ -420,12 +400,13 @@ const AdminDashboard = () => {
             loadPlacements();
             loadGallery();
             loadAchievements();
-            loadCertifications(); // This will now load all certs for admin, or filtered by year
+            loadCertifications();
             loadStats();
 
             const studentsChannel = supabase
                 .channel('students-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, () => {
+                    console.log("Supabase user_profiles change detected. Reloading students.");
                     loadAllStudents();
                     loadStats();
                 })
@@ -433,26 +414,65 @@ const AdminDashboard = () => {
 
             const certificatesChannel = supabase
                 .channel('certificates-changes')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'student_certificates' }, (payload) => { // Corrected table name in subscription
-                    console.log("Supabase student_certificates change detected. Reloading certs. Payload:", payload); // Diagnostic Log
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'student_certificates' }, (payload) => {
+                    console.log("Supabase student_certificates change detected. Reloading certs. Payload:", payload);
                     loadCertifications();
                 })
                 .subscribe();
 
+            // NEW: Realtime subscriptions for other tables
+            const eventsChannel = supabase.channel('events-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+                    console.log("Supabase events change detected. Reloading events.");
+                    loadEvents();
+                    loadStats();
+                }).subscribe();
+
+            const facultyChannel = supabase.channel('faculty-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'faculty' }, () => {
+                    console.log("Supabase faculty change detected. Reloading faculty.");
+                    loadFaculty();
+                    loadStats();
+                }).subscribe();
+
+            const placementsChannel = supabase.channel('placements-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'placements' }, () => {
+                    console.log("Supabase placements change detected. Reloading placements.");
+                    loadPlacements();
+                    loadStats();
+                }).subscribe();
+
+            const galleryChannel = supabase.channel('gallery-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery' }, () => {
+                    console.log("Supabase gallery change detected. Reloading gallery.");
+                    loadGallery();
+                }).subscribe();
+
+            const achievementsChannel = supabase.channel('achievements-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'achievements' }, () => {
+                    console.log("Supabase achievements change detected. Reloading achievements.");
+                    loadAchievements();
+                    loadStats();
+                }).subscribe();
+
             return () => {
                 supabase.removeChannel(studentsChannel);
                 supabase.removeChannel(certificatesChannel);
+                supabase.removeChannel(eventsChannel);
+                supabase.removeChannel(facultyChannel);
+                supabase.removeChannel(placementsChannel);
+                supabase.removeChannel(galleryChannel);
+                supabase.removeChannel(achievementsChannel);
             };
         } else if (!loading && userProfile && userProfile.role !== 'admin') {
-            console.log("Redirecting non-admin user to /."); // Diagnostic Log
+            console.log("Redirecting non-admin user to /.");
             setLocation('/');
         }
     }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadStats]);
 
     // This useEffect handles the *client-side filtering* based on search/year input
-    // It does NOT trigger a new database fetch, only filters the 'certifications' state.
+    // for certificates table.
     useEffect(() => {
-        console.log("Filtering useEffect triggered. Search:", certificateSearchHTNO, " Year Filter:", selectedYearFilterCerts, " Certs count:", certifications.length); // Diagnostic Log
         let currentFiltered = certifications;
 
         if (selectedYearFilterCerts !== 'all') {
@@ -462,15 +482,14 @@ const AdminDashboard = () => {
         }
 
         if (certificateSearchHTNO) {
-            // Updated to check against `ht_no` in the CertificateItem interface and user_profiles fields
             currentFiltered = currentFiltered.filter(cert =>
-                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) || // Search against mapped ht_no
+                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) ||
                 (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
                 (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
             );
         }
+
         setFilteredCertificates(currentFiltered);
-        console.log("Filtered certificates count:", currentFiltered.length); // Diagnostic Log
     }, [certificateSearchHTNO, certifications, selectedYearFilterCerts]);
 
 
@@ -510,7 +529,7 @@ const AdminDashboard = () => {
             toast({ title: 'Error', description: 'Invalid year format for promotion', variant: 'destructive' });
             return;
         }
-        if (numericYear >= 4) { // Assuming 4th year is final year
+        if (numericYear >= 4) {
             toast({ title: 'Notice', description: 'Student is already in final year or graduated.' });
             return;
         }
@@ -518,17 +537,16 @@ const AdminDashboard = () => {
         const confirmPromotion = window.confirm(`Promote this student to year ${nextYear}?`);
         if (!confirmPromotion) return;
         try {
-            const { error } = await supabase.from('user_profiles').update({ year: nextYear }).eq('id', studentId);
-            if (!error) {
+            const result = await updateEntry<PendingStudent>('user_profiles', studentId, { year: nextYear });
+            if (result) {
                 toast({ title: `Student promoted to year ${nextYear}` });
                 loadAllStudents();
+            } else {
+                toast({ title: 'Promotion failed', description: 'Failed to update student in database.', variant: 'destructive' });
             }
-            else toast({ title: 'Promotion failed', description: error.message, variant: 'destructive' });
         } catch (error: any) {
             console.error('Error promoting student:', error);
             toast({ title: 'Promotion failed', description: error.message || 'Please try again later.', variant: 'destructive' });
-        } finally {
-            // No specific loading state to reset here, as loadAllStudents handles its own.
         }
     };
 
@@ -545,7 +563,7 @@ const AdminDashboard = () => {
             return;
         }
 
-        if (currentYearNum >= 4) { // Assuming 4th year is final year
+        if (currentYearNum >= 4) {
             toast({ title: 'Notice', description: 'Students in 4th Year cannot be promoted further.', variant: 'info' });
             setIsPromoteModalOpen(false);
             setYearToPromote('');
@@ -561,6 +579,7 @@ const AdminDashboard = () => {
 
         setIsUpdating(true);
         try {
+            // Using direct supabase client for bulk operation
             const { error } = await supabase
                 .from('user_profiles')
                 .update({ year: nextYear })
@@ -587,16 +606,13 @@ const AdminDashboard = () => {
     const updateStudent = async (studentData: Partial<PendingStudent>) => {
         setIsUpdating(true);
         try {
-            const { error } = await supabase
-                .from('user_profiles')
-                .update(studentData)
-                .eq('id', editingStudent?.id);
-            if (!error) {
+            const result = await updateEntry<PendingStudent>('user_profiles', studentData.id!, studentData);
+            if (result) {
                 toast({ title: "Student details updated successfully" });
                 setEditingStudent(null);
                 loadAllStudents();
             } else {
-                toast({ title: 'Error updating student', description: error.message, variant: 'destructive' });
+                toast({ title: 'Error updating student', description: 'Failed to update student in database.', variant: 'destructive' });
             }
         } catch (error: any) {
             console.error('Error updating student:', error);
@@ -619,40 +635,31 @@ const AdminDashboard = () => {
 
         setIsPhotoLoading(true);
 
-        const filePathInStorage = `profiles/${viewingStudent.id}/photo.jpg`;
+        const folderPath = `profiles/${viewingStudent.id}`;
+        const { publicUrl, filePath, error: uploadError } = await uploadFile('profile_photos', newProfilePhotoFile, folderPath);
+
+        if (uploadError || !publicUrl) {
+            console.error('Error uploading profile photo:', uploadError);
+            toast({ title: 'Error uploading photo', description: uploadError?.message || 'Please try again.', variant: 'destructive' });
+            setIsPhotoLoading(false);
+            return;
+        }
 
         try {
-            const { error: uploadError } = await supabase.storage
-                .from('profile_photos')
-                .upload(filePathInStorage, newProfilePhotoFile, {
-                    upsert: true,
-                    contentType: newProfilePhotoFile.type,
-                });
-
-            if (uploadError) {
-                throw uploadError;
+            const result = await updateEntry<PendingStudent>('user_profiles', viewingStudent.id, { photo_url: publicUrl });
+            if (result) {
+                toast({ title: '✅ Profile photo updated successfully' });
+                setNewProfilePhotoFile(null);
+                loadAllStudents();
+                setViewingStudent(prev => prev ? { ...prev, photo_url: publicUrl } : null);
+            } else {
+                // If DB update fails, try to delete the uploaded file
+                await deleteFile('profile_photos', filePath!);
+                toast({ title: 'Error updating photo', description: 'Failed to link photo to student profile in database. File uploaded but not saved.', variant: 'destructive' });
             }
-
-            const { data: publicUrlData } = supabase.storage.from('profile_photos').getPublicUrl(filePathInStorage);
-            const newPhotoUrl = publicUrlData.publicUrl;
-
-            const { error: updateError } = await supabase
-                .from('user_profiles')
-                .update({ photo_url: newPhotoUrl })
-                .eq('id', viewingStudent.id);
-
-            if (updateError) {
-                throw updateError;
-            }
-
-            toast({ title: '✅ Profile photo updated successfully' });
-            setNewProfilePhotoFile(null);
-            loadAllStudents();
-            setViewingStudent(prev => prev ? { ...prev, photo_url: newPhotoUrl } : null);
-
         } catch (error: any) {
-            console.error('Error uploading profile photo:', error);
-            toast({ title: 'Error uploading photo', description: error.message || 'Please try again.', variant: 'destructive' });
+            console.error('Error linking profile photo to student:', error);
+            toast({ title: 'Error linking photo', description: error.message || 'Please try again.', variant: 'destructive' });
         } finally {
             setIsPhotoLoading(false);
         }
@@ -664,34 +671,11 @@ const AdminDashboard = () => {
         setIsPhotoLoading(false);
     };
 
-    // Corrected handleDragEnd signature and usage
-    const handleDragEnd = async <T extends { id: string }>(
-        event: DragEndEvent,
-        dataArray: T[],
-        setDataArray: React.Dispatch<React.SetStateAction<T[]>>,
-        filePath: string,
-        variableName: string
-    ) => {
-        const { active, over } = event;
-
-        if (active.id !== over?.id) {
-            const oldIndex = dataArray.findIndex(item => item.id === active.id);
-            const newIndex = dataArray.findIndex(item => item.id === over?.id);
-
-            if (oldIndex !== -1 && newIndex !== -1) {
-                const newOrderedArray = arrayMove(dataArray, oldIndex, newIndex);
-                setDataArray(newOrderedArray);
-
-                const success = await persistGitHubData(newOrderedArray, filePath, variableName, `Reordered ${variableName}`);
-                if (!success) {
-                    setDataArray(dataArray);
-                    toast({ title: 'Reorder Failed', description: 'Changes could not be saved to GitHub.', variant: 'destructive' });
-                } else {
-                    toast({ title: 'Reordered successfully', description: `Items in ${variableName} have been reordered.` });
-                }
-            }
-        }
-    };
+    // REMOVED handleDragEnd for dynamic content types (events, faculty, etc.)
+    // because drag-and-drop reordering for relational databases needs an explicit
+    // 'order_index' column and more complex logic to update multiple rows.
+    // If you need this, you'd add an 'order_index' column to each table and
+    // then re-implement this logic to update those indices.
 
     const handleDeleteEvent = async (eventToDelete: Event) => {
         const confirmDelete = window.confirm(`Are you sure you want to delete the event "${eventToDelete.title}"? This cannot be undone.`);
@@ -699,33 +683,23 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
-            if (eventToDelete.image) {
-                // Determine the path within the GitHub repository
-                const imagePathInRepo = eventToDelete.image.includes('raw.githubusercontent.com')
-                    ? eventToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : eventToDelete.image.startsWith('src/assets/uploads/') // Check for relative paths used directly in repo
-                        ? eventToDelete.image
-                        : null;
-
-                if (imagePathInRepo) {
-                    const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete event image: ${eventToDelete.title}`);
-                    if (!deleteResult.success) {
-                        console.warn(`Failed to delete image for event ${eventToDelete.title}: ${deleteResult.message}`);
-                        toast({ title: 'Image Deletion Warning', description: `Could not delete event image from GitHub: ${deleteResult.message}`, variant: 'warning' });
-                    }
+            // Delete image from storage first
+            if (eventToDelete.image_path) {
+                const { success, error } = await deleteFile('events', eventToDelete.image_path);
+                if (error) {
+                    console.warn(`Failed to delete event image ${eventToDelete.image_path}:`, error.message);
+                    toast({ title: 'Image Deletion Warning', description: `Could not delete event image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
 
-            const updatedEvents = events.filter(event => event.id !== eventToDelete.id);
-            setEvents(updatedEvents);
-
-            const success = await persistGitHubData(updatedEvents, 'src/data/events.json', 'events', `Delete event: ${eventToDelete.title}`);
-            if (!success) {
-                setEvents(events); // Revert local state if GitHub update fails
-                toast({ title: 'Error', description: 'Failed to delete event details from GitHub. Please refresh.', variant: 'destructive' });
-            } else {
+            // Then delete record from table
+            const { success, error } = await deleteEntry('events', eventToDelete.id);
+            if (success) {
                 toast({ title: 'Event deleted successfully' });
+                loadEvents();
                 loadStats();
+            } else {
+                toast({ title: 'Error deleting event', description: error?.message || 'Please try again.', variant: 'destructive' });
             }
         } catch (error: any) {
             console.error('Error deleting event:', error);
@@ -741,32 +715,21 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
-            if (facultyToDelete.image) {
-                const imagePathInRepo = facultyToDelete.image.includes('raw.githubusercontent.com')
-                    ? facultyToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : facultyToDelete.image.startsWith('src/assets/uploads/')
-                        ? facultyToDelete.image
-                        : null;
-
-                   if (imagePathInRepo) {
-                    const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete faculty image: ${facultyToDelete.name}`);
-                    if (!deleteResult.success) {
-                        console.warn(`Failed to delete image for faculty ${facultyToDelete.name}: ${deleteResult.message}`);
-                        toast({ title: 'Image Deletion Warning', description: `Could not delete faculty image from GitHub: ${deleteResult.message}`, variant: 'warning' });
-                    }
+            if (facultyToDelete.image_path) {
+                const { success, error } = await deleteFile('faculty', facultyToDelete.image_path);
+                if (error) {
+                    console.warn(`Failed to delete faculty image ${facultyToDelete.image_path}:`, error.message);
+                    toast({ title: 'Image Deletion Warning', description: `Could not delete faculty image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
 
-            const updatedFaculty = faculty.filter(member => member.id !== facultyToDelete.id);
-            setFaculty(updatedFaculty);
-
-            const success = await persistGitHubData(updatedFaculty, 'src/data/faculty.json', 'faculty', `Delete faculty: ${facultyToDelete.name}`);
-            if (!success) {
-                setFaculty(faculty);
-                toast({ title: 'Error', description: 'Failed to delete faculty details from GitHub. Please refresh.', variant: 'destructive' });
-            } else {
+            const { success, error } = await deleteEntry('faculty', facultyToDelete.id);
+            if (success) {
                 toast({ title: 'Faculty member deleted successfully' });
+                loadFaculty();
                 loadStats();
+            } else {
+                toast({ title: 'Error deleting faculty', description: error?.message || 'Please try again.', variant: 'destructive' });
             }
         } catch (error: any) {
             console.error('Error deleting faculty:', error);
@@ -782,31 +745,20 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
-            if (itemToDelete.image) {
-                const imagePathInRepo = itemToDelete.image.includes('raw.githubusercontent.com')
-                    ? itemToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : itemToDelete.image.startsWith('src/assets/uploads/')
-                        ? itemToDelete.image
-                        : null;
-
-                   if (imagePathInRepo) {
-                    const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete gallery image: ${itemToDelete.title}`);
-                    if (!deleteResult.success) {
-                        console.warn(`Failed to delete image for gallery item ${itemToDelete.title}: ${deleteResult.message}`);
-                        toast({ title: 'Image Deletion Warning', description: `Could not delete gallery image from GitHub: ${deleteResult.message}`, variant: 'warning' });
-                    }
+            if (itemToDelete.image_path) {
+                const { success, error } = await deleteFile('gallery', itemToDelete.image_path);
+                if (error) {
+                    console.warn(`Failed to delete gallery image ${itemToDelete.image_path}:`, error.message);
+                    toast({ title: 'Image Deletion Warning', description: `Could not delete gallery image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
 
-            const updatedGallery = gallery.filter(item => item.id !== itemToDelete.id);
-            setGallery(updatedGallery);
-
-            const success = await persistGitHubData(updatedGallery, 'src/data/gallery.json', 'galleryItems', `Delete gallery item: ${itemToDelete.title}`);
-            if (!success) {
-                setGallery(gallery);
-                toast({ title: 'Error', description: 'Failed to delete gallery item from GitHub. Please refresh.', variant: 'destructive' });
-            } else {
+            const { success, error } = await deleteEntry('gallery', itemToDelete.id);
+            if (success) {
                 toast({ title: 'Gallery item deleted successfully' });
+                loadGallery();
+            } else {
+                toast({ title: 'Error deleting gallery item', description: error?.message || 'Please try again.', variant: 'destructive' });
             }
         } catch (error: any) {
             console.error('Error deleting gallery item:', error);
@@ -822,32 +774,21 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
-            if (itemToDelete.image) {
-                const imagePathInRepo = itemToDelete.image.includes('raw.githubusercontent.com')
-                    ? itemToDelete.image.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : itemToDelete.image.startsWith('src/assets/uploads/')
-                        ? itemToDelete.image
-                        : null;
-
-                   if (imagePathInRepo) {
-                    const deleteResult = await deleteFileFromGithub(imagePathInRepo, `Delete placement image: ${itemToDelete.student_name}`);
-                    if (!deleteResult.success) {
-                        console.warn(`Failed to delete image for placement ${itemToDelete.student_name}: ${deleteResult.message}`);
-                        toast({ title: 'Image Deletion Warning', description: `Could not delete placement image from GitHub: ${deleteResult.message}`, variant: 'warning' });
-                    }
+            if (itemToDelete.image_path) {
+                const { success, error } = await deleteFile('placements', itemToDelete.image_path);
+                if (error) {
+                    console.warn(`Failed to delete placement image ${itemToDelete.image_path}:`, error.message);
+                    toast({ title: 'Image Deletion Warning', description: `Could not delete placement image from storage: ${error.message}`, variant: 'warning' });
                 }
             }
 
-            const updatedPlacements = placements.filter(item => item.id !== itemToDelete.id);
-            setPlacements(updatedPlacements);
-
-            const success = await persistGitHubData(updatedPlacements, 'src/data/placements.json', 'placements', `Delete placement: ${itemToDelete.student_name}`);
-            if (!success) {
-                setPlacements(placements);
-                toast({ title: 'Error', description: 'Failed to delete placement record from GitHub. Please refresh.', variant: 'destructive' });
-            } else {
+            const { success, error } = await deleteEntry('placements', itemToDelete.id);
+            if (success) {
                 toast({ title: 'Placement record deleted successfully' });
+                loadPlacements();
                 loadStats();
+            } else {
+                toast({ title: 'Error deleting placement record', description: error?.message || 'Please try again.', variant: 'destructive' });
             }
         } catch (error: any) {
             console.error('Error deleting placement:', error);
@@ -863,32 +804,21 @@ const AdminDashboard = () => {
 
         setIsDeleting(true);
         try {
-            if (itemToDelete.certificate_url) {
-                const filePathInRepo = itemToDelete.certificate_url.includes('raw.githubusercontent.com')
-                    ? itemToDelete.certificate_url.split('raw.githubusercontent.com/theshubhamgundu/vitsaids/main/')[1]
-                    : itemToDelete.certificate_url.startsWith('src/assets/uploads/')
-                        ? itemToDelete.certificate_url
-                        : null;
-
-                   if (filePathInRepo) {
-                    const deleteResult = await deleteFileFromGithub(filePathInRepo, `Delete achievement certificate: ${itemToDelete.title}`);
-                    if (!deleteResult.success) {
-                        console.warn(`Failed to delete certificate for achievement ${itemToDelete.title}: ${deleteResult.message}`);
-                        toast({ title: 'Certificate Deletion Warning', description: `Could not delete achievement certificate from GitHub: ${deleteResult.message}`, variant: 'warning' });
-                    }
+            if (itemToDelete.file_path) {
+                const { success, error } = await deleteFile('achievements', itemToDelete.file_path);
+                if (error) {
+                    console.warn(`Failed to delete achievement file ${itemToDelete.file_path}:`, error.message);
+                    toast({ title: 'File Deletion Warning', description: `Could not delete achievement file from storage: ${error.message}`, variant: 'warning' });
                 }
             }
 
-            const updatedAchievements = achievements.filter(item => item.id !== itemToDelete.id);
-            setAchievements(updatedAchievements);
-
-            const success = await persistGitHubData(updatedAchievements, 'src/data/achievements.json', 'achievements', `Delete achievement: ${itemToDelete.title}`);
-            if (!success) {
-                setAchievements(achievements);
-                toast({ title: 'Error', description: 'Failed to delete achievement from GitHub. Please refresh.', variant: 'destructive' });
-            } else {
+            const { success, error } = await deleteEntry('achievements', itemToDelete.id);
+            if (success) {
                 toast({ title: 'Achievement deleted successfully' });
+                loadAchievements();
                 loadStats();
+            } else {
+                toast({ title: 'Error deleting achievement', description: error?.message || 'Please try again.', variant: 'destructive' });
             }
         } catch (error: any) {
             console.error('Error deleting achievement:', error);
@@ -900,55 +830,22 @@ const AdminDashboard = () => {
 
 
     const handleSearchCertificates = () => {
-        console.log("handleSearchCertificates triggered."); // Diagnostic Log
-        if (!certificateSearchHTNO && selectedYearFilterCerts === 'all') {
-            setFilteredCertificates(certifications);
-            toast({ title: 'Showing all certificates.' });
-            return;
-        }
-
-        let currentFiltered = certifications;
-
-        if (selectedYearFilterCerts !== 'all') {
-            currentFiltered = currentFiltered.filter(cert =>
-                cert.user_profiles?.year === parseInt(selectedYearFilterCerts)
-            );
-        }
-
-        if (certificateSearchHTNO) {
-            // Updated to check against `ht_no` in the CertificateItem interface and user_profiles fields
-            currentFiltered = currentFiltered.filter(cert =>
-                cert.ht_no.toLowerCase().includes(certificateSearchHTNO.toLowerCase()) || // Search against mapped ht_no
-                (cert.user_profiles?.student_name && cert.user_profiles.student_name.toLowerCase().includes(certificateSearchHTNO.toLowerCase())) ||
-                (cert.user_profiles?.email && cert.user_profiles.email.toLowerCase().includes(certificateSearchHTNO.toLowerCase()))
-            );
-        }
-
-        setFilteredCertificates(currentFiltered);
-
-        if (currentFiltered.length === 0) {
-            toast({ title: 'No certificates found for this search criteria.' });
-        } else {
-            toast({ title: `Found ${currentFiltered.length} certificate(s).` });
-        }
+        console.log("handleSearchCertificates triggered. This function is now mostly handled by useEffect for dynamic filtering.");
+        // The filtering logic is now in the useEffect hook.
+        // This function can remain to trigger a re-evaluation or for future complex search logic.
+        // For simple input-based filtering, the useEffect reacting to `certificateSearchHTNO` and `selectedYearFilterCerts` is sufficient.
+        toast({ title: 'Filters applied.' });
     };
 
 
-    const deleteCertification = async (certId: string, certificateUrl: string) => {
+    const deleteCertification = async (certId: string, certificateFilePath: string) => { // Renamed param for clarity
         const confirmDelete = window.confirm("Are you sure you want to delete this certificate? This action cannot be undone.");
         if (!confirmDelete) return;
 
         setIsDeleting(true);
         try {
-            if (certificateUrl) {
-                // IMPORTANT: Assuming certificateUrl now contains ONLY the path within the 'certifications' bucket
-                // (e.g., '23891A7228/1753105852209-Shubham.png')
-                const pathToRemove = certificateUrl;
-
-                // Diagnostic log: What path is being sent to Supabase Storage for removal?
-                console.log("Attempting to remove certificate from path:", pathToRemove);
-
-                const { error: storageError } = await supabase.storage.from('certifications').remove([pathToRemove]);
+            if (certificateFilePath) {
+                const { error: storageError } = await supabase.storage.from('certifications').remove([certificateFilePath]);
                 if (storageError) {
                     console.warn('Error deleting certificate file from Supabase storage:', storageError);
                     toast({ title: 'Warning', description: 'Could not delete file from Supabase storage. Record deleted from DB.', variant: 'destructive' });
@@ -962,7 +859,7 @@ const AdminDashboard = () => {
 
             if (!error) {
                 toast({ title: "Certificate deleted successfully" });
-                loadCertifications(); // Reload certificates to update UI
+                loadCertifications();
             } else {
                 toast({ title: 'Error deleting certificate', description: error.message, variant: 'destructive' });
             }
@@ -981,25 +878,30 @@ const AdminDashboard = () => {
             return;
         }
         setIsUploading(true);
-        const fileName = `${Date.now()}-${resultFile.name}`;
-        const filePath = `results/${fileName}`;
+
+        const folderPath = 'public_results'; // Or any specific folder within the 'results' bucket
+        const { publicUrl, filePath, error: uploadError } = await uploadFile('results', resultFile, folderPath);
+
+        if (uploadError || !publicUrl) {
+            console.error('Error uploading result file:', uploadError);
+            toast({ title: 'Upload failed', description: uploadError?.message || 'Please try again later.', variant: 'destructive' });
+            setIsUploading(false);
+            return;
+        }
 
         try {
-            const { error: uploadError } = await supabase.storage.from('results').upload(filePath, resultFile, { upsert: true });
-            if (uploadError) {
-                throw uploadError;
-            }
-            const { data: publicUrlData } = supabase.storage.from('results').getPublicUrl(filePath);
-
-            const { error: dbError } = await supabase.from('results').insert([{ title: resultTitle, file_url: publicUrlData.publicUrl }]);
+            // Assume you have a 'results' table in Supabase
+            const { error: dbError } = await supabase.from('results').insert([{ title: resultTitle, file_url: publicUrl, file_path: filePath }]);
             if (dbError) {
+                // If DB insert fails, clean up the uploaded file
+                await deleteFile('results', filePath!);
                 throw dbError;
             }
             toast({ title: '✅ Result uploaded successfully' });
             setResultTitle('');
             setResultFile(null);
         } catch (error: any) {
-            console.error('Error uploading result:', error);
+            console.error('Error linking result in database:', error);
             toast({ title: 'Upload failed', description: error.message || 'Please try again later.', variant: 'destructive' });
         } finally {
             setIsUploading(false);
@@ -1061,7 +963,7 @@ const AdminDashboard = () => {
         RESULTS: 'results',
         TIMETABLE: 'timetable',
         GALLERY: 'gallery',
-        NOTIFICATIONS: 'notifications', // Added notifications tab
+        NOTIFICATIONS: 'notifications',
     };
 
 
@@ -1203,7 +1105,7 @@ const AdminDashboard = () => {
                             <CardHeader>
                                 <CardTitle className="flex items-center space-x-2">
                                     <Users className="w-5 h-5" />
-                                    <span>Student Management ({allStudents.length})</span>
+                                    <span>Student Management ({filteredStudents.length} / {allStudents.length} Total)</span>
                                     <div className="ml-auto flex items-center space-x-2">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
@@ -1222,8 +1124,13 @@ const AdminDashboard = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="mb-4 flex items-center space-x-2">
-                                    <Label htmlFor="year-filter" className="sr-only">Filter by Year</Label>
+                                <div className="mb-4 flex flex-wrap items-center gap-2">
+                                    <SearchBar
+                                        searchTerm={studentSearchTerm}
+                                        onSearchChange={setStudentSearchTerm}
+                                        onClear={() => setStudentSearchTerm('')}
+                                        placeholder="Search by H.T No., Name, or Email"
+                                    />
                                     <Select value={selectedYearFilter} onValueChange={(value) => setSelectedYearFilter(value)}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Filter by Year" />
@@ -1238,7 +1145,7 @@ const AdminDashboard = () => {
                                     </Select>
                                 </div>
 
-                                {allStudents.length > 0 ?
+                                {filteredStudents.length > 0 ?
                                     (
                                         <div className="overflow-x-auto">
                                             <table className="w-full border-collapse border border-gray-200">
@@ -1247,11 +1154,12 @@ const AdminDashboard = () => {
                                                         <th className="border border-gray-200 px-3 py-2 text-left">H.T No.</th>
                                                         <th className="border border-gray-200 px-3 py-2 text-left">Student Name</th>
                                                         <th className="border border-gray-200 px-3 py-2 text-left">Year</th>
+                                                        <th className="border border-gray-200 px-3 py-2 text-left">Actions</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {allStudents.map((student) => (
-                                                        <tr key={student.id} onClick={() => handleViewStudentDetails(student)} className="cursor-pointer hover:bg-gray-100">
+                                                    {filteredStudents.map((student) => (
+                                                        <tr key={student.id} className="cursor-pointer hover:bg-gray-100">
                                                             <td className="border border-gray-200 px-3 py-2">{student.ht_no}</td>
                                                             <td className="border border-gray-200 px-3 py-2 flex items-center gap-2">
                                                                 <img
@@ -1263,6 +1171,11 @@ const AdminDashboard = () => {
                                                                 <span className="text-sm font-medium">{student.student_name}</span>
                                                             </td>
                                                             <td className="border border-gray-200 px-3 py-2">{student.year}</td>
+                                                            <td className="border border-gray-200 px-3 py-2">
+                                                                <Button size="sm" variant="outline" onClick={() => handleViewStudentDetails(student)}>
+                                                                    View Details
+                                                                </Button>
+                                                            </td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -1272,6 +1185,7 @@ const AdminDashboard = () => {
                                         <div className="text-center py-8">
                                             <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                                             <p className="text-gray-500 text-lg">No students found</p>
+                                            {(studentSearchTerm || selectedYearFilter !== 'all') && <p className="text-gray-500 text-sm">(Try clearing the filters)</p>}
                                         </div>
                                     )}
                             </CardContent>
@@ -1318,7 +1232,8 @@ const AdminDashboard = () => {
                                         onClick={() => {
                                             setCertificateSearchHTNO('');
                                             setSelectedYearFilterCerts('all');
-                                            loadCertifications(); // Trigger reload from DB to reset all filters cleanly
+                                            // Re-fetch to ensure full reset if initial load had filters
+                                            loadCertifications();
                                             toast({ title: 'Filters cleared, showing all certificates.' });
                                         }}
                                         disabled={!certificateSearchHTNO && selectedYearFilterCerts === 'all'}
@@ -1369,8 +1284,7 @@ const AdminDashboard = () => {
                                                                         variant="outline"
                                                                     >
                                                                         <a
-                                                                            // This will now correctly use the path from DB with getPublicUrl
-                                                                            href={supabase.storage.from('certifications').getPublicUrl(cert.certificate_url).data.publicUrl}
+                                                                            href={cert.certificate_url} // This is already the public URL
                                                                             target="_blank"
                                                                             rel="noopener noreferrer"
                                                                         >
@@ -1381,7 +1295,7 @@ const AdminDashboard = () => {
                                                                 <Button
                                                                     size="sm"
                                                                     variant="destructive"
-                                                                    onClick={() => deleteCertification(cert.id, cert.certificate_url)}
+                                                                    onClick={() => deleteCertification(cert.id, cert.file_path!)} // Pass file_path for deletion
                                                                 >
                                                                     <Trash2 className="w-4 h-4" />
                                                                 </Button>
@@ -1403,7 +1317,7 @@ const AdminDashboard = () => {
                         </Card>
                     </TabsContent>
 
-                    {/* Events Tab Content (GitHub Backed) */}
+                    {/* Events Tab Content (Supabase Table Backed) */}
                     <TabsContent value={TAB_VALUES.EVENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
@@ -1416,65 +1330,48 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {events.length > 0 ? (<div className="overflow-x-auto">
-                                                <DndContext
-                                                    sensors={sensors}
-                                                    collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, events, setEvents, 'src/data/events.json', 'events')}
-                                                >
-                                                    <SortableContext
-                                                        items={events.map(event => event.id)}
-                                                        strategy={verticalListSortingStrategy}
-                                                    >
-                                                        <table className="w-full border-collapse border border-gray-200">
-                                                            <thead>
-                                                                <tr className="bg-gray-50">
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Venue</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                            {events.length > 0 ? (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full border-collapse border border-gray-200">
+                                                        <thead>
+                                                            <tr className="bg-gray-50">
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Venue</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {events.map((event) => (
+                                                                <tr key={event.id} className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                    <td className="border border-gray-200 px-4 py-2">{event.title}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">{new Date(event.date).toLocaleDateString()}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">{event.venue || 'N/A'}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">
+                                                                        <div className="flex space-x-2">
+                                                                            {/* Assuming EventsUploadForm has an 'isEdit' mode and takes initialData */}
+                                                                            <EventsUploadForm
+                                                                                isEdit={true}
+                                                                                initialData={event}
+                                                                                onUploadSuccess={loadEvents} // Callback to reload events after edit
+                                                                                // You might need to pass uploadFile and updateEntry to these forms
+                                                                                // e.g., uploadFile={uploadFile} updateEntry={updateEntry}
+                                                                                // and the forms themselves would handle their state and interaction with SupabaseDataManager
+                                                                                isUploading={isUploading}
+                                                                                setIsUploading={setIsUploading}
+                                                                                isUpdating={isUpdating}
+                                                                                setIsUpdating={setIsUpdating}
+                                                                            />
+                                                                            <Button size="sm" variant="destructive" onClick={() => handleDeleteEvent(event)} disabled={isDeleting}>
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    </td>
                                                                 </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {events.map((event) => (
-                                                                    <SortableItem key={event.id} id={event.id}>
-                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                            </td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{event.title}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{new Date(event.date).toLocaleDateString()}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{event.venue || 'N/A'}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                                <div className="flex space-x-2">
-                                                                                    <EventsUploadForm
-                                                                                        isEdit={true}
-                                                                                        initialData={event}
-                                                                                        onUploadSuccess={loadEvents}
-                                                                                        events={events}
-                                                                                        setEvents={setEvents}
-                                                                                        isUploading={isUploading}
-                                                                                        setIsUploading={setIsUploading}
-                                                                                        isUpdating={isUpdating}
-                                                                                        setIsUpdating={setIsUpdating}
-                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                            persistGitHubData(dataArray as Event[], filePath, variableName, commitMessage)
-                                                                                        }
-                                                                                    />
-                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeleteEvent(event)} disabled={isDeleting}>
-                                                                                        <Trash2 className="w-4 h-4" />
-                                                                                    </Button>
-                                                                                </div>
-                                                                            </td>
-                                                                        </tr>
-                                                                    </SortableItem>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </SortableContext>
-                                                </DndContext>
-                                            </div>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1490,21 +1387,17 @@ const AdminDashboard = () => {
                                         <CardHeader className="p-0 pb-4">
                                             <CardTitle className="text-xl font-semibold flex items-center space-x-2">
                                                 <Plus className="h-5 w-5" />
-                                                <span>Upload New Event</span>
+                                                <span>Add New Event</span>
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="p-0">
+                                            {/* Assuming EventsUploadForm takes a callback to trigger reload and handle own state */}
                                             <EventsUploadForm
-                                                onUploadSuccess={loadEvents}
-                                                events={events}
-                                                setEvents={setEvents}
+                                                onUploadSuccess={loadEvents} // Callback to reload events after new upload
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
                                                 setIsUpdating={setIsUpdating}
-                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                    persistGitHubData(dataArray as Event[], filePath, variableName, commitMessage)
-                                                }
                                             />
                                         </CardContent>
                                     </Card>
@@ -1513,7 +1406,7 @@ const AdminDashboard = () => {
                         </div>
                     </TabsContent>
 
-                    {/* Faculty Tab Content (GitHub Backed) */}
+                    {/* Faculty Tab Content (Supabase Table Backed) */}
                     <TabsContent value={TAB_VALUES.FACULTY}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
@@ -1526,65 +1419,44 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {faculty.length > 0 ? (<div className="overflow-x-auto">
-                                                <DndContext
-                                                    sensors={sensors}
-                                                    collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, faculty, setFaculty, 'src/data/faculty.json', 'faculty')}
-                                                >
-                                                    <SortableContext
-                                                        items={faculty.map(member => member.id)}
-                                                        strategy={verticalListSortingStrategy}
-                                                    >
-                                                        <table className="w-full border-collapse border border-gray-200">
-                                                            <thead>
-                                                                <tr className="bg-gray-50">
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Name</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Designation</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Department</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                            {faculty.length > 0 ? (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full border-collapse border border-gray-200">
+                                                        <thead>
+                                                            <tr className="bg-gray-50">
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Name</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Designation</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Department</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {faculty.map((member) => (
+                                                                <tr key={member.id} className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                    <td className="border border-gray-200 px-4 py-2">{member.name}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">{member.designation}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">{member.department || 'N/A'}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">
+                                                                        <div className="flex space-x-2">
+                                                                            <FacultyUploadForm
+                                                                                isEdit={true}
+                                                                                initialData={member}
+                                                                                onUploadSuccess={loadFaculty}
+                                                                                isUploading={isUploading}
+                                                                                setIsUploading={setIsUploading}
+                                                                                isUpdating={isUpdating}
+                                                                                setIsUpdating={setIsUpdating}
+                                                                            />
+                                                                            <Button size="sm" variant="destructive" onClick={() => handleDeleteFaculty(member)} disabled={isDeleting}>
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    </td>
                                                                 </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {faculty.map((member) => (
-                                                                    <SortableItem key={member.id} id={member.id}>
-                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                            </td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{member.name}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{member.designation}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{member.department || 'N/A'}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                                <div className="flex space-x-2">
-                                                                                    <FacultyUploadForm
-                                                                                        isEdit={true}
-                                                                                        initialData={member}
-                                                                                        onUploadSuccess={loadFaculty}
-                                                                                        faculty={faculty}
-                                                                                        setFaculty={setFaculty}
-                                                                                        isUploading={isUploading}
-                                                                                        setIsUploading={setIsUploading}
-                                                                                        isUpdating={isUpdating}
-                                                                                        setIsUpdating={setIsUpdating}
-                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                            persistGitHubData(dataArray as Faculty[], filePath, variableName, commitMessage)
-                                                                                        }
-                                                                                    />
-                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeleteFaculty(member)} disabled={isDeleting}>
-                                                                                        <Trash2 className="w-4 h-4" />
-                                                                                    </Button>
-                                                                                </div>
-                                                                            </td>
-                                                                        </tr>
-                                                                    </SortableItem>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </SortableContext>
-                                                </DndContext>
-                                            </div>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <GraduationCap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1606,15 +1478,10 @@ const AdminDashboard = () => {
                                         <CardContent className="p-0">
                                             <FacultyUploadForm
                                                 onUploadSuccess={loadFaculty}
-                                                faculty={faculty}
-                                                setFaculty={setFaculty}
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
                                                 setIsUpdating={setIsUpdating}
-                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                    persistGitHubData(dataArray as Faculty[], filePath, variableName, commitMessage)
-                                                }
                                             />
                                         </CardContent>
                                     </Card>
@@ -1623,7 +1490,7 @@ const AdminDashboard = () => {
                         </div>
                     </TabsContent>
 
-                    {/* Placements Tab Content (GitHub Backed) */}
+                    {/* Placements Tab Content (Supabase Table Backed) */}
                     <TabsContent value={TAB_VALUES.PLACEMENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
@@ -1636,65 +1503,44 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {placements.length > 0 ? (<div className="overflow-x-auto">
-                                                <DndContext
-                                                    sensors={sensors}
-                                                    collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, placements, setPlacements, 'src/data/placements.json', 'placements')}
-                                                >
-                                                    <SortableContext
-                                                        items={placements.map(item => item.id)}
-                                                        strategy={verticalListSortingStrategy}
-                                                    >
-                                                        <table className="w-full border-collapse border border-gray-200">
-                                                            <thead>
-                                                                <tr className="bg-gray-50">
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Company</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                            {placements.length > 0 ? (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full border-collapse border border-gray-200">
+                                                        <thead>
+                                                            <tr className="bg-gray-50">
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Student Name</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Company</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Year</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {placements.map((placement) => (
+                                                                <tr key={placement.id} className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                    <td className="border border-gray-200 px-4 py-2">{placement.student_name}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">{placement.company}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">
+                                                                        <div className="flex space-x-2">
+                                                                            <PlacementsUploadForm
+                                                                                isEdit={true}
+                                                                                initialData={placement}
+                                                                                onUploadSuccess={loadPlacements}
+                                                                                isUploading={isUploading}
+                                                                                setIsUploading={setIsUploading}
+                                                                                isUpdating={isUpdating}
+                                                                                setIsUpdating={setIsUpdating}
+                                                                            />
+                                                                            <Button size="sm" variant="destructive" onClick={() => handleDeletePlacement(placement)} disabled={isDeleting}>
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    </td>
                                                                 </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {placements.map((placement) => (
-                                                                    <SortableItem key={placement.id} id={placement.id}>
-                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                            </td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{placement.student_name}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{placement.company}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{placement.year}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                                <div className="flex space-x-2">
-                                                                                    <PlacementsUploadForm
-                                                                                        isEdit={true}
-                                                                                        initialData={placement}
-                                                                                        onUploadSuccess={loadPlacements}
-                                                                                        placements={placements}
-                                                                                        setPlacements={setPlacements}
-                                                                                        isUploading={isUploading}
-                                                                                        setIsUploading={setIsUploading}
-                                                                                        isUpdating={isUpdating}
-                                                                                        setIsUpdating={setIsUpdating}
-                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                            persistGitHubData(dataArray as Placement[], filePath, variableName, commitMessage)
-                                                                                        }
-                                                                                    />
-                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeletePlacement(placement)} disabled={isDeleting}>
-                                                                                        <Trash2 className="w-4 h-4" />
-                                                                                    </Button>
-                                                                                </div>
-                                                                            </td>
-                                                                        </tr>
-                                                                    </SortableItem>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </SortableContext>
-                                                </DndContext>
-                                            </div>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <TrendingUp className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1716,15 +1562,10 @@ const AdminDashboard = () => {
                                         <CardContent className="p-0">
                                             <PlacementsUploadForm
                                                 onUploadSuccess={loadPlacements}
-                                                placements={placements}
-                                                setPlacements={setPlacements}
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
                                                 setIsUpdating={setIsUpdating}
-                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                    persistGitHubData(dataArray as Placement[], filePath, variableName, commitMessage)
-                                                }
                                             />
                                         </CardContent>
                                     </Card>
@@ -1733,7 +1574,7 @@ const AdminDashboard = () => {
                         </div>
                     </TabsContent>
 
-                    {/* NEW: Achievements Tab Content (GitHub Backed) */}
+                    {/* Achievements Tab Content (Supabase Table Backed) */}
                     <TabsContent value={TAB_VALUES.ACHIEVEMENTS}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
@@ -1746,63 +1587,42 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {achievements.length > 0 ? (<div className="overflow-x-auto">
-                                                <DndContext
-                                                    sensors={sensors}
-                                                    collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, achievements, setAchievements, 'src/data/achievements.json', 'achievements')}
-                                                >
-                                                    <SortableContext
-                                                        items={achievements.map(item => item.id)}
-                                                        strategy={verticalListSortingStrategy}
-                                                    >
-                                                        <table className="w-full border-collapse border border-gray-200">
-                                                            <thead>
-                                                                <tr className="bg-gray-50">
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left w-12">Order</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
-                                                                    <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                            {achievements.length > 0 ? (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full border-collapse border border-gray-200">
+                                                        <thead>
+                                                            <tr className="bg-gray-50">
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Title</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Date</th>
+                                                                <th className="border border-gray-200 px-4 py-2 text-left">Actions</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {achievements.map((item) => (
+                                                                <tr key={item.id} className="bg-white hover:bg-gray-100 border-b border-gray-200">
+                                                                    <td className="border border-gray-200 px-4 py-2">{item.title}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</td>
+                                                                    <td className="border border-gray-200 px-4 py-2">
+                                                                        <div className="flex space-x-2">
+                                                                            <AchievementsUploadForm
+                                                                                isEdit={true}
+                                                                                initialData={item}
+                                                                                onUploadSuccess={loadAchievements}
+                                                                                isUploading={isUploading}
+                                                                                setIsUploading={setIsUploading}
+                                                                                isUpdating={isUpdating}
+                                                                                setIsUpdating={setIsUpdating}
+                                                                            />
+                                                                            <Button size="sm" variant="destructive" onClick={() => handleDeleteAchievement(item)} disabled={isDeleting}>
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    </td>
                                                                 </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {achievements.map((item) => (
-                                                                    <SortableItem key={item.id} id={item.id}>
-                                                                        <tr className="bg-white hover:bg-gray-100 border-b border-gray-200">
-                                                                            <td className="border border-gray-200 px-2 py-2 text-center">
-                                                                                <GripVertical className="w-5 h-5 text-gray-400 cursor-grab mx-auto" />
-                                                                            </td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{item.title}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</td>
-                                                                            <td className="border border-gray-200 px-4 py-2">
-                                                                                <div className="flex space-x-2">
-                                                                                    <AchievementsUploadForm
-                                                                                        isEdit={true}
-                                                                                        initialData={item}
-                                                                                        onUploadSuccess={loadAchievements}
-                                                                                        achievements={achievements}
-                                                                                        setAchievements={setAchievements}
-                                                                                        isUploading={isUploading}
-                                                                                        setIsUploading={setIsUploading}
-                                                                                        isUpdating={isUpdating}
-                                                                                        setIsUpdating={setIsUpdating}
-                                                                                        persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                            persistGitHubData(dataArray as Achievement[], filePath, variableName, commitMessage)
-                                                                                        }
-                                                                                    />
-                                                                                    <Button size="sm" variant="destructive" onClick={() => handleDeleteAchievement(item)} disabled={isDeleting}>
-                                                                                        <Trash2 className="w-4 h-4" />
-                                                                                    </Button>
-                                                                                </div>
-                                                                            </td>
-                                                                        </tr>
-                                                                    </SortableItem>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </SortableContext>
-                                                </DndContext>
-                                            </div>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <Trophy className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -1824,15 +1644,10 @@ const AdminDashboard = () => {
                                         <CardContent className="p-0">
                                             <AchievementsUploadForm
                                                 onUploadSuccess={loadAchievements}
-                                                achievements={achievements}
-                                                setAchievements={setAchievements}
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
                                                 setIsUpdating={setIsUpdating}
-                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                    persistGitHubData(dataArray as Achievement[], filePath, variableName, commitMessage)
-                                                }
                                             />
                                         </CardContent>
                                     </Card>
@@ -1920,7 +1735,7 @@ const AdminDashboard = () => {
                         </Card>
                     </TabsContent>
 
-                    {/* Gallery Tab Content (GitHub Backed) */}
+                    {/* Gallery Tab Content (Supabase Table Backed) */}
                     <TabsContent value={TAB_VALUES.GALLERY}>
                         <div className="w-full px-6 py-6">
                             <div className="flex flex-col md:flex-row gap-6 items-start w-full">
@@ -1933,59 +1748,37 @@ const AdminDashboard = () => {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {gallery.length > 0 ? (<div className="overflow-x-auto">
-                                                <DndContext
-                                                    sensors={sensors}
-                                                    collisionDetection={closestCenter}
-                                                    onDragEnd={(event) => handleDragEnd(event, gallery, setGallery, 'src/data/gallery.json', 'galleryItems')}
-                                                >
-                                                    <SortableContext
-                                                        items={gallery.map(item => item.id)}
-                                                        strategy={verticalListSortingStrategy}
-                                                    >
-                                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                                            {gallery.map((item) => (
-                                                                <SortableItem key={item.id} id={item.id}>
-                                                                    <Card className="relative group overflow-hidden h-full flex flex-col">
-                                                                        <div className="absolute top-2 left-2 z-10">
-                                                                            <GripVertical className="w-5 h-5 text-gray-400 cursor-grab" />
-                                                                        </div>
-                                                                        <img src={item.image} alt={item.title} className="w-full h-32 object-cover" />
-                                                                        <CardContent className="p-2 text-sm flex-grow">
-                                                                            <h3 className="font-semibold">{item.title}</h3>
-                                                                            <p className="text-gray-500 text-xs truncate">{item.description}</p>
-                                                                            <div className="flex justify-end space-x-2 mt-2">
-                                                                                <GalleryUploadForm
-                                                                                    isEdit={true}
-                                                                                    initialData={item}
-                                                                                    onUploadSuccess={loadGallery}
-                                                                                    galleryItems={gallery}
-                                                                                    setGalleryItems={setGallery}
-                                                                                    isUploading={isUploading}
-                                                                                    setIsUploading={setIsUploading}
-                                                                                    isUpdating={isUpdating}
-                                                                                    setIsUpdating={setIsUpdating}
-                                                                                    persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                                                        persistGitHubData(dataArray as GalleryItem[], filePath, variableName, commitMessage)
-                                                                                    }
-                                                                                />
-                                                                                <Button
-                                                                                    size="sm"
-                                                                                    variant="destructive"
-                                                                                    onClick={() => handleDeleteGalleryItem(item)}
-                                                                                    disabled={isDeleting}
-                                                                                >
-                                                                                    <Trash2 className="w-4 h-4" />
-                                                                                </Button>
-                                                                            </div>
-                                                                        </CardContent>
-                                                                    </Card>
-                                                                </SortableItem>
-                                                            ))}
-                                                        </div>
-                                                    </SortableContext>
-                                                </DndContext>
-                                            </div>
+                                            {gallery.length > 0 ? (
+                                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                                    {gallery.map((item) => (
+                                                        <Card key={item.id} className="relative group overflow-hidden h-full flex flex-col">
+                                                            <img src={item.image_url} alt={item.title} className="w-full h-32 object-cover" />
+                                                            <CardContent className="p-2 text-sm flex-grow">
+                                                                <h3 className="font-semibold">{item.title}</h3>
+                                                                <p className="text-gray-500 text-xs truncate">{item.description}</p>
+                                                                <div className="flex justify-end space-x-2 mt-2">
+                                                                    <GalleryUploadForm
+                                                                        isEdit={true}
+                                                                        initialData={item}
+                                                                        onUploadSuccess={loadGallery}
+                                                                        isUploading={isUploading}
+                                                                        setIsUploading={setIsUploading}
+                                                                        isUpdating={isUpdating}
+                                                                        setIsUpdating={setIsUpdating}
+                                                                    />
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="destructive"
+                                                                        onClick={() => handleDeleteGalleryItem(item)}
+                                                                        disabled={isDeleting}
+                                                                    >
+                                                                        <Trash2 className="w-4 h-4" />
+                                                                    </Button>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+                                                    ))}
+                                                </div>
                                             ) : (
                                                 <div className="text-center py-8">
                                                     <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -2007,15 +1800,10 @@ const AdminDashboard = () => {
                                         <CardContent className="p-0">
                                             <GalleryUploadForm
                                                 onUploadSuccess={loadGallery}
-                                                galleryItems={gallery}
-                                                setGalleryItems={setGallery}
                                                 isUploading={isUploading}
                                                 setIsUploading={setIsUploading}
                                                 isUpdating={isUpdating}
                                                 setIsUpdating={setIsUpdating}
-                                                persistGitHubData={(dataArray, filePath, variableName, commitMessage) =>
-                                                    persistGitHubData(dataArray as GalleryItem[], filePath, variableName, commitMessage)
-                                                }
                                             />
                                         </CardContent>
                                     </Card>
@@ -2024,7 +1812,7 @@ const AdminDashboard = () => {
                         </div>
                     </TabsContent>
 
-                    {/* NEW: Notifications Tab Content (Supabase Backed) */}
+                    {/* Notifications Tab Content (Supabase Backed) */}
                     <TabsContent value={TAB_VALUES.NOTIFICATIONS}>
                         <Card>
                             <CardHeader>
