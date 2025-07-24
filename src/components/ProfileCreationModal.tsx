@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
+import { supabaseOld } from '@/integrations/supabase/supabaseOld'; // Or supabaseNew, depending on its purpose
 import { useToast } from '@/hooks/use-toast';
 
 interface ProfileCreationModalProps {
