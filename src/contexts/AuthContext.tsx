@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client'; // ✅ CORRECT: Use the shared Supabase client
 import { Session, User } from '@supabase/supabase-js';
+import { useSensors, useSensor, PointerSensor } from '@dnd-kit/core';
 import { useToast } from '@/hooks/use-toast';
 import { useLocation } from 'wouter';
 
