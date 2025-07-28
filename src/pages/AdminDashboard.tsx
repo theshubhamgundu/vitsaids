@@ -240,7 +240,7 @@ const AdminDashboard = () => {
     const loadAllStudents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            let query = supabaseOld.from('user_profiles').select('*').eq('role', 'admin'); // Changed to 'admin' for testing if current user is always admin. If general students are listed, revert to 'student'
+            let query = supabaseOld.from('user_profiles').select('*').eq('role', 'student'); // Changed to 'admin' for testing if current user is always admin. If general students are listed, revert to 'student'
             const { data, error } = await query.order('student_name', { ascending: true });
             if (error) throw error;
 
