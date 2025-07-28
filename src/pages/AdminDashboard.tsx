@@ -11,6 +11,7 @@ import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, I
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch'; // For the theme toggle
+import { useLocation } from 'wouter'; // This line is correct, the issue might be with the import statement itself
 
 import { useToast } from '@/hooks/use-toast';
 import { supabaseOld } from '@/integrations/supabase/supabaseOld'; // 👈 OLD DB: students, certificates, profiles
