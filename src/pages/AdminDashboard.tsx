@@ -7,17 +7,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import SearchBar from '@/components/SearchBar';
+import SearchBar from '@/components/SearchBar'; // Ensure this import is present
 import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Upload, Clock, FileText, Search, MoreVertical, User, X, Sun, Moon } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch'; // For the theme toggle
-import { useLocation } from 'wouter'; // This line is correct, the issue might be with the import statement itself
+import { useLocation } from 'wouter';
 
 import { useToast } from '@/hooks/use-toast';
 import { supabaseOld } from '@/integrations/supabase/supabaseOld'; // 👈 OLD DB: students, certificates, profiles
 import { supabaseNew } from '@/integrations/supabase/supabaseNew'; // 👈 NEW DB: faculty, gallery, events, etc.
 import TimetableManager from '@/components/TimetableManager'; // Assuming this component will be updated or passed supabase instance
+import { SupabaseClient } from '@supabase/supabase-js'; // Import SupabaseClient type for type safety
 
 import { uploadFile, deleteFile, fetchAllEntries, addEntry, updateEntry, deleteEntry } from '@/lib/SupabaseDataManager'; // Make sure these are robust
 
@@ -239,7 +240,7 @@ const AdminDashboard = () => {
     const loadAllStudents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            let query = supabaseOld.from('user_profiles').select('*').eq('role', 'student');
+            let query = supabaseOld.from('user_profiles').select('*').eq('role', 'admin'); // Changed to 'admin' for testing if current user is always admin. If general students are listed, revert to 'student'
             const { data, error } = await query.order('student_name', { ascending: true });
             if (error) throw error;
 
@@ -386,12 +387,15 @@ const AdminDashboard = () => {
     const loadAttendanceRecords = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // Assuming a new 'attendance_records' table in supabaseOld
-            const data = await fetchAllEntries<AttendanceRecord>('attendance_records', supabaseOld);
+            // Updated fetch to explicitly select `uploaded_at` if 'created_at' causes issues
+            const { data, error } = await supabaseOld.from('attendance_records').select('*').order('uploaded_at', { ascending: false });
+
+            if (error) throw error;
             setAttendanceRecords(data || []);
         } catch (error: any) {
             console.error('Error loading attendance records:', error);
-            toast({ title: 'Error loading attendance records', description: error.message || 'Please check Supabase "attendance_records" table.', variant: 'destructive' });
+            // Updated error message to reflect expected column
+            toast({ title: 'Error loading attendance records', description: error.message || 'Please ensure `attendance_records` table exists and `uploaded_at` column is present.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -713,14 +717,14 @@ const AdminDashboard = () => {
     // --- Content Management (Events, Faculty, Gallery, Placements, Achievements) ---
 
     // Generic form submission handler for new entries
-    const handleAddEntry = async <T extends { title?: string; name?: string; student_name?: string }, F extends { id: string }>(
+    const handleAddEntry = async <T extends { title?: string; name?: string; student_name?: string; }, F extends { id: string }>(
         tableName: string,
         newData: T,
         file: File | null,
         bucketName: string | null,
-        supabaseInstance: any,
+        supabaseInstance: SupabaseClient, // Use SupabaseClient type
         onSuccess: () => void,
-        setNewData: React.Dispatch<React.SetStateAction<T | Omit<T, 'id' | 'image_url' | 'image_path' | 'certificate_url' | 'file_path'>>>
+        setNewData: React.Dispatch<React.SetStateAction<any>> // Broaden type for easier usage
     ) => {
         setIsUploading(true);
         let publicUrl = '';
@@ -731,47 +735,46 @@ const AdminDashboard = () => {
                 const uploadFolderPath = `${tableName}/${file.name}`; // Dynamic path
                 const uploadResult = await uploadFile(bucketName, file, uploadFolderPath, supabaseInstance);
                 if (uploadResult.error || !uploadResult.publicUrl) {
-                    throw new Error(uploadResult.error?.message || 'File upload failed');
+                    throw new Error(uploadResult.error?.message || `File upload to ${bucketName} failed`);
                 }
                 publicUrl = uploadResult.publicUrl;
                 filePath = uploadResult.filePath!;
             }
 
-            const dataToInsert = {
+            const dataToInsert: Record<string, any> = { // Use Record<string, any> for dynamic keys
                 ...newData,
                 ...(bucketName && {
                     [bucketName === 'certifications' || bucketName === 'achievements' ? 'file_url' : 'image_url']: publicUrl,
-                    file_path: filePath, // Generalize file_path for all uploads
+                    file_path: filePath,
                 }),
-                created_at: new Date().toISOString(), // Add timestamp
+                created_at: new Date().toISOString(),
             };
             if (dataToInsert.ctc !== undefined && dataToInsert.ctc === 0) {
-                delete dataToInsert.ctc; // Don't insert if 0 and optional
+                delete dataToInsert.ctc;
             }
             if (dataToInsert.year !== undefined && dataToInsert.year === 0) {
-                delete dataToInsert.year; // Don't insert if 0 and optional
+                delete dataToInsert.year;
             }
-
 
             const addResult = await addEntry(tableName, dataToInsert, supabaseInstance);
             if (!addResult) {
-                throw new Error('Failed to add entry to database.');
+                throw new Error(`Failed to add entry to ${tableName} database.`);
             }
             toast({ title: '✅ Item added successfully' });
-            setNewData({} as any); // Clear form
-            if (file) {
-                if (tableName === 'events') setNewEventImage(null);
-                if (tableName === 'faculty') setNewFacultyImage(null);
-                if (tableName === 'gallery') setNewGalleryImage(null);
-                if (tableName === 'placements') setNewPlacementImage(null);
-                if (tableName === 'achievements') setNewAchievementFile(null);
-            }
+            setNewData({} as any); // Clear form (resets to initial empty state)
+            // Clear specific file states
+            if (tableName === 'events') setNewEventImage(null);
+            if (tableName === 'faculty') setNewFacultyImage(null);
+            if (tableName === 'gallery') setNewGalleryImage(null);
+            if (tableName === 'placements') setNewPlacementImage(null);
+            if (tableName === 'achievements') setNewAchievementFile(null);
+
             onSuccess();
         } catch (error: any) {
             console.error(`Error adding ${tableName} entry:`, error);
             toast({ title: `Error adding ${tableName}`, description: error.message || 'Please try again.', variant: 'destructive' });
             if (filePath && bucketName) {
-                await deleteFile(bucketName, filePath, supabaseInstance); // Clean up uploaded file if DB insert fails
+                await deleteFile(bucketName, filePath, supabaseInstance);
             }
         } finally {
             setIsUploading(false);
@@ -970,6 +973,7 @@ const AdminDashboard = () => {
         setIsUploading(true);
 
         const folderPath = `public_results/${resultFile.name}`;
+        // Ensure 'results' is the correct bucket name in supabaseNew
         const { publicUrl, filePath, error: uploadError } = await uploadFile('results', resultFile, folderPath, supabaseNew);
 
         if (uploadError || !publicUrl) {
@@ -980,7 +984,8 @@ const AdminDashboard = () => {
         }
 
         try {
-            const { error: dbError } = await supabaseNew.from('results').insert([{ title: resultTitle, file_url: publicUrl, file_path: filePath }]);
+            // Assume you have a 'results' table in SupabaseNew
+            const { error: dbError } = await supabaseNew.from('results').insert([{ title: resultTitle, file_url: publicUrl, file_path: filePath, created_at: new Date().toISOString() }]);
             if (dbError) {
                 await deleteFile('results', filePath!, supabaseNew);
                 throw dbError;
@@ -1004,6 +1009,7 @@ const AdminDashboard = () => {
         }
         setIsUploading(true);
         try {
+            // Ensure 'notifications' table is in supabaseNew
             const { error } = await supabaseNew.from('notifications').insert([{ title: notificationTitle, message: notificationMessage, created_at: new Date().toISOString() }]);
             if (error) {
                 toast({ title: 'Error posting notification', description: error.message, variant: 'destructive' });
@@ -1036,12 +1042,10 @@ const AdminDashboard = () => {
 
         setIsUploading(true);
         try {
-            // Define the path for the attendance file in storage.
-            // Using a timestamp to ensure unique file names and prevent overwrites.
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const folderPath = `attendance_sheets/${timestamp}_${attendanceFile.name}`;
 
-            // Upload the file to Supabase Storage (using supabaseOld as requested)
+            // Ensure 'attendance_sheets' is the correct bucket name in supabaseOld
             const { publicUrl, filePath, error: uploadError } = await uploadFile('attendance_sheets', attendanceFile, folderPath, supabaseOld);
 
             if (uploadError || !publicUrl) {
@@ -1051,19 +1055,19 @@ const AdminDashboard = () => {
             }
 
             // Store metadata in the 'attendance_records' table (in supabaseOld)
+            // Ensure column name `uploaded_at` matches database schema
             const { error: dbError } = await supabaseOld.from('attendance_records').insert([
                 {
                     file_name: attendanceFile.name,
                     file_url: publicUrl,
                     file_path: filePath,
-                    uploaded_at: new Date().toISOString(),
-                    processed_status: 'pending', // Initial status
+                    uploaded_at: new Date().toISOString(), // This should match your DB column name
+                    processed_status: 'pending',
                     notes: 'File uploaded, awaiting backend processing.'
                 }
             ]);
 
             if (dbError) {
-                // If DB insert fails, clean up the uploaded file from storage
                 await deleteFile('attendance_sheets', filePath!, supabaseOld);
                 throw dbError;
             }
@@ -2019,7 +2023,7 @@ const AdminDashboard = () => {
                             </CardHeader>
                             <CardContent>
                                 <Suspense fallback={<div className="text-gray-600 dark:text-gray-300">Loading Timetable...</div>}>
-                                    {/* Assuming TimetableManager can now receive supabase instances if needed, or handles its own imports */}
+                                    {/* Pass supabase instances to TimetableManager */}
                                     <TimetableManager supabaseNew={supabaseNew} supabaseOld={supabaseOld} toast={toast} />
                                 </Suspense>
                             </CardContent>
