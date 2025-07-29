@@ -7,22 +7,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import SearchBar from '@/components/SearchBar'; // Ensure this import is present
-import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Upload, Clock, FileText, Search, MoreVertical, User, X, Sun, Moon } from 'lucide-react';
+import SearchBar from '@/components/SearchBar';
+import { Users, Calendar, GraduationCap, TrendingUp, LogOut, BookOpen, Trophy, Image, BarChart3, Plus, Trash2, Upload, Clock, FileText, Search, MoreVertical, User, X, Sun, Moon, Video } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch'; // For the theme toggle
 import { useLocation } from 'wouter';
+import { v4 as uuidv4 } from 'uuid'; // For unique file names in gallery for multiple uploads
 
 import { useToast } from '@/hooks/use-toast';
-import { supabaseOld } from '@/integrations/supabase/supabaseOld'; // 👈 OLD DB: students, certificates, profiles
-import { supabaseNew } from '@/integrations/supabase/supabaseNew'; // 👈 NEW DB: faculty, gallery, events, etc.
-import TimetableManager from '@/components/TimetableManager'; // Assuming this component will be updated or passed supabase instance
-import { SupabaseClient } from '@supabase/supabase-js'; // Import SupabaseClient type for type safety
+import { supabaseOld } from '@/integrations/supabase/supabaseOld'; // OLD DB: students, certificates, profiles, attendance_records, notifications, timetable_slots
+import { supabaseNew } from '@/integrations/supabase/supabaseNew'; // NEW DB: achievements, events, faculty, gallery, gallery_media, placements, results
+import TimetableManager from '@/components/TimetableManager';
+import { SupabaseClient } from '@supabase/supabase-js';
 
-import { uploadFile, deleteFile, fetchAllEntries, addEntry, updateEntry, deleteEntry } from '@/lib/SupabaseDataManager'; // Make sure these are robust
+import { uploadFile, deleteFile, fetchAllEntries, addEntry, updateEntry, deleteEntry } from '@/lib/SupabaseDataManager';
 
-// Theme Context
+// Theme Context - No changes here, keep as is
 type Theme = 'light' | 'dark';
 
 interface ThemeContextType {
@@ -70,8 +71,8 @@ export const useTheme = () => {
     return context;
 };
 
-// Type definitions for our data (matching Supabase table columns)
-interface PendingStudent {
+// Type definitions for our data (matching FINAL Supabase table columns)
+interface PendingStudent { // From supabaseOld
     id: string;
     ht_no: string;
     student_name: string;
@@ -84,7 +85,7 @@ interface PendingStudent {
     email?: string;
 }
 
-interface Event {
+interface Event { // From supabaseNew (Updated based on "title, description, date, time, venue, image")
     id: string;
     title: string;
     description?: string;
@@ -92,43 +93,49 @@ interface Event {
     time?: string;
     venue?: string;
     image_url?: string;
-    image_path?: string;
-    speaker?: string;
+    image_path?: string; // Stored for deletion
+    created_at?: string;
 }
 
-interface Faculty {
+interface Faculty { // From supabaseNew (Updated based on "name, designation, image")
     id: string;
     name: string;
     designation: string;
-    department: string;
-    bio?: string;
-    expertise?: string;
-    publications?: string;
     image_url?: string;
-    image_path?: string;
+    image_path?: string; // Stored for deletion
+    created_at?: string;
 }
 
-interface GalleryItem {
+interface GalleryMedia { // NEW: separate table for multiple images/videos
+    id: string;
+    gallery_item_id: string;
+    media_url: string;
+    media_path: string;
+    media_type: 'image' | 'video';
+    order_index?: number;
+    created_at?: string;
+}
+
+interface GalleryItem { // From supabaseNew (Updated to be parent of GalleryMedia)
     id: string;
     title: string;
     description?: string;
-    image_url: string;
-    image_path?: string;
+    media?: GalleryMedia[]; // To hold related media when fetched
+    created_at?: string;
 }
 
-interface Placement {
+interface Placement { // From supabaseNew (Updated based on "id, name, company, ctc, year, image")
     id: string;
-    student_name: string;
+    student_name: string; // Changed from 'name' to 'student_name' for clarity
     company: string;
-    ctc?: number;
-    year: number;
-    type: string;
-    branch: string;
+    ctc?: number; // Nullable
+    year?: number; // Nullable
     image_url?: string;
-    image_path?: string;
+    image_path?: string; // Stored for deletion
+    created_at?: string;
 }
 
-interface CertificateItem {
+interface CertificateItem { // From supabaseOld - No changes
     id: string;
     ht_no: string;
     certificate_name: string;
@@ -146,31 +153,49 @@ interface CertificateItem {
     };
 }
 
-interface Achievement {
+interface Achievement { // From supabaseNew (Updated based on "student_name, title, description, image")
     id: string;
+    student_name: string; // Manually entered
     title: string;
     description?: string;
-    date?: string;
-    certificate_url?: string; // This could be for a certificate associated with the achievement
-    file_path?: string; // path to the certificate file
+    image_url?: string; // For the image
+    image_path?: string; // Stored for deletion
+    created_at?: string;
 }
 
-interface AttendanceRecord {
+interface AttendanceRecord { // From supabaseOld - No changes to interface
     id: string;
     file_name: string;
     file_url: string;
     file_path: string;
     uploaded_at: string;
-    processed_status: string; // e.g., 'pending', 'processing', 'completed', 'error'
+    processed_status: string;
     notes?: string;
+}
+
+interface NotificationItem { // From supabaseOld - Assuming this is in supabaseOld
+    id: string;
+    title: string;
+    message: string;
+    created_at: string;
+}
+
+interface TimetableSlot { // From supabaseOld - Assuming this is in supabaseOld and already defined
+    id: string;
+    day: string;
+    time: string;
+    subject: string;
+    faculty: string;
+    room: string;
 }
 
 const AdminDashboard = () => {
     const { toast } = useToast();
     const { user, userProfile, loading } = useAuth();
     const [, setLocation] = useLocation();
-    const { theme, toggleTheme } = useTheme(); // Use theme context
+    const { theme, toggleTheme } = useTheme();
 
+    // State for data from DBs
     const [allStudents, setAllStudents] = useState<PendingStudent[]>([]);
     const [events, setEvents] = useState<Event[]>([]);
     const [faculty, setFaculty] = useState<Faculty[]>([]);
@@ -180,7 +205,7 @@ const AdminDashboard = () => {
     const [achievements, setAchievements] = useState<Achievement[]>([]);
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
 
-
+    // State for dashboard stats
     const [stats, setStats] = useState({
         totalStudents: 0,
         activeEvents: 0,
@@ -189,13 +214,14 @@ const AdminDashboard = () => {
         totalAchievements: 0,
     });
 
+    // Loading & Operation States
     const [isGlobalLoading, setIsGlobalLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
     const [isPhotoLoading, setIsPhotoLoading] = useState(false);
 
-    // Student Management States
+    // Student Management States (supabaseOld)
     const [editingStudent, setEditingStudent] = useState<PendingStudent | null>(null);
     const [viewingStudent, setViewingStudent] = useState<PendingStudent | null>(null);
     const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all');
@@ -205,32 +231,41 @@ const AdminDashboard = () => {
     const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
     const [yearToPromote, setYearToPromote] = useState<string>('');
 
-    // Certificate Management States
+    // Certificate Management States (supabaseOld)
     const [certificateSearchHTNO, setCertificateSearchHTNO] = useState('');
     const [filteredCertificates, setFilteredCertificates] = useState<CertificateItem[]>([]);
     const [selectedYearFilterCerts, setSelectedYearFilterCerts] = useState<string>('all');
 
-    // Results Upload States
+    // Results Upload States (supabaseNew)
     const [resultTitle, setResultTitle] = useState('');
     const [resultFile, setResultFile] = useState<File | null>(null);
 
-    // Notification States
+    // Notification States (supabaseOld)
     const [notificationTitle, setNotificationTitle] = useState('');
     const [notificationMessage, setNotificationMessage] = useState('');
 
-    // New Content Upload Form States (for Events, Faculty, Gallery, Placements, Achievements)
-    const [newEvent, setNewEvent] = useState<Omit<Event, 'id' | 'image_url' | 'image_path'>>({ title: '', description: '', date: '', time: '', venue: '', speaker: '' });
+    // Form States for new content types (matching new DB schemas)
+    // Events (supabaseNew)
+    const [newEvent, setNewEvent] = useState<Omit<Event, 'id' | 'image_url' | 'image_path' | 'created_at'>>({ title: '', description: '', date: '', time: '', venue: '' });
     const [newEventImage, setNewEventImage] = useState<File | null>(null);
-    const [newFaculty, setNewFaculty] = useState<Omit<Faculty, 'id' | 'image_url' | 'image_path'>>({ name: '', designation: '', department: '', bio: '', expertise: '', publications: '' });
-    const [newFacultyImage, setNewFacultyImage] = useState<File | null>(null);
-    const [newGalleryItem, setNewGalleryItem] = useState<Omit<GalleryItem, 'id' | 'image_url' | 'image_path'>>({ title: '', description: '' });
-    const [newGalleryImage, setNewGalleryImage] = useState<File | null>(null);
-    const [newPlacement, setNewPlacement] = useState<Omit<Placement, 'id' | 'image_url' | 'image_path'>>({ student_name: '', company: '', year: 0, type: '', branch: '', ctc: 0 });
-    const [newPlacementImage, setNewPlacementImage] = useState<File | null>(null);
-    const [newAchievement, setNewAchievement] = useState<Omit<Achievement, 'id' | 'certificate_url' | 'file_path'>>({ title: '', description: '', date: '' });
-    const [newAchievementFile, setNewAchievementFile] = useState<File | null>(null);
 
-    // Attendance Upload States
+    // Faculty (supabaseNew)
+    const [newFaculty, setNewFaculty] = useState<Omit<Faculty, 'id' | 'image_url' | 'image_path' | 'created_at'>>({ name: '', designation: '' });
+    const [newFacultyImage, setNewFacultyImage] = useState<File | null>(null);
+
+    // Gallery (supabaseNew)
+    const [newGalleryItem, setNewGalleryItem] = useState<Omit<GalleryItem, 'id' | 'media' | 'created_at'>>({ title: '', description: '' });
+    const [newGalleryMediaFiles, setNewGalleryMediaFiles] = useState<File[]>([]); // To hold multiple files
+
+    // Placements (supabaseNew)
+    const [newPlacement, setNewPlacement] = useState<Omit<Placement, 'id' | 'image_url' | 'image_path' | 'created_at'>>({ student_name: '', company: '' });
+    const [newPlacementImage, setNewPlacementImage] = useState<File | null>(null);
+
+    // Achievements (supabaseNew)
+    const [newAchievement, setNewAchievement] = useState<Omit<Achievement, 'id' | 'image_url' | 'image_path' | 'created_at'>>({ student_name: '', title: '', description: '' });
+    const [newAchievementImage, setNewAchievementImage] = useState<File | null>(null);
+
+    // Attendance Upload States (supabaseOld)
     const [attendanceFile, setAttendanceFile] = useState<File | null>(null);
 
 
@@ -240,12 +275,13 @@ const AdminDashboard = () => {
     const loadAllStudents = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            let query = supabaseOld.from('user_profiles').select('*').eq('role', 'student'); // Changed to 'admin' for testing if current user is always admin. If general students are listed, revert to 'student'
+            // Reverted to 'student' role as discussed for displaying students
+            let query = supabaseOld.from('user_profiles').select('*').eq('role', 'student');
             const { data, error } = await query.order('student_name', { ascending: true });
             if (error) throw error;
 
             const studentsWithPhotos = await Promise.all(data.map(async (student: PendingStudent) => {
-                const photoPath = `profiles/${student.id}/photo.jpg`;
+                const photoPath = `profiles/${student.id}/photo.jpg`; // Assuming fixed name 'photo.jpg'
                 const { data: publicUrlData } = supabaseOld.storage.from("profile_photos").getPublicUrl(photoPath);
                 return { ...student, photo_url: publicUrlData?.publicUrl || '/default-avatar.png' };
             }));
@@ -300,11 +336,25 @@ const AdminDashboard = () => {
     const loadGallery = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            const data = await fetchAllEntries<GalleryItem>('gallery', supabaseNew);
-            setGallery(data || []);
+            // Fetch main gallery items and their associated media
+            const { data, error } = await supabaseNew
+                .from('gallery')
+                .select(`*, media:gallery_media(*)`) // Fetch related media items
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            const structuredData: GalleryItem[] = data.map(item => ({
+                id: item.id,
+                title: item.title,
+                description: item.description,
+                created_at: item.created_at,
+                media: item.media || [], // Ensure media is an array
+            }));
+            setGallery(structuredData || []);
         } catch (error: any) {
             console.error('Error loading gallery:', error);
-            toast({ title: 'Error loading gallery', description: error.message || 'Please check Supabase "gallery" table.', variant: 'destructive' });
+            toast({ title: 'Error loading gallery', description: error.message || 'Please check Supabase "gallery" and "gallery_media" tables.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
         }
@@ -387,14 +437,12 @@ const AdminDashboard = () => {
     const loadAttendanceRecords = useCallback(async () => {
         setIsGlobalLoading(true);
         try {
-            // Updated fetch to explicitly select `uploaded_at` if 'created_at' causes issues
             const { data, error } = await supabaseOld.from('attendance_records').select('*').order('uploaded_at', { ascending: false });
 
             if (error) throw error;
             setAttendanceRecords(data || []);
         } catch (error: any) {
             console.error('Error loading attendance records:', error);
-            // Updated error message to reflect expected column
             toast({ title: 'Error loading attendance records', description: error.message || 'Please ensure `attendance_records` table exists and `uploaded_at` column is present.', variant: 'destructive' });
         } finally {
             setIsGlobalLoading(false);
@@ -430,7 +478,7 @@ const AdminDashboard = () => {
             loadGallery();
             loadAchievements();
             loadCertifications();
-            loadAttendanceRecords(); // Load attendance records
+            loadAttendanceRecords();
             loadStats();
 
             const studentsChannel = supabaseOld
@@ -455,6 +503,20 @@ const AdminDashboard = () => {
                 })
                 .subscribe();
 
+            const notificationsChannel = supabaseOld
+                .channel('notifications-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
+                    // Assuming you might want to reload notifications list if you add one
+                    // Currently, no display for notifications, but useful if implemented
+                }).subscribe();
+
+            const timetableChannel = supabaseOld
+                .channel('timetable-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'timetable_slots' }, () => {
+                    // TimetableManager uses its own subscription, but this is a central one
+                }).subscribe();
+
+
             const eventsChannel = supabaseNew.channel('events-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
                     loadEvents();
@@ -475,24 +537,41 @@ const AdminDashboard = () => {
 
             const galleryChannel = supabaseNew.channel('gallery-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery' }, () => {
-                    loadGallery();
+                    loadGallery(); // Reload main gallery items
                 }).subscribe();
+
+            const galleryMediaChannel = supabaseNew.channel('gallery_media-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_media' }, () => {
+                    loadGallery(); // Reload main gallery items to get updated media
+                }).subscribe();
+
 
             const achievementsChannel = supabaseNew.channel('achievements-changes')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'achievements' }, () => {
                     loadAchievements();
                     loadStats();
                 }).subscribe();
+            
+            const resultsChannel = supabaseNew.channel('results-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'results' }, () => {
+                    // If you implement a list of results, call loadResults here
+                }).subscribe();
+
 
             return () => {
                 supabaseOld.removeChannel(studentsChannel);
                 supabaseOld.removeChannel(certificatesChannel);
                 supabaseOld.removeChannel(attendanceChannel);
+                supabaseOld.removeChannel(notificationsChannel);
+                supabaseOld.removeChannel(timetableChannel); // Remove if TimetableManager handles its own cleanup
+
                 supabaseNew.removeChannel(eventsChannel);
                 supabaseNew.removeChannel(facultyChannel);
                 supabaseNew.removeChannel(placementsChannel);
                 supabaseNew.removeChannel(galleryChannel);
+                supabaseNew.removeChannel(galleryMediaChannel);
                 supabaseNew.removeChannel(achievementsChannel);
+                supabaseNew.removeChannel(resultsChannel);
             };
         } else if (!loading && userProfile && userProfile.role !== 'admin') {
             setLocation('/');
@@ -679,7 +758,7 @@ const AdminDashboard = () => {
 
         setIsPhotoLoading(true);
 
-        const folderPath = `profiles/${viewingStudent.id}/${newProfilePhotoFile.name}`; // Use actual file name for unique path
+        const folderPath = `profiles/${viewingStudent.id}/${newProfilePhotoFile.name}`; // Using actual file name for unique path
         const { publicUrl, filePath, error: uploadError } = await uploadFile('profile_photos', newProfilePhotoFile, folderPath, supabaseOld);
 
         if (uploadError || !publicUrl) {
@@ -714,17 +793,18 @@ const AdminDashboard = () => {
         setIsPhotoLoading(false);
     };
 
-    // --- Content Management (Events, Faculty, Gallery, Placements, Achievements) ---
+    // --- Generic Content Management (Events, Faculty, Placements, Achievements) ---
+    // Note: Gallery uses a custom handleAddGalleryItem due to multiple files
 
-    // Generic form submission handler for new entries
-    const handleAddEntry = async <T extends { title?: string; name?: string; student_name?: string; }, F extends { id: string }>(
+    const handleAddSingleFileEntry = async <T extends object>(
         tableName: string,
         newData: T,
         file: File | null,
         bucketName: string | null,
-        supabaseInstance: SupabaseClient, // Use SupabaseClient type
+        supabaseInstance: SupabaseClient,
         onSuccess: () => void,
-        setNewData: React.Dispatch<React.SetStateAction<any>> // Broaden type for easier usage
+        setNewData: React.Dispatch<React.SetStateAction<any>>,
+        setFile: React.Dispatch<React.SetStateAction<File | null>> // To clear file input
     ) => {
         setIsUploading(true);
         let publicUrl = '';
@@ -732,7 +812,9 @@ const AdminDashboard = () => {
 
         try {
             if (file && bucketName) {
-                const uploadFolderPath = `${tableName}/${file.name}`; // Dynamic path
+                // Ensure unique file name in bucket to prevent overwrites, e.g., using UUID
+                const uniqueFileName = `${uuidv4()}_${file.name.replace(/\s/g, '_')}`;
+                const uploadFolderPath = `${tableName}/${uniqueFileName}`; // Dynamic path based on table
                 const uploadResult = await uploadFile(bucketName, file, uploadFolderPath, supabaseInstance);
                 if (uploadResult.error || !uploadResult.publicUrl) {
                     throw new Error(uploadResult.error?.message || `File upload to ${bucketName} failed`);
@@ -741,18 +823,21 @@ const AdminDashboard = () => {
                 filePath = uploadResult.filePath!;
             }
 
-            const dataToInsert: Record<string, any> = { // Use Record<string, any> for dynamic keys
+            const dataToInsert: Record<string, any> = {
                 ...newData,
                 ...(bucketName && {
-                    [bucketName === 'certifications' || bucketName === 'achievements' ? 'file_url' : 'image_url']: publicUrl,
-                    file_path: filePath,
+                    // Use 'image_url' for Events, Faculty, Placements, Achievements
+                    image_url: publicUrl,
+                    image_path: filePath, // Store path for deletion
                 }),
                 created_at: new Date().toISOString(),
             };
-            if (dataToInsert.ctc !== undefined && dataToInsert.ctc === 0) {
+
+            // Remove optional number fields if they are 0 (e.g., if input is empty)
+            if ('ctc' in dataToInsert && (dataToInsert.ctc === 0 || dataToInsert.ctc === undefined)) {
                 delete dataToInsert.ctc;
             }
-            if (dataToInsert.year !== undefined && dataToInsert.year === 0) {
+            if ('year' in dataToInsert && (dataToInsert.year === 0 || dataToInsert.year === undefined)) {
                 delete dataToInsert.year;
             }
 
@@ -761,172 +846,64 @@ const AdminDashboard = () => {
                 throw new Error(`Failed to add entry to ${tableName} database.`);
             }
             toast({ title: '✅ Item added successfully' });
-            setNewData({} as any); // Clear form (resets to initial empty state)
-            // Clear specific file states
-            if (tableName === 'events') setNewEventImage(null);
-            if (tableName === 'faculty') setNewFacultyImage(null);
-            if (tableName === 'gallery') setNewGalleryImage(null);
-            if (tableName === 'placements') setNewPlacementImage(null);
-            if (tableName === 'achievements') setNewAchievementFile(null);
-
+            setNewData({} as any); // Clear form state (resets to initial empty state)
+            setFile(null); // Clear file input
             onSuccess();
         } catch (error: any) {
             console.error(`Error adding ${tableName} entry:`, error);
             toast({ title: `Error adding ${tableName}`, description: error.message || 'Please try again.', variant: 'destructive' });
             if (filePath && bucketName) {
-                await deleteFile(bucketName, filePath, supabaseInstance);
+                await deleteFile(bucketName, filePath, supabaseInstance); // Clean up uploaded file if DB insert fails
             }
         } finally {
             setIsUploading(false);
         }
     };
 
-    // --- Deletion Handlers (from previous code) ---
-    const handleDeleteEvent = async (eventToDelete: Event) => {
-        const confirmDelete = window.confirm(`Are you sure you want to delete the event "${eventToDelete.title}"? This cannot be undone.`);
-        if (!confirmDelete) return;
+    // --- Deletion Handlers ---
 
-        setIsDeleting(true);
-        try {
-            if (eventToDelete.image_path) {
-                const { error: storageError } = await deleteFile('events', eventToDelete.image_path, supabaseNew);
-                if (storageError) {
-                    console.warn(`Failed to delete event image ${eventToDelete.image_path}:`, storageError.message);
-                    toast({ title: 'Image Deletion Warning', description: `Could not delete event image from storage: ${storageError.message}`, variant: 'warning' });
-                }
-            }
-            const { success, error } = await deleteEntry('events', eventToDelete.id, supabaseNew);
-            if (success) {
-                toast({ title: 'Event deleted successfully' });
-                loadEvents();
-                loadStats();
-            } else {
-                toast({ title: 'Error deleting event', description: error?.message || 'Please try again.', variant: 'destructive' });
-            }
-        } catch (error: any) {
-            console.error('Error deleting event:', error);
-            toast({ title: 'Deletion Failed', description: error.message || 'Please try again later.', variant: 'destructive' });
-        } finally {
-            setIsDeleting(false);
-        }
-    };
-
-    const handleDeleteFaculty = async (facultyToDelete: Faculty) => {
-        const confirmDelete = window.confirm(`Are you sure you want to delete faculty member "${facultyToDelete.name}"? This cannot be undone.`);
-        if (!confirmDelete) return;
-
-        setIsDeleting(true);
-        try {
-            if (facultyToDelete.image_path) {
-                const { error: storageError } = await deleteFile('faculty', facultyToDelete.image_path, supabaseNew);
-                if (storageError) {
-                    console.warn(`Failed to delete faculty image ${facultyToDelete.image_path}:`, storageError.message);
-                    toast({ title: 'Image Deletion Warning', description: `Could not delete faculty image from storage: ${storageError.message}`, variant: 'warning' });
-                }
-            }
-            const { success, error } = await deleteEntry('faculty', facultyToDelete.id, supabaseNew);
-            if (success) {
-                toast({ title: 'Faculty member deleted successfully' });
-                loadFaculty();
-                loadStats();
-            } else {
-                toast({ title: 'Error deleting faculty', description: error?.message || 'Please try again.', variant: 'destructive' });
-            }
-        } catch (error: any) {
-            console.error('Error deleting faculty:', error);
-            toast({ title: 'Deletion Failed', description: error.message || 'Please try again later.', variant: 'destructive' });
-        } finally {
-            setIsDeleting(false);
-        }
-    };
-
-    const handleDeleteGalleryItem = async (itemToDelete: GalleryItem) => {
-        const confirmDelete = window.confirm(`Are you sure you want to delete the gallery item "${itemToDelete.title}"? This cannot be undone.`);
+    // Generic deletion function for items with associated single files
+    const handleDeleteWithSingleFile = async (
+        itemToDelete: { id: string; image_path?: string; title?: string; name?: string; student_name?:string; },
+        tableName: string,
+        bucketName: string,
+        supabaseInstance: SupabaseClient,
+        onSuccess: () => void
+    ) => {
+        const confirmDelete = window.confirm(`Are you sure you want to delete "${itemToDelete.title || itemToDelete.name || itemToDelete.student_name}"? This cannot be undone.`);
         if (!confirmDelete) return;
 
         setIsDeleting(true);
         try {
             if (itemToDelete.image_path) {
-                const { error: storageError } = await deleteFile('gallery', itemToDelete.image_path, supabaseNew);
+                const { error: storageError } = await deleteFile(bucketName, itemToDelete.image_path, supabaseInstance);
                 if (storageError) {
-                    console.warn(`Failed to delete gallery image ${itemToDelete.image_path}:`, storageError.message);
-                    toast({ title: 'Image Deletion Warning', description: `Could not delete gallery image from storage: ${storageError.message}`, variant: 'warning' });
+                    console.warn(`Failed to delete file from storage (${itemToDelete.image_path}):`, storageError.message);
+                    toast({ title: 'File Deletion Warning', description: `Could not delete associated file from storage: ${storageError.message}`, variant: 'warning' });
                 }
             }
-            const { success, error } = await deleteEntry('gallery', itemToDelete.id, supabaseNew);
+            const { success, error } = await deleteEntry(tableName, itemToDelete.id, supabaseInstance);
             if (success) {
-                toast({ title: 'Gallery item deleted successfully' });
-                loadGallery();
+                toast({ title: 'Item deleted successfully' });
+                onSuccess();
             } else {
-                toast({ title: 'Error deleting gallery item', description: error?.message || 'Please try again.', variant: 'destructive' });
+                toast({ title: 'Error deleting item', description: error?.message || 'Please try again.', variant: 'destructive' });
             }
         } catch (error: any) {
-            console.error('Error deleting gallery item:', error);
+            console.error('Error deleting item:', error);
             toast({ title: 'Deletion Failed', description: error.message || 'Please try again later.', variant: 'destructive' });
         } finally {
             setIsDeleting(false);
         }
     };
 
-    const handleDeletePlacement = async (itemToDelete: Placement) => {
-        const confirmDelete = window.confirm(`Are you sure you want to delete the placement record for "${itemToDelete.student_name}"? This cannot be undone.`);
-        if (!confirmDelete) return;
+    // Specific deletion handlers using the generic one
+    const handleDeleteEvent = (eventToDelete: Event) => handleDeleteWithSingleFile(eventToDelete, 'events', 'events', supabaseNew, loadEvents);
+    const handleDeleteFaculty = (facultyToDelete: Faculty) => handleDeleteWithSingleFile(facultyToDelete, 'faculty', 'faculty', supabaseNew, loadFaculty);
+    const handleDeletePlacement = (itemToDelete: Placement) => handleDeleteWithSingleFile(itemToDelete, 'placements', 'placements', supabaseNew, loadPlacements);
+    const handleDeleteAchievement = (itemToDelete: Achievement) => handleDeleteWithSingleFile(itemToDelete, 'achievements', 'achievements', supabaseNew, loadAchievements);
 
-        setIsDeleting(true);
-        try {
-            if (itemToDelete.image_path) {
-                const { error: storageError } = await deleteFile('placements', itemToDelete.image_path, supabaseNew);
-                if (storageError) {
-                    console.warn(`Failed to delete placement image ${itemToDelete.image_path}:`, storageError.message);
-                    toast({ title: 'Image Deletion Warning', description: `Could not delete placement image from storage: ${storageError.message}`, variant: 'warning' });
-                }
-            }
-            const { success, error } = await deleteEntry('placements', itemToDelete.id, supabaseNew);
-            if (success) {
-                toast({ title: 'Placement record deleted successfully' });
-                loadPlacements();
-                loadStats();
-            } else {
-                toast({ title: 'Error deleting placement record', description: error?.message || 'Please try again.', variant: 'destructive' });
-            }
-        } catch (error: any) {
-            console.error('Error deleting placement:', error);
-            toast({ title: 'Deletion Failed', description: error.message || 'Please try again later.', variant: 'destructive' });
-        } finally {
-            setIsDeleting(false);
-        }
-    };
-
-    const handleDeleteAchievement = async (itemToDelete: Achievement) => {
-        const confirmDelete = window.confirm(`Are you sure you want to delete the achievement "${itemToDelete.title}"? This cannot be undone.`);
-        if (!confirmDelete) return;
-
-        setIsDeleting(true);
-        try {
-            if (itemToDelete.file_path) {
-                const { error: storageError } = await deleteFile('achievements', itemToDelete.file_path, supabaseNew);
-                if (storageError) {
-                    console.warn(`Failed to delete achievement file ${itemToDelete.file_path}:`, storageError.message);
-                    toast({ title: 'File Deletion Warning', description: `Could not delete achievement file from storage: ${storageError.message}`, variant: 'warning' });
-                }
-            }
-            const { success, error } = await deleteEntry('achievements', itemToDelete.id, supabaseNew);
-            if (success) {
-                toast({ title: 'Achievement deleted successfully' });
-                loadAchievements();
-                loadStats();
-            } else {
-                toast({ title: 'Error deleting achievement', description: error?.message || 'Please try again.', variant: 'destructive' });
-            }
-        } catch (error: any) {
-            console.error('Error deleting achievement:', error);
-            toast({ title: 'Deletion Failed', description: error.message || 'Please try again later.', variant: 'destructive' });
-        } finally {
-            setIsDeleting(false);
-        }
-    };
-
-    const deleteCertification = async (certId: string, certificateFilePath: string) => {
+    const deleteCertification = async (certId: string, certificateFilePath: string) => { // This remains specific to supabaseOld certs
         const confirmDelete = window.confirm("Are you sure you want to delete this certificate? This action cannot be undone.");
         if (!confirmDelete) return;
 
@@ -959,9 +936,117 @@ const AdminDashboard = () => {
         }
     };
 
+    // --- Gallery Specific Logic (Multiple Files) ---
+    const handleGalleryMediaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(event.target.files || []);
+        setNewGalleryMediaFiles(files);
+    };
+
+    const handleAddGalleryItem = async () => {
+        if (!newGalleryItem.title || newGalleryMediaFiles.length === 0) {
+            toast({ title: 'Error', description: 'Please provide a title and select at least one image/video file.', variant: 'destructive' });
+            return;
+        }
+
+        setIsUploading(true);
+        let galleryItemId: string | null = null;
+        let uploadedFilePaths: string[] = []; // To track files for cleanup
+
+        try {
+            // 1. Add the main gallery item first
+            const { data: insertedItem, error: itemError } = await supabaseNew.from('gallery').insert([{
+                title: newGalleryItem.title,
+                description: newGalleryItem.description,
+                created_at: new Date().toISOString(),
+            }]).select('id');
+
+            if (itemError || !insertedItem || insertedItem.length === 0) {
+                throw new Error(itemError?.message || 'Failed to add main gallery item.');
+            }
+            galleryItemId = insertedItem[0].id;
+
+            // 2. Upload each media file and insert into gallery_media
+            for (const file of newGalleryMediaFiles) {
+                const mediaType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'other';
+                if (mediaType === 'other') {
+                    console.warn(`Skipping unsupported media type: ${file.type}`);
+                    toast({ title: 'Unsupported File Type', description: `Skipped file: ${file.name}. Only images and videos are supported.`, variant: 'warning' });
+                    continue; // Skip this file
+                }
+
+                const uniqueFileName = `${uuidv4()}_${file.name.replace(/\s/g, '_')}`;
+                const uploadPath = `gallery_media/${galleryItemId}/${uniqueFileName}`; // Organize by gallery item ID
+
+                const uploadResult = await uploadFile('gallery_media', file, uploadPath, supabaseNew);
+                if (uploadResult.error || !uploadResult.publicUrl) {
+                    throw new Error(uploadResult.error?.message || `Failed to upload media file: ${file.name}`);
+                }
+                uploadedFilePaths.push(uploadResult.filePath!); // Track for potential cleanup
+
+                await supabaseNew.from('gallery_media').insert([{
+                    gallery_item_id: galleryItemId,
+                    media_url: uploadResult.publicUrl,
+                    media_path: uploadResult.filePath!,
+                    media_type: mediaType,
+                    order_index: uploadedFilePaths.length, // Simple ordering
+                    created_at: new Date().toISOString(),
+                }]);
+            }
+
+            toast({ title: '✅ Gallery item and media uploaded successfully' });
+            setNewGalleryItem({ title: '', description: '' });
+            setNewGalleryMediaFiles([]);
+            loadGallery(); // Refresh the list
+        } catch (error: any) {
+            console.error('Error adding gallery item or media:', error);
+            toast({ title: 'Gallery Upload Failed', description: error.message || 'Please try again.', variant: 'destructive' });
+
+            // Cleanup: Delete partially uploaded files and main item if something went wrong
+            if (galleryItemId) {
+                await deleteEntry('gallery', galleryItemId, supabaseNew); // Delete main item
+                for (const path of uploadedFilePaths) {
+                    await deleteFile('gallery_media', path, supabaseNew); // Delete uploaded media files
+                }
+            }
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleDeleteGalleryItem = async (itemToDelete: GalleryItem) => {
+        const confirmDelete = window.confirm(`Are you sure you want to delete the gallery item "${itemToDelete.title}" and all its media? This cannot be undone.`);
+        if (!confirmDelete) return;
+
+        setIsDeleting(true);
+        try {
+            // 1. Delete all associated media files from storage
+            if (itemToDelete.media && itemToDelete.media.length > 0) {
+                const pathsToDelete = itemToDelete.media.map(media => media.media_path);
+                const { error: storageError } = await supabaseNew.storage.from('gallery_media').remove(pathsToDelete);
+                if (storageError) {
+                    console.warn(`Failed to delete some gallery media files from storage:`, storageError.message);
+                    toast({ title: 'Partial Deletion Warning', description: `Could not delete all associated media files from storage: ${storageError.message}`, variant: 'warning' });
+                }
+            }
+            // 2. Database `ON DELETE CASCADE` on `gallery_media` should handle deleting records,
+            // so we just delete the main gallery item.
+            const { success, error } = await deleteEntry('gallery', itemToDelete.id, supabaseNew);
+            if (success) {
+                toast({ title: 'Gallery item and media deleted successfully' });
+                loadGallery();
+            } else {
+                toast({ title: 'Error deleting gallery item', description: error?.message || 'Please try again.', variant: 'destructive' });
+            }
+        } catch (error: any) {
+            console.error('Error deleting gallery item:', error);
+            toast({ title: 'Deletion Failed', description: error.message || 'Please try again later.', variant: 'destructive' });
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+
     const handleSearchCertificates = () => {
-        // The filtering logic is already handled by the useEffect for dynamic filtering.
-        // This function can remain to trigger a re-evaluation or for future complex search logic.
         toast({ title: 'Filters applied.' });
     };
 
@@ -972,8 +1057,8 @@ const AdminDashboard = () => {
         }
         setIsUploading(true);
 
-        const folderPath = `public_results/${resultFile.name}`;
-        // Ensure 'results' is the correct bucket name in supabaseNew
+        const uniqueFileName = `${uuidv4()}_${resultFile.name.replace(/\s/g, '_')}`;
+        const folderPath = `public_results/${uniqueFileName}`;
         const { publicUrl, filePath, error: uploadError } = await uploadFile('results', resultFile, folderPath, supabaseNew);
 
         if (uploadError || !publicUrl) {
@@ -993,7 +1078,6 @@ const AdminDashboard = () => {
             toast({ title: '✅ Result uploaded successfully' });
             setResultTitle('');
             setResultFile(null);
-            // Consider adding a loadResults function and calling it here if you display existing results
         } catch (error: any) {
             console.error('Error linking result in database:', error);
             toast({ title: 'Upload failed', description: error.message || 'Please try again later.', variant: 'destructive' });
@@ -1009,8 +1093,7 @@ const AdminDashboard = () => {
         }
         setIsUploading(true);
         try {
-            // Ensure 'notifications' table is in supabaseNew
-            const { error } = await supabaseNew.from('notifications').insert([{ title: notificationTitle, message: notificationMessage, created_at: new Date().toISOString() }]);
+            const { error } = await supabaseOld.from('notifications').insert([{ title: notificationTitle, message: notificationMessage, created_at: new Date().toISOString() }]);
             if (error) {
                 toast({ title: 'Error posting notification', description: error.message, variant: 'destructive' });
             } else {
@@ -1043,9 +1126,9 @@ const AdminDashboard = () => {
         setIsUploading(true);
         try {
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const folderPath = `attendance_sheets/${timestamp}_${attendanceFile.name}`;
+            const uniqueFileName = `${timestamp}_${attendanceFile.name.replace(/\s/g, '_')}`; // Ensure unique file name
+            const folderPath = `attendance_sheets/${uniqueFileName}`;
 
-            // Ensure 'attendance_sheets' is the correct bucket name in supabaseOld
             const { publicUrl, filePath, error: uploadError } = await uploadFile('attendance_sheets', attendanceFile, folderPath, supabaseOld);
 
             if (uploadError || !publicUrl) {
@@ -1054,14 +1137,12 @@ const AdminDashboard = () => {
                 return;
             }
 
-            // Store metadata in the 'attendance_records' table (in supabaseOld)
-            // Ensure column name `uploaded_at` matches database schema
             const { error: dbError } = await supabaseOld.from('attendance_records').insert([
                 {
                     file_name: attendanceFile.name,
                     file_url: publicUrl,
                     file_path: filePath,
-                    uploaded_at: new Date().toISOString(), // This should match your DB column name
+                    uploaded_at: new Date().toISOString(),
                     processed_status: 'pending',
                     notes: 'File uploaded, awaiting backend processing.'
                 }
@@ -1076,8 +1157,8 @@ const AdminDashboard = () => {
                 title: "✅ Attendance sheet uploaded",
                 description: `File "${attendanceFile.name}" uploaded. Backend processing initiated (placeholder).`,
             });
-            setAttendanceFile(null); // Clear the file input
-            loadAttendanceRecords(); // Refresh the list of attendance records
+            setAttendanceFile(null);
+            loadAttendanceRecords();
 
         } catch (error: any) {
             console.error('Error during attendance upload/processing:', error);
@@ -1517,6 +1598,7 @@ const AdminDashboard = () => {
                                                         <tr className="bg-gray-50 dark:bg-gray-700">
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Title</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Date</th>
+                                                            <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Time</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Venue</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Actions</th>
                                                         </tr>
@@ -1526,6 +1608,7 @@ const AdminDashboard = () => {
                                                             <tr key={event.id} className="bg-white hover:bg-gray-100 border-b border-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 dark:border-gray-600">
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{event.title}</td>
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{new Date(event.date).toLocaleDateString()}</td>
+                                                                <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{event.time || 'N/A'}</td>
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{event.venue || 'N/A'}</td>
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600">
                                                                     <div className="flex space-x-2">
@@ -1559,26 +1642,23 @@ const AdminDashboard = () => {
                                         <Label htmlFor="event-title">Title</Label>
                                         <Input id="event-title" value={newEvent.title} onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
-                                        <Label htmlFor="event-description">Description</Label>
+                                        <Label htmlFor="event-description">Description (Optional)</Label>
                                         <Textarea id="event-description" value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
                                         <Label htmlFor="event-date">Date</Label>
                                         <Input id="event-date" type="date" value={newEvent.date} onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
                                         <Label htmlFor="event-time">Time (Optional)</Label>
-                                        <Input id="event-time" type="time" value={newEvent.time} onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
+                                        <Input id="event-time" type="time" value={newEvent.time || ''} onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
                                         <Label htmlFor="event-venue">Venue (Optional)</Label>
-                                        <Input id="event-venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                        <Label htmlFor="event-speaker">Speaker (Optional)</Label>
-                                        <Input id="event-speaker" value={newEvent.speaker} onChange={(e) => setNewEvent({ ...newEvent, speaker: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
+                                        <Input id="event-venue" value={newEvent.venue || ''} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
                                         <Label htmlFor="event-image">Image (Optional)</Label>
                                         <Input id="event-image" type="file" accept="image/*" onChange={(e) => setNewEventImage(e.target.files?.[0] || null)} />
 
                                         <Button
-                                            onClick={() => handleAddEntry('events', newEvent, newEventImage, 'events', supabaseNew, loadEvents, setNewEvent)}
+                                            onClick={() => handleAddSingleFileEntry('events', newEvent, newEventImage, 'events', supabaseNew, loadEvents, setNewEvent, setNewEventImage)}
                                             disabled={isUploading || !newEvent.title || !newEvent.date}
                                             className="w-full flex items-center space-x-2 dark:bg-blue-600 dark:hover:bg-blue-700"
                                         >
@@ -1613,7 +1693,6 @@ const AdminDashboard = () => {
                                                         <tr className="bg-gray-50 dark:bg-gray-700">
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Name</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Designation</th>
-                                                            <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Department</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Actions</th>
                                                         </tr>
                                                     </thead>
@@ -1622,7 +1701,6 @@ const AdminDashboard = () => {
                                                             <tr key={member.id} className="bg-white hover:bg-gray-100 border-b border-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 dark:border-gray-600">
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{member.name}</td>
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{member.designation}</td>
-                                                                <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{member.department || 'N/A'}</td>
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600">
                                                                     <div className="flex space-x-2">
                                                                         <Button size="sm" variant="destructive" onClick={() => handleDeleteFaculty(member)} disabled={isDeleting}>
@@ -1658,31 +1736,19 @@ const AdminDashboard = () => {
                                         <Label htmlFor="faculty-designation">Designation</Label>
                                         <Input id="faculty-designation" value={newFaculty.designation} onChange={(e) => setNewFaculty({ ...newFaculty, designation: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
-                                        <Label htmlFor="faculty-department">Department</Label>
-                                        <Input id="faculty-department" value={newFaculty.department} onChange={(e) => setNewFaculty({ ...newFaculty, department: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                        <Label htmlFor="faculty-bio">Bio (Optional)</Label>
-                                        <Textarea id="faculty-bio" value={newFaculty.bio} onChange={(e) => setNewFaculty({ ...newFaculty, bio: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                        <Label htmlFor="faculty-expertise">Expertise (Optional)</Label>
-                                        <Input id="faculty-expertise" value={newFaculty.expertise} onChange={(e) => setNewFaculty({ ...newFaculty, expertise: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                        <Label htmlFor="faculty-publications">Publications (Optional)</Label>
-                                        <Textarea id="faculty-publications" value={newFaculty.publications} onChange={(e) => setNewFaculty({ ...newFaculty, publications: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
                                         <Label htmlFor="faculty-image">Image (Optional)</Label>
                                         <Input id="faculty-image" type="file" accept="image/*" onChange={(e) => setNewFacultyImage(e.target.files?.[0] || null)} />
 
                                         <Button
-                                            onClick={() => handleAddEntry('faculty', newFaculty, newFacultyImage, 'faculty', supabaseNew, loadFaculty, setNewFaculty)}
-                                            disabled={isUploading || !newFaculty.name || !newFaculty.designation || !newFaculty.department}
+                                            onClick={() => handleAddSingleFileEntry('faculty', newFaculty, newFacultyImage, 'faculty', supabaseNew, loadFaculty, setNewFaculty, setNewFacultyImage)}
+                                            disabled={isUploading || !newFaculty.name || !newFaculty.designation}
                                             className="w-full flex items-center space-x-2 dark:bg-blue-600 dark:hover:bg-blue-700"
                                         >
                                             <Plus className="w-4 h-4" />
                                             <span>{isUploading ? 'Adding...' : 'Add Faculty'}</span>
                                         </Button>
-                                        {(!newFaculty.name || !newFaculty.designation || !newFaculty.department) && (
-                                            <p className="text-sm text-red-500">Please enter name, designation, and department to add faculty.</p>
+                                        {(!newFaculty.name || !newFaculty.designation) && (
+                                            <p className="text-sm text-red-500">Please enter name and designation to add faculty.</p>
                                         )}
                                     </CardContent>
                                 </Card>
@@ -1709,6 +1775,7 @@ const AdminDashboard = () => {
                                                         <tr className="bg-gray-50 dark:bg-gray-700">
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Student Name</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Company</th>
+                                                            <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">CTC</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Year</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Actions</th>
                                                         </tr>
@@ -1718,7 +1785,8 @@ const AdminDashboard = () => {
                                                             <tr key={placement.id} className="bg-white hover:bg-gray-100 border-b border-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 dark:border-gray-600">
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{placement.student_name}</td>
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{placement.company}</td>
-                                                                <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{placement.year}</td>
+                                                                <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{placement.ctc || 'N/A'}</td>
+                                                                <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{placement.year || 'N/A'}</td>
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600">
                                                                     <div className="flex space-x-2">
                                                                         <Button size="sm" variant="destructive" onClick={() => handleDeletePlacement(placement)} disabled={isDeleting}>
@@ -1757,27 +1825,21 @@ const AdminDashboard = () => {
                                         <Label htmlFor="placement-ctc">CTC (Optional)</Label>
                                         <Input id="placement-ctc" type="number" value={newPlacement.ctc || ''} onChange={(e) => setNewPlacement({ ...newPlacement, ctc: parseFloat(e.target.value) || undefined })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
-                                        <Label htmlFor="placement-year">Year</Label>
-                                        <Input id="placement-year" type="number" value={newPlacement.year || ''} onChange={(e) => setNewPlacement({ ...newPlacement, year: parseInt(e.target.value) || 0 })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                        <Label htmlFor="placement-type">Type</Label>
-                                        <Input id="placement-type" value={newPlacement.type} onChange={(e) => setNewPlacement({ ...newPlacement, type: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                        <Label htmlFor="placement-branch">Branch</Label>
-                                        <Input id="placement-branch" value={newPlacement.branch} onChange={(e) => setNewPlacement({ ...newPlacement, branch: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
+                                        <Label htmlFor="placement-year">Year (Optional)</Label>
+                                        <Input id="placement-year" type="number" value={newPlacement.year || ''} onChange={(e) => setNewPlacement({ ...newPlacement, year: parseInt(e.target.value) || undefined })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
                                         <Label htmlFor="placement-image">Image (Optional)</Label>
                                         <Input id="placement-image" type="file" accept="image/*" onChange={(e) => setNewPlacementImage(e.target.files?.[0] || null)} />
 
                                         <Button
-                                            onClick={() => handleAddEntry('placements', newPlacement, newPlacementImage, 'placements', supabaseNew, loadPlacements, setNewPlacement)}
-                                            disabled={isUploading || !newPlacement.student_name || !newPlacement.company || !newPlacement.year || !newPlacement.type || !newPlacement.branch}
+                                            onClick={() => handleAddSingleFileEntry('placements', newPlacement, newPlacementImage, 'placements', supabaseNew, loadPlacements, setNewPlacement, setNewPlacementImage)}
+                                            disabled={isUploading || !newPlacement.student_name || !newPlacement.company}
                                             className="w-full flex items-center space-x-2 dark:bg-blue-600 dark:hover:bg-blue-700"
                                         >
                                             <Plus className="w-4 h-4" />
                                             <span>{isUploading ? 'Adding...' : 'Add Placement'}</span>
                                         </Button>
-                                        {(!newPlacement.student_name || !newPlacement.company || !newPlacement.year || !newPlacement.type || !newPlacement.branch) && (
+                                        {(!newPlacement.student_name || !newPlacement.company) && (
                                             <p className="text-sm text-red-500">Please fill all required fields to add a placement.</p>
                                         )}
                                     </CardContent>
@@ -1803,19 +1865,21 @@ const AdminDashboard = () => {
                                                 <table className="w-full border-collapse border border-gray-200 dark:border-gray-600">
                                                     <thead>
                                                         <tr className="bg-gray-50 dark:bg-gray-700">
+                                                            <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Student Name</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Title</th>
-                                                            <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Date</th>
+                                                            <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Uploaded At</th>
                                                             <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Actions</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         {achievements.map((item) => (
                                                             <tr key={item.id} className="bg-white hover:bg-gray-100 border-b border-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 dark:border-gray-600">
+                                                                <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{item.student_name}</td>
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{item.title}</td>
-                                                                <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</td>
+                                                                <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A'}</td>
                                                                 <td className="border border-gray-200 px-4 py-2 dark:border-gray-600">
                                                                     <div className="flex space-x-2">
-                                                                        {item.certificate_url && (
+                                                                        {item.image_url && (
                                                                             <Button
                                                                                 asChild
                                                                                 size="sm"
@@ -1823,11 +1887,11 @@ const AdminDashboard = () => {
                                                                                 className="dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-700"
                                                                             >
                                                                                 <a
-                                                                                    href={item.certificate_url}
+                                                                                    href={item.image_url}
                                                                                     target="_blank"
                                                                                     rel="noopener noreferrer"
                                                                                 >
-                                                                                    View Cert
+                                                                                    View Image
                                                                                 </a>
                                                                             </Button>
                                                                         )}
@@ -1858,28 +1922,28 @@ const AdminDashboard = () => {
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-0 space-y-4">
+                                        <Label htmlFor="achievement-student-name">Student Name</Label>
+                                        <Input id="achievement-student-name" value={newAchievement.student_name} onChange={(e) => setNewAchievement({ ...newAchievement, student_name: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
+
                                         <Label htmlFor="achievement-title">Title</Label>
                                         <Input id="achievement-title" value={newAchievement.title} onChange={(e) => setNewAchievement({ ...newAchievement, title: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
                                         <Label htmlFor="achievement-description">Description (Optional)</Label>
                                         <Textarea id="achievement-description" value={newAchievement.description} onChange={(e) => setNewAchievement({ ...newAchievement, description: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
-                                        <Label htmlFor="achievement-date">Date (Optional)</Label>
-                                        <Input id="achievement-date" type="date" value={newAchievement.date} onChange={(e) => setNewAchievement({ ...newAchievement, date: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                        <Label htmlFor="achievement-file">Certificate File (PDF/Image - Optional)</Label>
-                                        <Input id="achievement-file" type="file" accept=".pdf,image/*" onChange={(e) => setNewAchievementFile(e.target.files?.[0] || null)} />
+                                        <Label htmlFor="achievement-image">Image (Optional)</Label>
+                                        <Input id="achievement-image" type="file" accept="image/*" onChange={(e) => setNewAchievementImage(e.target.files?.[0] || null)} />
 
                                         <Button
-                                            onClick={() => handleAddEntry('achievements', newAchievement, newAchievementFile, 'achievements', supabaseNew, loadAchievements, setNewAchievement)}
-                                            disabled={isUploading || !newAchievement.title}
+                                            onClick={() => handleAddSingleFileEntry('achievements', newAchievement, newAchievementImage, 'achievements', supabaseNew, loadAchievements, setNewAchievement, setNewAchievementImage)}
+                                            disabled={isUploading || !newAchievement.student_name || !newAchievement.title}
                                             className="w-full flex items-center space-x-2 dark:bg-blue-600 dark:hover:bg-blue-700"
                                         >
                                             <Upload className="w-4 h-4" />
                                             <span>{isUploading ? 'Uploading...' : 'Upload Achievement'}</span>
                                         </Button>
-                                        {!newAchievement.title && (
-                                            <p className="text-sm text-red-500">Please enter a title to upload an achievement.</p>
+                                        {(!newAchievement.student_name || !newAchievement.title) && (
+                                            <p className="text-sm text-red-500">Please enter student name and title to upload an achievement.</p>
                                         )}
                                     </CardContent>
                                 </Card>
@@ -2009,7 +2073,6 @@ const AdminDashboard = () => {
                                 </p>
                             </CardContent>
                         </Card>
-                        {/* You might want to add a section to view/manage uploaded results here too */}
                     </TabsContent>
 
                     {/* Timetable Tab Content (External component) */}
@@ -2023,7 +2086,6 @@ const AdminDashboard = () => {
                             </CardHeader>
                             <CardContent>
                                 <Suspense fallback={<div className="text-gray-600 dark:text-gray-300">Loading Timetable...</div>}>
-                                    {/* Pass supabase instances to TimetableManager */}
                                     <TimetableManager supabaseNew={supabaseNew} supabaseOld={supabaseOld} toast={toast} />
                                 </Suspense>
                             </CardContent>
@@ -2043,14 +2105,29 @@ const AdminDashboard = () => {
                                     </CardHeader>
                                     <CardContent>
                                         {gallery.length > 0 ? (
-                                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                                 {gallery.map((item) => (
                                                     <Card key={item.id} className="relative group overflow-hidden h-full flex flex-col dark:bg-gray-700 dark:text-gray-100">
-                                                        <img src={item.image_url} alt={item.title} className="w-full h-32 object-cover" />
+                                                        {/* Display first media item as thumbnail, or loop through all */}
+                                                        {item.media && item.media.length > 0 && (
+                                                            <>
+                                                                {item.media[0].media_type === 'image' ? (
+                                                                    <img src={item.media[0].media_url} alt={item.title} className="w-full h-32 object-cover" />
+                                                                ) : (
+                                                                    <div className="w-full h-32 bg-gray-900 flex items-center justify-center text-gray-400">
+                                                                        <Video className="w-12 h-12" />
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        )}
                                                         <CardContent className="p-2 text-sm flex-grow">
                                                             <h3 className="font-semibold">{item.title}</h3>
                                                             <p className="text-gray-500 text-xs truncate dark:text-gray-300">{item.description}</p>
+                                                            {item.media && item.media.length > 1 && (
+                                                                <p className="text-xs text-gray-400 mt-1 dark:text-gray-500">+{item.media.length - 1} more media</p>
+                                                            )}
                                                             <div className="flex justify-end space-x-2 mt-2">
+                                                                {/* You might want a "View All Media" dialog here */}
                                                                 <Button
                                                                     size="sm"
                                                                     variant="destructive"
@@ -2085,21 +2162,24 @@ const AdminDashboard = () => {
                                         <Input id="gallery-title" value={newGalleryItem.title} onChange={(e) => setNewGalleryItem({ ...newGalleryItem, title: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
                                         <Label htmlFor="gallery-description">Description (Optional)</Label>
-                                        <Textarea id="gallery-description" value={newGalleryItem.description} onChange={(e) => setNewGalleryItem({ ...newGalleryItem, description: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
+                                        <Textarea id="gallery-description" value={newGalleryItem.description || ''} onChange={(e) => setNewGalleryItem({ ...newGalleryItem, description: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
-                                        <Label htmlFor="gallery-image">Image</Label>
-                                        <Input id="gallery-image" type="file" accept="image/*" onChange={(e) => setNewGalleryImage(e.target.files?.[0] || null)} />
+                                        <Label htmlFor="gallery-media-files">Images/Videos (Multiple)</Label>
+                                        <Input id="gallery-media-files" type="file" accept="image/*,video/*" multiple onChange={handleGalleryMediaFileChange} />
+                                        {newGalleryMediaFiles.length > 0 && (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">Selected: {newGalleryMediaFiles.map(f => f.name).join(', ')}</p>
+                                        )}
 
                                         <Button
-                                            onClick={() => handleAddEntry('gallery', newGalleryItem, newGalleryImage, 'gallery', supabaseNew, loadGallery, setNewGalleryItem)}
-                                            disabled={isUploading || !newGalleryItem.title || !newGalleryImage}
+                                            onClick={handleAddGalleryItem}
+                                            disabled={isUploading || !newGalleryItem.title || newGalleryMediaFiles.length === 0}
                                             className="w-full flex items-center space-x-2 dark:bg-blue-600 dark:hover:bg-blue-700"
                                         >
                                             <Upload className="w-4 h-4" />
                                             <span>{isUploading ? 'Uploading...' : 'Upload Gallery Item'}</span>
                                         </Button>
-                                        {(!newGalleryItem.title || !newGalleryImage) && (
-                                            <p className="text-sm text-red-500">Please enter a title and select an image to upload to gallery.</p>
+                                        {(!newGalleryItem.title || newGalleryMediaFiles.length === 0) && (
+                                            <p className="text-sm text-red-500">Please enter a title and select at least one image/video file to upload to gallery.</p>
                                         )}
                                     </CardContent>
                                 </Card>
@@ -2107,7 +2187,7 @@ const AdminDashboard = () => {
                         </div>
                     </TabsContent>
 
-                    {/* Notifications Tab Content (SupabaseNew Backed) */}
+                    {/* Notifications Tab Content (SupabaseOld Backed) */}
                     <TabsContent value={TAB_VALUES.NOTIFICATIONS}>
                         <Card className="dark:bg-gray-800 dark:text-gray-100">
                             <CardHeader>
