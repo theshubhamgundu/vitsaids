@@ -8,9 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Edit, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { SupabaseClient } from '@supabase/supabase-js'; // Import SupabaseClient type
-// import { supabaseOld } from '@/integrations/supabase/supabaseOld'; // No longer directly imported here, but passed as prop
-import AddSlotModal from './AddSlotModal'; // Assuming this component exists and its logic is compatible
+import { SupabaseClient } from '@supabase/supabase-js';
+import AddSlotModal from './AddSlotModal';
 
 // Define interface for TimetableSlot as expected by the DB and component
 interface TimetableSlot {
@@ -19,6 +18,8 @@ interface TimetableSlot {
     day: string;
     hour: string; // Storing formatted time slot like "9:00 AM-10:00 AM"
     subject_name: string; // Corrected column name
+    faculty?: string; // Optional faculty column
+    room?: string; // Optional room column
     created_at?: string;
 }
 
@@ -31,14 +32,15 @@ interface TimetableManagerProps {
 
 const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supabaseOld, toast }) => {
     const [selectedYear, setSelectedYear] = useState('1');
-    const [editingSlot, setEditingSlot] = useState<TimetableSlot | null>(null); // Type for editing slot
+    const [editingSlot, setEditingSlot] = useState<TimetableSlot | null>(null);
     const [showAddSlot, setShowAddSlot] = useState(false);
     const [selectedDay, setSelectedDay] = useState('Monday');
-    const [timetableData, setTimetableData] = useState<{ [year: string]: { [day: string]: { [hour: string]: string } } }>({});
-    const [isLoading, setIsLoading] = useState(false); // Added loading state
+    // Using a more structured state to easily access nested data and prevent errors for non-existent year/day
+    const [timetableData, setTimetableData] = useState<{ [year: string]: { [day: string]: { [hour: string]: TimetableSlot } } }>({});
+    const [isLoading, setIsLoading] = useState(false);
 
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const years = ['1', '2', '3', '4']; // Assuming years 1-4
+    const years = ['1', '2', '3', '4'];
 
     // Load timetable data from database
     const loadTimetableData = useCallback(async () => {
@@ -46,10 +48,10 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
         try {
             // Use supabaseOld as confirmed for timetable
             const { data, error } = await supabaseOld
-                .from('timetable_slots') // Changed table name to 'timetable_slots'
+                .from('timetable_slots')
                 .select('*')
-                .eq('year', parseInt(selectedYear)) // Filter by selectedYear
-                .order('hour'); // Order by hour
+                .order('year', { ascending: true }) // Order by year for full data load
+                .order('hour', { ascending: true }); // Then by hour
 
             if (error) {
                 console.error('Error loading timetable data:', error);
@@ -57,23 +59,20 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
                 return;
             }
 
-            // Transform data into the expected format
-            // This logic groups by day and then hour for easy lookup in the UI
-            const transformedData: { [year: string]: { [day: string]: { [hour: string]: string } } } = {};
+            // Transform data into the expected nested format
+            const transformedData: { [year: string]: { [day: string]: { [hour: string]: TimetableSlot } } } = {};
             data.forEach((slot: TimetableSlot) => {
-                if (!transformedData[slot.year]) {
-                    transformedData[slot.year] = {};
+                const yearStr = slot.year.toString();
+                if (!transformedData[yearStr]) {
+                    transformedData[yearStr] = {};
                 }
-                if (!transformedData[slot.year][slot.day]) {
-                    transformedData[slot.year][slot.day] = {};
+                if (!transformedData[yearStr][slot.day]) {
+                    transformedData[yearStr][slot.day] = {};
                 }
-                transformedData[slot.year][slot.day][slot.hour] = slot.subject_name;
+                transformedData[yearStr][slot.day][slot.hour] = slot; // Store the full slot object
             });
 
-            setTimetableData(prev => ({ // Merge with previous data or set entirely
-                ...prev, // Keep data for other years if already loaded
-                [selectedYear]: transformedData[selectedYear] || {} // Only update data for current selected year
-            }));
+            setTimetableData(transformedData); // Set the full transformed data
 
         } catch (error: any) {
             console.error('Error loading timetable:', error);
@@ -81,68 +80,37 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
         } finally {
             setIsLoading(false);
         }
-    }, [selectedYear, supabaseOld, toast]); // Added selectedYear to dependencies to reload when year changes
+    }, [supabaseOld, toast]);
 
     useEffect(() => {
         loadTimetableData();
-        // Add realtime listener here only if you need instant updates for timetable,
-        // otherwise, AdminDashboard's central listener is sufficient.
-        // For local development, adding a specific listener here ensures updates without full page refresh.
+        
+        // Realtime subscription for timetable changes
         const timetableChannel = supabaseOld
-            .channel(`timetable_slots_channel_${selectedYear}`) // Unique channel for each year
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'timetable_slots', filter: `year=eq.${selectedYear}` }, (payload) => {
+            .channel('timetable_slots_changes_all') // A single channel for all timetable changes
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'timetable_slots' }, (payload) => {
                 console.log("Timetable change detected:", payload);
-                loadTimetableData(); // Reload data for the specific year
+                loadTimetableData(); // Reload all data on any change
             })
             .subscribe();
 
         return () => {
             supabaseOld.removeChannel(timetableChannel);
         };
-    }, [loadTimetableData, selectedYear, supabaseOld]); // Depends on selectedYear to subscribe/unsubscribe correctly
+    }, [loadTimetableData, supabaseOld]);
 
-    const updateTimetableSlot = async (year: string, day: string, timeSlot: string, subject: string) => {
-        setIsLoading(true); // Indicate loading for update operation
+    const updateTimetableSlot = async (slotId: string, updatedFields: Partial<TimetableSlot>) => {
+        setIsLoading(true);
         try {
-            // Find the slot by its unique combination of year, day, and hour (timeSlot)
-            const { data: existingSlots, error: fetchError } = await supabaseOld
+            // Update using the slot ID
+            const { error } = await supabaseOld
                 .from('timetable_slots')
-                .select('id')
-                .eq('year', parseInt(year))
-                .eq('day', day)
-                .eq('hour', timeSlot);
+                .update(updatedFields)
+                .eq('id', slotId);
 
-            if (fetchError) throw fetchError;
-
-            if (existingSlots && existingSlots.length > 0) {
-                // Update existing slot using its ID
-                const { error } = await supabaseOld
-                    .from('timetable_slots')
-                    .update({ subject_name: subject }) // Ensure subject_name matches DB
-                    .eq('id', existingSlots[0].id);
-
-                if (error) throw error;
-                toast({ title: "Timetable slot updated successfully" });
-            } else {
-                // This case ideally shouldn't happen for an 'update' function, but as a fallback
-                // it might insert if the combination doesn't exist.
-                // However, for consistency, consider making update a more atomic operation by ID
-                toast({ title: "Warning", description: "Time slot not found for update, attempting to insert.", variant: "warning" });
-                const { error } = await supabaseOld
-                    .from('timetable_slots')
-                    .insert({
-                        year: parseInt(year),
-                        day: day,
-                        hour: timeSlot,
-                        subject_name: subject,
-                        created_at: new Date().toISOString()
-                    });
-                if (error) throw error;
-                toast({ title: "New time slot inserted as part of update fallback." });
-            }
-
+            if (error) throw error;
+            toast({ title: "Timetable slot updated successfully" });
             loadTimetableData(); // Reload all data to ensure UI consistency
-
         } catch (error: any) {
             console.error('Error updating timetable:', error);
             toast({ title: "Error updating timetable", description: error.message || "Please try again.", variant: "destructive" });
@@ -151,16 +119,16 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
         }
     };
 
-    const deleteSlot = async (year: string, day: string, timeSlot: string) => {
-        setIsLoading(true); // Indicate loading for delete operation
+    const deleteSlot = async (slotId: string) => {
+        const confirmDelete = window.confirm("Are you sure you want to delete this timetable slot? This cannot be undone.");
+        if (!confirmDelete) return;
+
+        setIsLoading(true);
         try {
-            // Delete by year, day, hour (timeSlot) combination
             const { error } = await supabaseOld
                 .from('timetable_slots')
                 .delete()
-                .eq('year', parseInt(year))
-                .eq('day', day)
-                .eq('hour', timeSlot);
+                .eq('id', slotId); // Delete by ID
 
             if (error) throw error;
 
@@ -177,7 +145,6 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
     const handleAddSlot = async (slotData: { year: string; day: string; startTime: string; endTime: string; subject: string; faculty: string; room: string; }) => {
         const { year, day, startTime, endTime, subject, faculty, room } = slotData;
 
-        // Convert 24-hour format to 12-hour format for display and storage consistency
         const formatTime = (time: string) => {
             const [hours, minutes] = time.split(':');
             const hour = parseInt(hours);
@@ -188,17 +155,17 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
 
         const formattedTimeSlot = `${formatTime(startTime)}-${formatTime(endTime)}`;
 
-        setIsLoading(true); // Indicate loading for add operation
+        setIsLoading(true);
         try {
             const { error } = await supabaseOld
-                .from('timetable_slots') // Changed table name
+                .from('timetable_slots')
                 .insert({
                     year: parseInt(year),
                     day: day,
-                    hour: formattedTimeSlot, // Storing combined time slot
-                    subject_name: subject, // Using subject_name
-                    faculty: faculty, // Assuming 'faculty' column also exists
-                    room: room, // Assuming 'room' column also exists
+                    hour: formattedTimeSlot,
+                    subject_name: subject,
+                    faculty: faculty,
+                    room: room,
                     created_at: new Date().toISOString()
                 });
 
@@ -208,8 +175,8 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
                 title: "New time slot added successfully",
                 description: `${subject} added to ${day} at ${formattedTimeSlot}`
             });
-            setShowAddSlot(false); // Close modal on success
-            loadTimetableData(); // Refresh list
+            setShowAddSlot(false);
+            loadTimetableData();
         } catch (error: any) {
             console.error('Error adding slot:', error);
             toast({ title: "Error adding slot", description: error.message || "Please try again.", variant: "destructive" });
@@ -218,34 +185,28 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
         }
     };
 
-    const SlotEditModal = ({ slot, onSave, onClose }: { slot: TimetableSlot | null; onSave: (year: string, day: string, timeSlot: string, subject: string) => Promise<void>; onClose: () => void }) => {
-        const [subject, setSubject] = useState(slot?.subject_name || ''); // Use subject_name
-        const [faculty, setFaculty] = useState(slot?.faculty || ''); // Assuming faculty is editable
-        const [room, setRoom] = useState(slot?.room || ''); // Assuming room is editable
+    // SlotEditModal moved inside TimetableManager to directly access its states and functions
+    const SlotEditModal = ({ slot, onSave, onClose }: { slot: TimetableSlot | null; onSave: (id: string, updatedFields: Partial<TimetableSlot>) => Promise<void>; onClose: () => void }) => {
+        const [subject, setSubject] = useState('');
+        const [faculty, setFaculty] = useState('');
+        const [room, setRoom] = useState('');
 
         useEffect(() => {
             if (slot) {
                 setSubject(slot.subject_name);
-                setFaculty(slot.faculty || ''); // Initialize optional fields
-                setRoom(slot.room || ''); // Initialize optional fields
+                setFaculty(slot.faculty || '');
+                setRoom(slot.room || '');
+            } else {
+                // Reset state when modal is closed or slot is nullified
+                setSubject('');
+                setFaculty('');
+                setRoom('');
             }
         }, [slot]);
 
         const handleSave = async () => {
             if (slot) {
-                await onSave(slot.year.toString(), slot.day, slot.hour, subject); // Pass year as string for onSave
-                // Also update faculty and room if they are directly in timetable_slots
-                // For this, you would need an update function that takes more parameters or a full object
-                // If faculty/room are stored in the timetable_slots table itself:
-                const { error: updateError } = await supabaseOld
-                    .from('timetable_slots')
-                    .update({ faculty, room })
-                    .eq('id', slot.id);
-                if (updateError) {
-                    toast({title: "Error updating faculty/room", description: updateError.message, variant: "destructive"});
-                } else {
-                    toast({title: "Faculty/Room updated"});
-                }
+                await onSave(slot.id, { subject_name: subject, faculty: faculty, room: room });
             }
             onClose();
         };
@@ -302,16 +263,31 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
     };
 
     // Get all unique time slots for the selected year and day
-    const getTimeSlotsForDay = (year: string, day: string) => {
-        // Ensure timetableData[year] and timetableData[year][day] exist before accessing
+    const getTimeSlotsForDay = useCallback((year: string, day: string) => {
         const dayData = timetableData[year]?.[day] || {};
         return Object.keys(dayData).sort((a, b) => {
-            // Custom sort for "HH:MM AM/PM" format
-            const timeA = new Date(`2000/01/01 ${a.split('-')[0]}`);
-            const timeB = new Date(`2000/01/01 ${b.split('-')[0]}`);
-            return timeA.getTime() - timeB.getTime();
+            // Robust time parsing for sorting "HH:MM AM/PM" format
+            const parseTime = (timeStr: string) => {
+                const [timePart] = timeStr.split('-');
+                const [time, ampm] = timePart.split(' ');
+
+                let [hours, minutes] = time.split(':').map(Number);
+
+                if (ampm) {
+                    if (ampm.toUpperCase() === 'PM' && hours < 12) {
+                        hours += 12;
+                    } else if (ampm.toUpperCase() === 'AM' && hours === 12) {
+                        hours = 0; // Midnight (12 AM) is 0 hours
+                    }
+                }
+                return hours * 60 + minutes; // Convert to minutes from midnight for easy comparison
+            };
+
+            const minutesA = parseTime(a);
+            const minutesB = parseTime(b);
+            return minutesA - minutesB;
         });
-    };
+    }, [timetableData]); // Include timetableData in dependencies for useCallback
 
     return (
         <div className="space-y-6">
@@ -367,7 +343,7 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {isLoading && !timetableData[selectedYear]?.[day] ? (
+                                {isLoading && (!timetableData[selectedYear] || Object.keys(timetableData[selectedYear][day] || {}).length === 0) ? (
                                     <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
                                         <p>Loading slots...</p>
@@ -379,12 +355,12 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
-                                        {getTimeSlotsForDay(selectedYear, day).map(timeSlot => {
-                                            const slot = (timetableData[selectedYear]?.[day] as { [hour: string]: TimetableSlot })?.[timeSlot];
-                                            if (!slot) return null; // Defensive check
+                                        {getTimeSlotsForDay(selectedYear, day).map(timeSlotKey => { // Use timeSlotKey
+                                            const slot = timetableData[selectedYear]?.[day]?.[timeSlotKey]; // Retrieve full slot object
+                                            if (!slot) return null;
 
                                             return (
-                                                <div key={timeSlot} className="flex items-center justify-between p-3 border rounded-lg dark:border-gray-600 dark:bg-gray-700">
+                                                <div key={slot.id} className="flex items-center justify-between p-3 border rounded-lg dark:border-gray-600 dark:bg-gray-700">
                                                     <div className="flex-1 text-gray-900 dark:text-gray-200">
                                                         <span className="font-medium text-sm">{slot.hour}</span>
                                                         <span className="ml-4 text-gray-700 dark:text-gray-300">{slot.subject_name}</span>
@@ -395,15 +371,7 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
-                                                            onClick={() => setEditingSlot({
-                                                                id: slot.id, // Pass ID for actual update
-                                                                year: parseInt(selectedYear),
-                                                                day: day,
-                                                                hour: timeSlot,
-                                                                subject_name: slot.subject_name,
-                                                                faculty: slot.faculty,
-                                                                room: slot.room,
-                                                            })}
+                                                            onClick={() => setEditingSlot(slot)} // Pass the whole slot object
                                                             className="dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-600"
                                                         >
                                                             <Edit className="w-4 h-4" />
@@ -411,7 +379,7 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
                                                         <Button
                                                             size="sm"
                                                             variant="destructive"
-                                                            onClick={() => deleteSlot(selectedYear, day, timeSlot)}
+                                                            onClick={() => deleteSlot(slot.id)} // Pass ID for deletion
                                                             disabled={isLoading}
                                                         >
                                                             <Trash2 className="w-4 h-4" />
@@ -419,7 +387,7 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
                                                     </div>
                                                 </div>
                                             );
-                                        })
+                                        })}
                                     </div>
                                 )}
                             </CardContent>
@@ -430,7 +398,7 @@ const TimetableManager: React.FC<TimetableManagerProps> = ({ supabaseNew, supaba
 
             <SlotEditModal
                 slot={editingSlot}
-                onSave={updateTimetableSlot}
+                onSave={updateTimetableSlot} // Pass the correct update function
                 onClose={() => setEditingSlot(null)}
             />
 
