@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { supabaseOld } from '@/integrations/supabase/supabaseOld';
+import { supabaseOld as supabase } from '@/integrations/supabase/supabaseOld';
 import { Upload } from 'lucide-react';
 
 interface ProfileCompletionModalProps {

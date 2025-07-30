@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Users, Calendar, GraduationCap, Trophy, BookOpen, MapPin, Phone, Mail, Eye, Target, Image } from 'lucide-react';
-import { supabaseNew } from '@/integrations/supabase/supabaseNew'; // Changed to supabaseNew for content data
+import { supabaseNew as supabase } from '@/integrations/supabase/supabaseNew'; // Changed to supabaseNew for content data
 
 const Hero = () => {
   const [selectedSection, setSelectedSection] = useState(null);
@@ -25,7 +25,7 @@ const Hero = () => {
 
   const loadEvents = async () => {
     try {
-      const { data, error } = await supabaseNew // Changed to supabaseNew
+      const { data, error } = await supabase
         .from('events')
         .select('*')
         .order('date', { ascending: false })
@@ -41,7 +41,7 @@ const Hero = () => {
 
   const loadFaculty = async () => {
     try {
-      const { data, error } = await supabaseNew // Changed to supabaseNew
+      const { data, error } = await supabase
         .from('faculty')
         .select('*')
         .order('created_at', { ascending: false })
@@ -57,7 +57,7 @@ const Hero = () => {
 
   const loadPlacements = async () => {
     try {
-      const { data, error } = await supabaseNew // Changed to supabaseNew
+      const { data, error } = await supabase
         .from('placements')
         .select('*')
         .order('created_at', { ascending: false })
@@ -73,7 +73,7 @@ const Hero = () => {
 
   const loadGallery = async () => {
     try {
-      const { data, error } = await supabaseNew // Changed to supabaseNew
+      const { data, error } = await supabase
         .from('gallery')
         .select('*')
         .order('created_at', { ascending: false })

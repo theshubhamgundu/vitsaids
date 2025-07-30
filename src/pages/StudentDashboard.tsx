@@ -1,7 +1,7 @@
 // StudentDashboard.tsx
 import React, { useEffect, useState, useRef, useCallback } from 'react'; // Added useCallback
 import { useAuth } from '@/contexts/AuthContext';
-import { supabaseNew } from '@/integrations/supabase/supabaseNew'; // Correct import nameimport { useLocation } from 'wouter';
+import { supabaseOld as supabase } from '@/integrations/supabase/supabaseOld'; // Fixed import
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter'; // Add this line
 import { Card, CardContent } from '@/components/ui/card';

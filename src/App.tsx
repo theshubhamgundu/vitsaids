@@ -81,9 +81,11 @@ const App: React.FC = () => {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <AppRoutes />
-          <Toaster />
-          <Sonner />
+          <div className="min-h-screen">
+            <AppRoutes />
+            <Toaster />
+            <Sonner />
+          </div>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
