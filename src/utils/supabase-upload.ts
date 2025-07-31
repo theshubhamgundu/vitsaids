@@ -1,5 +1,5 @@
 // utils/supabase-upload.ts
-import { supabaseNew } from '@/integrations/supabase/supabaseNew';
+import { supabaseNew, setSupabaseNewSession } from '@/integrations/supabase/supabaseNew';
 import { v4 as uuidv4 } from 'uuid';
 
 type ContentType = 'gallery' | 'events' | 'faculty' | 'placements';
@@ -17,6 +17,14 @@ export async function uploadContent({
 }) {
   const id = uuidv4();
   const filePath = `uploads/${id}-${file.name}`;
+
+  // Ensure session is set for supabaseNew before insert
+  // You must pass the current session/access_token from your AuthContext/provider
+  // Example usage:
+  // await setSupabaseNewSession(session.access_token);
+  if (typeof window !== 'undefined' && window.session && window.session.access_token) {
+    await setSupabaseNewSession(window.session.access_token);
+  }
 
   // Upload to Supabase Storage
   const { error: uploadError } = await supabaseNew.storage.from(type).upload(filePath, file);
