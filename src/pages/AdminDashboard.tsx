@@ -17,8 +17,7 @@ import { v4 as uuidv4 } from 'uuid'; // For unique file names in gallery for mul
 
 import { useToast } from '@/hooks/use-toast';
 import { supabaseOld } from '@/integrations/supabase/supabaseOld'; // OLD DB: students, certificates, profiles, attendance_records, notifications, timetable_slots
-import { supabaseNew } from '@/integrations/supabase/supabaseNew'; // NEW DB: achievements, events, faculty, gallery, gallery_media, placements, results
-import TimetableManager from '@/components/TimetableManager';
+import { supabaseNew, setSupabaseNewSession } from '@/integrations/supabase/supabaseNew'; // New importimport TimetableManager from '@/components/TimetableManager';
 import { SupabaseClient } from '@supabase/supabase-js';
 
 import { uploadFile, deleteFile, fetchAllEntries, addEntry, updateEntry, deleteEntry } from '@/lib/SupabaseDataManager';
