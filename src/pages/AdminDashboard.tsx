@@ -804,7 +804,6 @@ const AdminDashboard = () => {
     // --- Generic Content Management (Events, Faculty, Placements, Achievements) ---
     // Note: Gallery uses a custom handleAddGalleryItem due to multiple files
 
-    const { session } = useAuth();
     const handleAddSingleFileEntry = async <T extends object>(
         tableName: string,
         newData: T,
