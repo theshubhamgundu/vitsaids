@@ -139,15 +139,19 @@ export async function fetchAllEntries<T extends BaseContentItem>(tableName: stri
 /**
  * Adds a new entry to a Supabase table.
  */
-export async function addEntry<T extends BaseContentItem>(tableName: string, entryData: Omit<T, 'id' | 'created_at'>, supabase: SupabaseClient): Promise<T | null> {
+export async function addEntry<T extends BaseContentItem>(tableName: string, entryData: Omit<T, 'id' | 'created_at'>, supabase: SupabaseClient, session: { access_token: string }): Promise<T | null> {
     console.log(`[SupabaseDataManager] addEntry: Attempting to add to table "${tableName}" with data:`, entryData);
+    // Enforce session setting before DB call
+    if (session?.access_token) {
+        const { setSupabaseNewSession } = await import('@/integrations/supabase/supabaseNew');
+        await setSupabaseNewSession(session.access_token);
+    }
     try {
         const { data, error } = await supabase
             .from(tableName)
             .insert([entryData])
-            .select() // Request the inserted data back
-            .single(); // Expect a single row back
-
+            .select()
+            .single();
         if (error) {
             console.error(`[SupabaseDataManager] addEntry Error to table "${tableName}":`, error);
             if (error.details) console.error("Error Details:", error.details);
@@ -165,8 +169,13 @@ export async function addEntry<T extends BaseContentItem>(tableName: string, ent
 /**
  * Updates an existing entry in a Supabase table.
  */
-export async function updateEntry<T extends BaseContentItem>(tableName: string, id: string, updatedData: Partial<T>, supabase: SupabaseClient): Promise<T | null> {
+export async function updateEntry<T extends BaseContentItem>(tableName: string, id: string, updatedData: Partial<T>, supabase: SupabaseClient, session: { access_token: string }): Promise<T | null> {
     console.log(`[SupabaseDataManager] updateEntry: Attempting to update table "${tableName}" ID "${id}" with data:`, updatedData);
+    // Enforce session setting before DB call
+    if (session?.access_token) {
+        const { setSupabaseNewSession } = await import('@/integrations/supabase/supabaseNew');
+        await setSupabaseNewSession(session.access_token);
+    }
     try {
         const { data, error } = await supabase
             .from(tableName)
@@ -174,7 +183,6 @@ export async function updateEntry<T extends BaseContentItem>(tableName: string, 
             .eq('id', id)
             .select()
             .single();
-
         if (error) {
             console.error(`[SupabaseDataManager] updateEntry Error for table "${tableName}" ID "${id}":`, error);
             if (error.details) console.error("Error Details:", error.details);
@@ -187,19 +195,23 @@ export async function updateEntry<T extends BaseContentItem>(tableName: string, 
         console.error(`[SupabaseDataManager] updateEntry Caught Exception for table "${tableName}" ID "${id}":`, e);
         return null;
     }
-};
+}
 
 /**
  * Deletes an entry from a Supabase table.
  */
-export async function deleteEntry(tableName: string, id: string, supabase: SupabaseClient): Promise<{ success: boolean; error: Error | null }> {
+export async function deleteEntry(tableName: string, id: string, supabase: SupabaseClient, session: { access_token: string }): Promise<{ success: boolean; error: Error | null }> {
     console.log(`[SupabaseDataManager] deleteEntry: Attempting to delete from table "${tableName}" ID "${id}"`);
+    // Enforce session setting before DB call
+    if (session?.access_token) {
+        const { setSupabaseNewSession } = await import('@/integrations/supabase/supabaseNew');
+        await setSupabaseNewSession(session.access_token);
+    }
     try {
         const { error } = await supabase
             .from(tableName)
             .delete()
             .eq('id', id);
-
         if (error) {
             console.error(`[SupabaseDataManager] deleteEntry Error for table "${tableName}" ID "${id}":`, error);
             if (error.details) console.error("Error Details:", error.details);

@@ -804,6 +804,7 @@ const AdminDashboard = () => {
     // --- Generic Content Management (Events, Faculty, Placements, Achievements) ---
     // Note: Gallery uses a custom handleAddGalleryItem due to multiple files
 
+    const { session } = useAuth();
     const handleAddSingleFileEntry = async <T extends object>(
         tableName: string,
         newData: T,
@@ -819,15 +820,9 @@ const AdminDashboard = () => {
         let filePath = '';
 
         try {
-            // Ensure session is set for supabaseNew before any insert
-            if (supabaseInstance === supabaseNew) {
-                // Import session from your context/provider
-                // Example: import { session } from '@/contexts/AuthContext';
-                // You may need to pass session as a parameter or get it from context
-                // For demonstration, assuming global session variable
-                if (typeof session !== 'undefined' && session?.access_token) {
-                    await setSupabaseNewSession(session.access_token);
-                }
+            // Enforce session setting for supabaseNew before any insert
+            if (supabaseInstance === supabaseNew && session?.access_token) {
+                await setSupabaseNewSession(session.access_token);
             }
 
             if (file && bucketName) {
@@ -860,7 +855,7 @@ const AdminDashboard = () => {
                 delete dataToInsert.year;
             }
 
-            const addResult = await addEntry(tableName, dataToInsert, supabaseInstance);
+            const addResult = await addEntry(tableName, dataToInsert, supabaseInstance, session);
             if (!addResult) {
                 throw new Error(`Failed to add entry to ${tableName} database.`);
             }
@@ -901,7 +896,7 @@ const AdminDashboard = () => {
                     toast({ title: 'File Deletion Warning', description: `Could not delete associated file from storage: ${storageError.message}`, variant: 'warning' });
                 }
             }
-            const { success, error } = await deleteEntry(tableName, itemToDelete.id, supabaseInstance);
+            const { success, error } = await deleteEntry(tableName, itemToDelete.id, supabaseInstance, session);
             if (success) {
                 toast({ title: 'Item deleted successfully' });
                 onSuccess();
@@ -973,6 +968,9 @@ const AdminDashboard = () => {
 
         try {
             // 1. Add the main gallery item first
+            if (session?.access_token) {
+                await setSupabaseNewSession(session.access_token);
+            }
             const { data: insertedItem, error: itemError } = await supabaseNew.from('gallery').insert([{
                 title: newGalleryItem.title,
                 description: newGalleryItem.description,
@@ -1002,6 +1000,9 @@ const AdminDashboard = () => {
                 }
                 uploadedFilePaths.push(uploadResult.filePath!); // Track for potential cleanup
 
+                if (session?.access_token) {
+                    await setSupabaseNewSession(session.access_token);
+                }
                 await supabaseNew.from('gallery_media').insert([{
                     gallery_item_id: galleryItemId,
                     media_url: uploadResult.publicUrl,
@@ -1022,7 +1023,7 @@ const AdminDashboard = () => {
 
             // Cleanup: Delete partially uploaded files and main item if something went wrong
             if (galleryItemId) {
-                await deleteEntry('gallery', galleryItemId, supabaseNew); // Delete main item
+                await deleteEntry('gallery', galleryItemId, supabaseNew, session); // Delete main item
                 for (const path of uploadedFilePaths) {
                     await deleteFile('gallery_media', path, supabaseNew); // Delete uploaded media files
                 }
@@ -1049,7 +1050,7 @@ const AdminDashboard = () => {
             }
             // 2. Database `ON DELETE CASCADE` on `gallery_media` should handle deleting records,
             // so we just delete the main gallery item.
-            const { success, error } = await deleteEntry('gallery', itemToDelete.id, supabaseNew);
+            const { success, error } = await deleteEntry('gallery', itemToDelete.id, supabaseNew, session);
             if (success) {
                 toast({ title: 'Gallery item and media deleted successfully' });
                 loadGallery();
@@ -1089,6 +1090,9 @@ const AdminDashboard = () => {
 
         try {
             // Assume you have a 'results' table in SupabaseNew
+            if (session?.access_token) {
+                await setSupabaseNewSession(session.access_token);
+            }
             const { error: dbError } = await supabaseNew.from('results').insert([{ title: resultTitle, file_url: publicUrl, file_path: filePath, created_at: new Date().toISOString() }]);
             if (dbError) {
                 await deleteFile('results', filePath!, supabaseNew);

@@ -9,22 +9,20 @@ export async function uploadContent({
   title,
   description,
   type,
+  session,
 }: {
   file: File;
   title: string;
   description: string;
   type: ContentType;
+  session: { access_token: string };
 }) {
   const id = uuidv4();
   const filePath = `uploads/${id}-${file.name}`;
 
   // Ensure session is set for supabaseNew before insert
-  // You must pass the current session/access_token from your AuthContext/provider
-  // Example usage:
-  // await setSupabaseNewSession(session.access_token);
-  if (typeof window !== 'undefined' && window.session && window.session.access_token) {
-    await setSupabaseNewSession(window.session.access_token);
-  }
+  // Session must be passed from AuthContext/provider
+  await setSupabaseNewSession(session.access_token);
 
   // Upload to Supabase Storage
   const { error: uploadError } = await supabaseNew.storage.from(type).upload(filePath, file);
@@ -77,11 +75,7 @@ export async function uploadContent({
     throw new Error('Invalid content type');
   }
 
-  // Ensure session is set for supabaseNew before insert
-  // If you have a session manager, call setSupabaseNewSession here
-  // Example:
-  // import { setSupabaseNewSession } from '@/integrations/supabase/supabaseNew';
-  // await setSupabaseNewSession(session.access_token);
+  // Session is already set above
 
   const { error: dbError } = await supabaseNew.from(type).insert([insertData]);
   if (dbError) throw new Error('Database error: ' + dbError.message);
