@@ -472,10 +472,11 @@ const AdminDashboard = () => {
     useEffect(() => {
         if (!loading && userProfile?.role === 'admin') {
             // Set session for supabaseNew as soon as session is available
+            // This is CRITICAL for cross-database RLS to work.
             if (session?.access_token) {
                 setSupabaseNewSession(session.access_token);
             } else {
-                setSupabaseNewSession(null); // Clear session if no token
+                setSupabaseNewSession(null); // Clear session if user logs out or session is null
             }
 
             loadAllStudents();
@@ -583,7 +584,7 @@ const AdminDashboard = () => {
         } else if (!loading && userProfile && userProfile.role !== 'admin') {
             setLocation('/');
         }
-    }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadAttendanceRecords, loadStats, session]); // Added session to dependencies
+    }, [userProfile, loading, setLocation, loadAllStudents, loadEvents, loadFaculty, loadPlacements, loadGallery, loadAchievements, loadCertifications, loadAttendanceRecords, loadStats, session]); // Added 'session' to dependencies
 
     // Student and Certificate client-side filtering effects
     useEffect(() => {
@@ -1425,7 +1426,7 @@ const AdminDashboard = () => {
                                                         <th className="border border-gray-200 px-3 py-2 text-left dark:border-gray-600 dark:text-gray-100">Actions</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody>
+                                                <tbody> {/* <--- Corrected tbody opening */}
                                                     {filteredStudents.map((student) => (
                                                         <tr key={student.id} className="cursor-pointer hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700">
                                                             <td className="border border-gray-200 px-3 py-2 dark:border-gray-600 dark:text-gray-200">{student.ht_no}</td>
@@ -1446,7 +1447,7 @@ const AdminDashboard = () => {
                                                             </td>
                                                         </tr>
                                                     ))}
-                                                </tbody>
+                                                </tbody> {/* <--- Corrected tbody closing */}
                                             </table>
                                         </div>
                                     ) : (
@@ -1539,7 +1540,9 @@ const AdminDashboard = () => {
                                                             {cert.user_profiles?.year || 'N/A'}
                                                         </td>
                                                         <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{cert.certificate_name}</td>
-                                                        <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'}</td>
+                                                        <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">
+                                                            {cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleDateString() : 'N/A'}
+                                                        </td>
                                                         <td className="border border-gray-200 px-4 py-2 dark:border-gray-600">
                                                             <div className="flex space-x-2">
                                                                 {cert.certificate_url && (
@@ -1997,427 +2000,463 @@ const AdminDashboard = () => {
                                                     <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Status</th>
                                                     <th className="border border-gray-200 px-4 py-2 text-left dark:border-gray-600 dark:text-gray-100">Actions</th>
                                                 </tr>
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        ) : (
-                                            <div className="text-center py-8">
-                                                <Clock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                                <p className="text-gray-500 text-lg dark:text-gray-400">No attendance records found.</p>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            </TabsContent>
+                                            </thead>
+                                            <tbody>
+                                                {attendanceRecords.map((record) => (
+                                                    <tr key={record.id} className="bg-white hover:bg-gray-100 border-b border-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 dark:border-gray-600">
+                                                        <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{record.file_name}</td>
+                                                        <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">{new Date(record.uploaded_at).toLocaleDateString()}</td>
+                                                        <td className="border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-200">
+                                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${record.processed_status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                                {record.processed_status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="border border-gray-200 px-4 py-2 dark:border-gray-600">
+                                                            <div className="flex space-x-2">
+                                                                {record.file_url && (
+                                                                    <Button
+                                                                        asChild
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-700"
+                                                                    >
+                                                                        <a
+                                                                            href={record.file_url}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                        >
+                                                                            View File
+                                                                        </a>
+                                                                    </Button>
+                                                                )}
+                                                                <Button size="sm" variant="destructive" onClick={() => handleDeleteAttendanceRecord(record)} disabled={isDeleting}>
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <Clock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                        <p className="text-gray-500 text-lg dark:text-gray-400">No attendance records found.</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
 
 
-                            {/* Results Tab Content (SupabaseNew Backed) */}
-                            <TabsContent value={TAB_VALUES.RESULTS}>
+                    {/* Results Tab Content (SupabaseNew Backed) */}
+                    <TabsContent value={TAB_VALUES.RESULTS}>
+                        <Card className="dark:bg-gray-800 dark:text-gray-100">
+                            <CardHeader>
+                                <CardTitle className="flex items-center space-x-2 text-gray-900 dark:text-gray-100">
+                                    <FileText className="w-5 h-5" />
+                                    <span>Results Upload</span>
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <Label htmlFor="result-title" className="dark:text-gray-200">Result Title</Label>
+                                <Input id="result-title" placeholder="e.g., Semester 1 Results" value={resultTitle} onChange={(e) => setResultTitle(e.target.value)} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
+
+                                <Label htmlFor="result-file" className="dark:text-gray-200">Upload Result File (PDF)</Label>
+                                <Input id="result-file" type="file" accept=".pdf" onChange={handleResultsFileUpload} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
+
+                                <Button
+                                    onClick={uploadResult}
+                                    className="flex items-center space-x-1 dark:bg-blue-600 dark:hover:bg-blue-700"
+                                    disabled={isUploading || !resultFile || !resultTitle}
+                                >
+                                    {isUploading ? 'Uploading...' : 'Upload Result'}
+                                    <Upload className="w-4 h-4" />
+                                </Button>
+                                {(!resultFile || !resultTitle) && (
+                                    <p className="text-sm text-red-500">Please enter a title and select a PDF file to enable upload.</p>
+                                )}
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Upload official semester results in PDF format.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* Timetable Tab Content (External component) */}
+                    <TabsContent value={TAB_VALUES.TIMETABLE}>
+                        <Card className="dark:bg-gray-800 dark:text-gray-100">
+                            <CardHeader>
+                                <CardTitle className="flex items-center space-x-2 text-gray-900 dark:text-gray-100">
+                                    <BarChart3 className="w-5 h-5" />
+                                    <span>Timetable Management</span>
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Suspense fallback={<div className="text-gray-600 dark:text-gray-300">Loading Timetable...</div>}>
+                                    <TimetableManager supabaseNew={supabaseNew} supabaseOld={supabaseOld} toast={toast} />
+                                </Suspense>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* Gallery Tab Content (SupabaseNew Backed) */}
+                    <TabsContent value={TAB_VALUES.GALLERY}>
+                        <div className="w-full">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start w-full">
                                 <Card className="dark:bg-gray-800 dark:text-gray-100">
                                     <CardHeader>
                                         <CardTitle className="flex items-center space-x-2 text-gray-900 dark:text-gray-100">
-                                            <FileText className="w-5 h-5" />
-                                            <span>Results Upload</span>
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <Label htmlFor="result-title" className="dark:text-gray-200">Result Title</Label>
-                                        <Input id="result-title" placeholder="e.g., Semester 1 Results" value={resultTitle} onChange={(e) => setResultTitle(e.target.value)} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                        <Label htmlFor="result-file" className="dark:text-gray-200">Upload Result File (PDF)</Label>
-                                        <Input id="result-file" type="file" accept=".pdf" onChange={handleResultsFileUpload} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                        <Button
-                                            onClick={uploadResult}
-                                            className="flex items-center space-x-1 dark:bg-blue-600 dark:hover:bg-blue-700"
-                                            disabled={isUploading || !resultFile || !resultTitle}
-                                        >
-                                            {isUploading ? 'Uploading...' : 'Upload Result'}
-                                            <Upload className="w-4 h-4" />
-                                        </Button>
-                                        {(!resultFile || !resultTitle) && (
-                                            <p className="text-sm text-red-500">Please enter a title and select a PDF file to enable upload.</p>
-                                        )}
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            Upload official semester results in PDF format.
-                                        </p>
-                                    </CardContent>
-                                </Card>
-                            </TabsContent>
-
-                            {/* Timetable Tab Content (External component) */}
-                            <TabsContent value={TAB_VALUES.TIMETABLE}>
-                                <Card className="dark:bg-gray-800 dark:text-gray-100">
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center space-x-2 text-gray-900 dark:text-gray-100">
-                                            <BarChart3 className="w-5 h-5" />
-                                            <span>Timetable Management</span>
+                                            <Image className="w-5 h-5" />
+                                            <span>Gallery Management ({gallery.length})</span>
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent>
-                                        <Suspense fallback={<div className="text-gray-600 dark:text-gray-300">Loading Timetable...</div>}>
-                                            <TimetableManager supabaseNew={supabaseNew} supabaseOld={supabaseOld} toast={toast} />
-                                        </Suspense>
+                                        {gallery.length > 0 ? (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                                {gallery.map((item) => (
+                                                    <Card key={item.id} className="relative group overflow-hidden h-full flex flex-col dark:bg-gray-700 dark:text-gray-100">
+                                                        {/* Display first media item as thumbnail, or loop through all */}
+                                                        {item.media && item.media.length > 0 && (
+                                                            <>
+                                                                {item.media[0].media_type === 'image' ? (
+                                                                    <img src={item.media[0].media_url} alt={item.title} className="w-full h-32 object-cover" />
+                                                                ) : (
+                                                                    <div className="w-full h-32 bg-gray-900 flex items-center justify-center text-gray-400">
+                                                                        <Video className="w-12 h-12" />
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        )}
+                                                        <CardContent className="p-2 text-sm flex-grow">
+                                                            <h3 className="font-semibold">{item.title}</h3>
+                                                            <p className="text-gray-500 text-xs truncate dark:text-gray-300">{item.description}</p>
+                                                            {item.media && item.media.length > 1 && (
+                                                                <p className="text-xs text-gray-400 mt-1 dark:text-gray-500">+{item.media.length - 1} more media</p>
+                                                            )}
+                                                            <div className="flex justify-end space-x-2 mt-2">
+                                                                {/* You might want a "View All Media" dialog here */}
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="destructive"
+                                                                    onClick={() => handleDeleteGalleryItem(item)}
+                                                                    disabled={isDeleting}
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-8">
+                                                <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                                <p className="text-500 text-lg dark:text-gray-400">No gallery items found.</p>
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
-                            </TabsContent>
 
-                            {/* Gallery Tab Content (SupabaseNew Backed) */}
-                            <TabsContent value={TAB_VALUES.GALLERY}>
-                                <div className="w-full">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start w-full">
-                                        <Card className="dark:bg-gray-800 dark:text-gray-100">
-                                            <CardHeader>
-                                                <CardTitle className="flex items-center space-x-2 text-gray-900 dark:text-gray-100">
-                                                    <Image className="w-5 h-5" />
-                                                    <span>Gallery Management ({gallery.length})</span>
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                {gallery.length > 0 ? (
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                                        {gallery.map((item) => (
-                                                            <Card key={item.id} className="relative group overflow-hidden h-full flex flex-col dark:bg-gray-700 dark:text-gray-100">
-                                                                {/* Display first media item as thumbnail, or loop through all */}
-                                                                {item.media && item.media.length > 0 && (
-                                                                    <>
-                                                                        {item.media[0].media_type === 'image' ? (
-                                                                            <img src={item.media[0].media_url} alt={item.title} className="w-full h-32 object-cover" />
-                                                                        ) : (
-                                                                            <div className="w-full h-32 bg-gray-900 flex items-center justify-center text-gray-400">
-                                                                                <Video className="w-12 h-12" />
-                                                                            </div>
-                                                                        )}
-                                                                    </>
-                                                                )}
-                                                                <CardContent className="p-2 text-sm flex-grow">
-                                                                    <h3 className="font-semibold">{item.title}</h3>
-                                                                    <p className="text-gray-500 text-xs truncate dark:text-gray-300">{item.description}</p>
-                                                                    {item.media && item.media.length > 1 && (
-                                                                        <p className="text-xs text-gray-400 mt-1 dark:text-gray-500">+{item.media.length - 1} more media</p>
-                                                                    )}
-                                                                    <div className="flex justify-end space-x-2 mt-2">
-                                                                        {/* You might want a "View All Media" dialog here */}
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="destructive"
-                                                                            onClick={() => handleDeleteGalleryItem(item)}
-                                                                            disabled={isDeleting}
-                                                                        >
-                                                                            <Trash2 className="w-4 h-4" />
-                                                                        </Button>
-                                                                    </div>
-                                                                </CardContent>
-                                                            </Card>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-center py-8">
-                                                        <Image className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                                        <p className="text-gray-500 text-lg dark:text-gray-400">No gallery items found.</p>
-                                                    </div>
-                                                )}
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4 dark:bg-gray-800 dark:text-gray-100">
-                                            <CardHeader className="p-0 pb-4">
-                                                <CardTitle className="text-xl font-semibold flex items-center space-x-2 text-gray-900 dark:text-gray-100">
-                                                    <Plus className="h-5 w-5" />
-                                                    <span>Upload New Gallery Item</span>
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="p-0 space-y-4">
-                                                <Label htmlFor="gallery-title">Title</Label>
-                                                <Input id="gallery-title" value={newGalleryItem.title} onChange={(e) => setNewGalleryItem({ ...newGalleryItem, title: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                                <Label htmlFor="gallery-description">Description (Optional)</Label>
-                                                <Textarea id="gallery-description" value={newGalleryItem.description || ''} onChange={(e) => setNewGalleryItem({ ...newGalleryItem, description: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
-
-                                                <Label htmlFor="gallery-media-files">Images/Videos (Multiple)</Label>
-                                                <Input id="gallery-media-files" type="file" accept="image/*,video/*" multiple onChange={handleGalleryMediaFileChange} />
-                                                {newGalleryMediaFiles.length > 0 && (
-                                                    <p className="text-sm text-gray-500 dark:text-gray-400">Selected: {newGalleryMediaFiles.map(f => f.name).join(', ')}</p>
-                                                )}
-
-                                                <Button
-                                                    onClick={handleAddGalleryItem}
-                                                    disabled={isUploading || !newGalleryItem.title || newGalleryMediaFiles.length === 0}
-                                                    className="w-full flex items-center space-x-2 dark:bg-blue-600 dark:hover:bg-blue-700"
-                                                >
-                                                    <Upload className="w-4 h-4" />
-                                                    <span>{isUploading ? 'Uploading...' : 'Upload Gallery Item'}</span>
-                                                </Button>
-                                                {(!newGalleryItem.title || newGalleryMediaFiles.length === 0) && (
-                                                    <p className="text-sm text-red-500">Please enter a title and select at least one image/video file to upload to gallery.</p>
-                                                )}
-                                            </CardContent>
-                                        </Card>
-                                    </div>
-                                </div>
-                            </TabsContent>
-
-                            {/* Notifications Tab Content (SupabaseOld Backed) */}
-                            <TabsContent value={TAB_VALUES.NOTIFICATIONS}>
-                                <Card className="dark:bg-gray-800 dark:text-gray-100">
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center space-x-2 text-gray-900 dark:text-gray-100">
-                                            <User className="w-5 h-5" />
-                                            <span>Post Notification</span>
+                                <Card className="bg-white rounded-xl border p-6 shadow-md space-y-4 dark:bg-gray-800 dark:text-gray-100">
+                                    <CardHeader className="p-0 pb-4">
+                                        <CardTitle className="text-xl font-semibold flex items-center space-x-2 text-gray-900 dark:text-gray-100">
+                                            <Plus className="h-5 w-5" />
+                                            <span>Upload New Gallery Item</span>
                                         </CardTitle>
                                     </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <Label htmlFor="notification-title" className="dark:text-gray-200">Notification Title</Label>
-                                        <Input
-                                            id="notification-title"
-                                            placeholder="e.g., Important Update"
-                                            value={notificationTitle}
-                                            onChange={(e) => setNotificationTitle(e.target.value)}
-                                            className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
-                                        />
+                                    <CardContent className="p-0 space-y-4">
+                                        <Label htmlFor="gallery-title">Title</Label>
+                                        <Input id="gallery-title" value={newGalleryItem.title} onChange={(e) => setNewGalleryItem({ ...newGalleryItem, title: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
 
-                                        <Label htmlFor="notification-message" className="dark:text-gray-200">Notification Message</Label>
-                                        <Textarea
-                                            id="notification-message"
-                                            placeholder="Enter your message here..."
-                                            value={notificationMessage}
-                                            onChange={(e) => setNotificationMessage(e.target.value)}
-                                            className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
-                                        />
+                                        <Label htmlFor="gallery-description">Description (Optional)</Label>
+                                        <Textarea id="gallery-description" value={newGalleryItem.description || ''} onChange={(e) => setNewGalleryItem({ ...newGalleryItem, description: e.target.value })} className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600" />
+
+                                        <Label htmlFor="gallery-media-files">Images/Videos (Multiple)</Label>
+                                        <Input id="gallery-media-files" type="file" accept="image/*,video/*" multiple onChange={handleGalleryMediaFileChange} />
+                                        {newGalleryMediaFiles.length > 0 && (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">Selected: {newGalleryMediaFiles.map(f => f.name).join(', ')}</p>
+                                        )}
 
                                         <Button
-                                            onClick={postNotification}
-                                            className="flex items-center space-x-1 dark:bg-blue-600 dark:hover:bg-blue-700"
-                                            disabled={isUploading || !notificationTitle || !notificationMessage}
+                                            onClick={handleAddGalleryItem}
+                                            disabled={isUploading || !newGalleryItem.title || newGalleryMediaFiles.length === 0}
+                                            className="w-full flex items-center space-x-2 dark:bg-blue-600 dark:hover:bg-blue-700"
                                         >
-                                            {isUploading ? 'Posting...' : 'Post Notification'}
                                             <Upload className="w-4 h-4" />
+                                            <span>{isUploading ? 'Uploading...' : 'Upload Gallery Item'}</span>
                                         </Button>
-                                        {(!notificationTitle || !notificationMessage) && (
-                                            <p className="text-sm text-red-500">Please enter both a title and a message to post.</p>
+                                        {(!newGalleryItem.title || newGalleryMediaFiles.length === 0) && (
+                                            <p className="text-sm text-red-500">Please enter a title and select at least one image/video file to upload to gallery.</p>
                                         )}
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            Notifications will be visible to all students on their dashboards.
-                                        </p>
                                     </CardContent>
                                 </Card>
-                            </TabsContent>
-                        </Tabs>
+                            </div>
+                        </div>
+                    </TabsContent>
 
-                        {/* Edit Student Dialog (SupabaseOld Backed) */}
-                        <Dialog open={!!editingStudent} onOpenChange={() => setEditingStudent(null)}>
-                            <DialogContent className="sm:max-w-[425px] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700">
-                                <DialogHeader>
-                                    <DialogTitle className="dark:text-gray-100">Edit Student Details</DialogTitle>
-                                </DialogHeader>
-                                {editingStudent && (
-                                    <div className="grid gap-4 py-4">
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="edit-name" className="text-right dark:text-gray-200">
-                                                Name
-                                            </Label>
-                                            <Input
-                                                id="edit-name"
-                                                value={editingStudent.student_name}
-                                                onChange={(e) => setEditingStudent({ ...editingStudent, student_name: e.target.value })}
-                                                className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="edit-htno" className="text-right dark:text-gray-200">
-                                                H.T No.
-                                            </Label>
-                                            <Input
-                                                id="edit-htno"
-                                                value={editingStudent.ht_no}
-                                                onChange={(e) => setEditingStudent({ ...editingStudent, ht_no: e.target.value })}
-                                                className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="edit-year" className="text-right dark:text-gray-200">
-                                                Year
-                                            </Label>
-                                            <Input
-                                                id="edit-year"
-                                                type="number"
-                                                value={editingStudent.year}
-                                                onChange={(e) => setEditingStudent({ ...editingStudent, year: parseInt(e.target.value) || e.target.value })}
-                                                className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="edit-status" className="text-right dark:text-gray-200">
-                                                Status
-                                            </Label>
-                                            <Input
-                                                id="edit-status"
-                                                value={editingStudent.status}
-                                                onChange={(e) => setEditingStudent({ ...editingStudent, status: e.target.value })}
-                                                className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="edit-phone" className="text-right dark:text-gray-200">
-                                                Phone
-                                            </Label>
-                                            <Input
-                                                id="edit-phone"
-                                                value={editingStudent.phone}
-                                                onChange={(e) => setEditingStudent({ ...editingStudent, phone: e.target.value })}
-                                                className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="edit-address" className="text-right dark:text-gray-200">
-                                                Address
-                                            </Label>
-                                            <Textarea
-                                                id="edit-address"
-                                                value={editingStudent.address}
-                                                onChange={(e) => setEditingStudent({ ...editingStudent, address: e.target.value })}
-                                                className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-4 items-center gap-4">
-                                            <Label htmlFor="edit-emergency" className="text-right dark:text-gray-200">
-                                                Emergency No.
-                                            </Label>
-                                            <Input
-                                                id="edit-emergency"
-                                                value={editingStudent.emergency_no}
-                                                onChange={(e) => setEditingStudent({ ...editingStudent, emergency_no: e.target.value })}
-                                                className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
-                                            />
-                                        </div>
-                                        <DialogFooter>
-                                            <Button onClick={() => updateStudent(editingStudent)} disabled={isUpdating} className="dark:bg-blue-600 dark:hover:bg-blue-700">
-                                                {isUpdating ? 'Updating...' : 'Update Student'}
-                                            </Button>
-                                        </DialogFooter>
-                                    </div>
+                    {/* Notifications Tab Content (SupabaseOld Backed) */}
+                    <TabsContent value={TAB_VALUES.NOTIFICATIONS}>
+                        <Card className="dark:bg-gray-800 dark:text-gray-100">
+                            <CardHeader>
+                                <CardTitle className="flex items-center space-x-2 text-gray-900 dark:text-gray-100">
+                                    <User className="w-5 h-5" />
+                                    <span>Post Notification</span>
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <Label htmlFor="notification-title" className="dark:text-gray-200">Notification Title</Label>
+                                <Input
+                                    id="notification-title"
+                                    placeholder="e.g., Important Update"
+                                    value={notificationTitle}
+                                    onChange={(e) => setNotificationTitle(e.target.value)}
+                                    className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                />
+
+                                <Label htmlFor="notification-message" className="dark:text-gray-200">Notification Message</Label>
+                                <Textarea
+                                    id="notification-message"
+                                    placeholder="Enter your message here..."
+                                    value={notificationMessage}
+                                    onChange={(e) => setNotificationMessage(e.target.value)}
+                                    className="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                />
+
+                                <Button
+                                    onClick={postNotification}
+                                    className="flex items-center space-x-1 dark:bg-blue-600 dark:hover:bg-blue-700"
+                                    disabled={isUploading || !notificationTitle || !notificationMessage}
+                                >
+                                    {isUploading ? 'Posting...' : 'Post Notification'}
+                                    <Upload className="w-4 h-4" />
+                                </Button>
+                                {(!notificationTitle || !notificationMessage) && (
+                                    <p className="text-sm text-red-500">Please enter both a title and a message to post.</p>
                                 )}
-                            </DialogContent>
-                        </Dialog>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Notifications will be visible to all students on their dashboards.
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
 
-                        {/* Promote Students Modal (SupabaseOld Backed) */}
-                        <Dialog open={isPromoteModalOpen} onOpenChange={setIsPromoteModalOpen}>
-                            <DialogContent className="sm:max-w-[425px] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700">
-                                <DialogHeader>
-                                    <DialogTitle className="dark:text-gray-100">Promote Students</DialogTitle>
-                                </DialogHeader>
-                                <div className="grid gap-4 py-4">
-                                    <div className="grid grid-cols-4 items-center gap-4">
-                                        <Label htmlFor="current-year" className="text-right dark:text-gray-200">
-                                            Current Year
-                                        </Label>
-                                        <Select value={yearToPromote} onValueChange={setYearToPromote}>
-                                            <SelectTrigger className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">
-                                                <SelectValue placeholder="Select current year to promote" />
-                                            </SelectTrigger>
-                                            <SelectContent className="dark:bg-gray-700 dark:border-gray-600">
-                                                <SelectItem value="1" className="dark:text-gray-100 dark:hover:bg-gray-600">1st Year</SelectItem>
-                                                <SelectItem value="2" className="dark:text-gray-100 dark:hover:bg-gray-600">2nd Year</SelectItem>
-                                                <SelectItem value="3" className="dark:text-gray-100 dark:hover:bg-gray-600">3rd Year</SelectItem>
-                                                <SelectItem value="4" className="dark:text-gray-100 dark:hover:bg-gray-600">4th Year</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <DialogFooter>
-                                        <Button onClick={handleBulkPromote} disabled={!yearToPromote || isUpdating} className="dark:bg-blue-600 dark:hover:bg-blue-700">
-                                            {isUpdating ? 'Promoting...' : 'Promote All Students in Selected Year'}
-                                        </Button>
-                                    </DialogFooter>
+                {/* Edit Student Dialog (SupabaseOld Backed) */}
+                <Dialog open={!!editingStudent} onOpenChange={() => setEditingStudent(null)}>
+                    <DialogContent className="sm:max-w-[425px] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700">
+                        <DialogHeader>
+                            <DialogTitle className="dark:text-gray-100">Edit Student Details</DialogTitle>
+                        </DialogHeader>
+                        {editingStudent && (
+                            <div className="grid gap-4 py-4">
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="edit-name" className="text-right dark:text-gray-200">
+                                        Name
+                                    </Label>
+                                    <Input
+                                        id="edit-name"
+                                        value={editingStudent.student_name}
+                                        onChange={(e) => setEditingStudent({ ...editingStudent, student_name: e.target.value })}
+                                        className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                    />
                                 </div>
-                            </DialogContent>
-                        </Dialog>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="edit-htno" className="text-right dark:text-gray-200">
+                                        H.T No.
+                                    </Label>
+                                    <Input
+                                        id="edit-htno"
+                                        value={editingStudent.ht_no}
+                                        onChange={(e) => setEditingStudent({ ...editingStudent, ht_no: e.target.value })}
+                                        className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="edit-year" className="text-right dark:text-gray-200">
+                                        Year
+                                    </Label>
+                                    <Input
+                                        id="edit-year"
+                                        type="number"
+                                        value={editingStudent.year}
+                                        onChange={(e) => setEditingStudent({ ...editingStudent, year: parseInt(e.target.value) || e.target.value })}
+                                        className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="edit-status" className="text-right dark:text-gray-200">
+                                        Status
+                                    </Label>
+                                    <Input
+                                        id="edit-status"
+                                        value={editingStudent.status}
+                                        onChange={(e) => setEditingStudent({ ...editingStudent, status: e.target.value })}
+                                        className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="edit-phone" className="text-right dark:text-gray-200">
+                                        Phone
+                                    </Label>
+                                    <Input
+                                        id="edit-phone"
+                                        value={editingStudent.phone}
+                                        onChange={(e) => setEditingStudent({ ...editingStudent, phone: e.target.value })}
+                                        className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="edit-address" className="text-right dark:text-gray-200">
+                                        Address
+                                    </Label>
+                                    <Textarea
+                                        id="edit-address"
+                                        value={editingStudent.address}
+                                        onChange={(e) => setEditingStudent({ ...editingStudent, address: e.target.value })}
+                                        className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="edit-emergency" className="text-right dark:text-gray-200">
+                                        Emergency No.
+                                    </Label>
+                                    <Input
+                                        id="edit-emergency"
+                                        value={editingStudent.emergency_no}
+                                        onChange={(e) => setEditingStudent({ ...editingStudent, emergency_no: e.target.value })}
+                                        className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                    />
+                                </div>
+                                <DialogFooter>
+                                    <Button onClick={() => updateStudent(editingStudent)} disabled={isUpdating} className="dark:bg-blue-600 dark:hover:bg-blue-700">
+                                        {isUpdating ? 'Updating...' : 'Update Student'}
+                                    </Button>
+                                </DialogFooter>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
 
-                        {/* Student Detail View Dialog (SupabaseOld Backed) */}
-                        <Dialog open={!!viewingStudent} onOpenChange={() => { setViewingStudent(null); setNewProfilePhotoFile(null); }}>
-                            <DialogContent className="sm:max-w-[500px] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700">
-                                <DialogHeader>
-                                    <DialogTitle className="dark:text-gray-100">Student Details</DialogTitle>
-                                </DialogHeader>
-                                {viewingStudent && (
-                                    <div className="grid gap-4 py-4">
-                                        {/* Profile Photo Display */}
-                                        <div className="flex flex-col items-center mb-4 space-y-2">
-                                            {isPhotoLoading ? (
-                                                <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
-                                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                                                </div>
-                                            ) : (
-                                                <img
-                                                    src={viewingStudent.photo_url || '/default-avatar.png'}
-                                                    alt="Profile Photo"
-                                                    className="w-32 h-32 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600"
-                                                    onError={(e) => (e.currentTarget.src = '/default-avatar.png')}
-                                                />
-                                            )}
-                                            <span className="text-sm text-gray-500 dark:text-gray-400">Profile Photo</span>
+                {/* Promote Students Modal (SupabaseOld Backed) */}
+                <Dialog open={isPromoteModalOpen} onOpenChange={setIsPromoteModalOpen}>
+                    <DialogContent className="sm:max-w-[425px] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700">
+                        <DialogHeader>
+                            <DialogTitle className="dark:text-gray-100">Promote Students</DialogTitle>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="current-year" className="text-right dark:text-gray-200">
+                                    Current Year
+                                </Label>
+                                <Select value={yearToPromote} onValueChange={setYearToPromote}>
+                                    <SelectTrigger className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">
+                                        <SelectValue placeholder="Select current year to promote" />
+                                    </SelectTrigger>
+                                    <SelectContent className="dark:bg-gray-700 dark:border-gray-600">
+                                        <SelectItem value="1" className="dark:text-gray-100 dark:hover:bg-gray-600">1st Year</SelectItem>
+                                        <SelectItem value="2" className="dark:text-gray-100 dark:hover:bg-gray-600">2nd Year</SelectItem>
+                                        <SelectItem value="3" className="dark:text-gray-100 dark:hover:bg-gray-600">3rd Year</SelectItem>
+                                        <SelectItem value="4" className="dark:text-gray-100 dark:hover:bg-gray-600">4th Year</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <DialogFooter>
+                                <Button onClick={handleBulkPromote} disabled={!yearToPromote || isUpdating} className="dark:bg-blue-600 dark:hover:bg-blue-700">
+                                    {isUpdating ? 'Promoting...' : 'Promote All Students in Selected Year'}
+                                </Button>
+                            </DialogFooter>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Student Detail View Dialog (SupabaseOld Backed) */}
+                <Dialog open={!!viewingStudent} onOpenChange={() => { setViewingStudent(null); setNewProfilePhotoFile(null); }}>
+                    <DialogContent className="sm:max-w-[500px] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700">
+                        <DialogHeader>
+                            <DialogTitle className="dark:text-gray-100">Student Details</DialogTitle>
+                        </DialogHeader>
+                        {viewingStudent && (
+                            <div className="grid gap-4 py-4">
+                                {/* Profile Photo Display */}
+                                <div className="flex flex-col items-center mb-4 space-y-2">
+                                    {isPhotoLoading ? (
+                                        <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                                         </div>
+                                    ) : (
+                                        <img
+                                            src={viewingStudent.photo_url || '/default-avatar.png'}
+                                            alt="Profile Photo"
+                                            className="w-32 h-32 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600"
+                                            onError={(e) => (e.currentTarget.src = '/default-avatar.png')}
+                                        />
+                                    )}
+                                    <span className="text-sm text-gray-500 dark:text-gray-400">Profile Photo</span>
+                                </div>
 
-                                        {/* Photo Upload Option */}
-                                        <div className="grid grid-cols-4 items-center gap-2">
-                                            <Label htmlFor="photo-upload" className="text-right dark:text-gray-200">
-                                                Update Photo
-                                            </Label>
-                                            <Input
-                                                id="photo-upload"
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={handleProfilePhotoChange}
-                                                className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
-                                            />
-                                        </div>
-                                        {newProfilePhotoFile && (
-                                            <Button onClick={uploadProfilePhoto} className="w-full dark:bg-blue-600 dark:hover:bg-blue-700" disabled={isPhotoLoading}>
-                                                {isPhotoLoading ? 'Uploading...' : 'Upload New Photo'}
-                                            </Button>
-                                        )}
-
-                                        {/* Student Details */}
-                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 text-gray-900 dark:text-gray-200">
-                                            <div className="font-semibold">H.T No.:</div>
-                                            <div>{viewingStudent.ht_no}</div>
-
-                                            <div className="font-semibold">Name:</div>
-                                            <div>{viewingStudent.student_name}</div>
-
-                                            <div className="font-semibold">Email:</div>
-                                            <div>{viewingStudent.email || 'N/A'}</div>
-
-                                            <div className="font-semibold">Year:</div>
-                                            <div>{viewingStudent.year}</div>
-
-                                            <div className="font-semibold">Status:</div>
-                                            <div>{viewingStudent.status}</div>
-
-                                            <div className="font-semibold">Phone:</div>
-                                            <div>{viewingStudent.phone || 'N/A'}</div>
-
-                                            <div className="font-semibold">Address:</div>
-                                            <div>{viewingStudent.address || 'N/A'}</div>
-
-                                            <div className="font-semibold">Emergency No.:</div>
-                                            <div>{viewingStudent.emergency_no || 'N/A'}</div>
-                                        </div>
-                                        <DialogFooter>
-                                            <Button onClick={() => {
-                                                setEditingStudent(viewingStudent);
-                                                setViewingStudent(null);
-                                            }} className="dark:bg-blue-600 dark:hover:bg-blue-700">
-                                                Edit Student
-                                            </Button>
-                                        </DialogFooter>
-                                    </div>
+                                {/* Photo Upload Option */}
+                                <div className="grid grid-cols-4 items-center gap-2">
+                                    <Label htmlFor="photo-upload" className="text-right dark:text-gray-200">
+                                        Update Photo
+                                    </Label>
+                                    <Input
+                                        id="photo-upload"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleProfilePhotoChange}
+                                        className="col-span-3 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
+                                    />
+                                </div>
+                                {newProfilePhotoFile && (
+                                    <Button onClick={uploadProfilePhoto} className="w-full dark:bg-blue-600 dark:hover:bg-blue-700" disabled={isPhotoLoading}>
+                                        {isPhotoLoading ? 'Uploading...' : 'Upload New Photo'}
+                                    </Button>
                                 )}
-                            </DialogContent>
-                        </Dialog>
-                    </main>
-                </div>
-            );
-        };
+
+                                {/* Student Details */}
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 text-gray-900 dark:text-gray-200">
+                                    <div className="font-semibold">H.T No.:</div>
+                                    <div>{viewingStudent.ht_no}</div>
+
+                                    <div className="font-semibold">Name:</div>
+                                    <div>{viewingStudent.student_name}</div>
+
+                                    <div className="font-semibold">Email:</div>
+                                    <div>{viewingStudent.email || 'N/A'}</div>
+
+                                    <div className="font-semibold">Year:</div>
+                                    <div>{viewingStudent.year}</div>
+
+                                    <div className="font-semibold">Status:</div>
+                                    <div>{viewingStudent.status}</div>
+
+                                    <div className="font-semibold">Phone:</div>
+                                    <div>{viewingStudent.phone || 'N/A'}</div>
+
+                                    <div className="font-semibold">Address:</div>
+                                    <div>{viewingStudent.address || 'N/A'}</div>
+
+                                    <div className="font-semibold">Emergency No.:</div>
+                                    <div>{viewingStudent.emergency_no || 'N/A'}</div>
+                                </div>
+                                <DialogFooter>
+                                    <Button onClick={() => {
+                                        setEditingStudent(viewingStudent);
+                                        setViewingStudent(null);
+                                    }} className="dark:bg-blue-600 dark:hover:bg-blue-700">
+                                        Edit Student
+                                    </Button>
+                                </DialogFooter>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
+            </main>
+        </div>
+    );
+};
 
 // Wrap the AdminDashboard with ThemeProvider
 const WrappedAdminDashboard = () => (
