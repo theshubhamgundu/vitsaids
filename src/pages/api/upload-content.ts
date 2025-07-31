@@ -1,7 +1,7 @@
 // src/pages/api/upload-content.ts
 
 import { NextApiRequest, NextApiResponse } from 'next';
-import { supabase } from '@/integrations/supabase/client';
+import { supabaseNew } from '@/integrations/supabase/supabaseNew';
 import { v4 as uuidv4 } from 'uuid';
 
 export const config = {
@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const fileName = `${uuidv4()}.${fileExt}`;
     const bucket = type; // gallery | events | faculty | placements | achievements
 
-    const { data, error } = await supabase.storage
+    const { data, error } = await supabaseNew.storage
       .from(bucket)
       .upload(`${fileName}`, fileBuffer, {
         contentType: `image/${fileExt}`,
@@ -36,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (error) throw error;
 
-    const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(fileName);
+    const { data: publicUrlData } = supabaseNew.storage.from(bucket).getPublicUrl(fileName);
     const publicUrl = publicUrlData.publicUrl;
 
     const metadata = {
@@ -49,7 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const table = `public_${type}`; // Example: public_gallery, public_events...
 
-    const { error: insertError } = await supabase.from(table).insert([metadata]);
+    const { error: insertError } = await supabaseNew.from(table).insert([metadata]);
 
     if (insertError) throw insertError;
 
