@@ -819,6 +819,17 @@ const AdminDashboard = () => {
         let filePath = '';
 
         try {
+            // Ensure session is set for supabaseNew before any insert
+            if (supabaseInstance === supabaseNew) {
+                // Import session from your context/provider
+                // Example: import { session } from '@/contexts/AuthContext';
+                // You may need to pass session as a parameter or get it from context
+                // For demonstration, assuming global session variable
+                if (typeof session !== 'undefined' && session?.access_token) {
+                    await setSupabaseNewSession(session.access_token);
+                }
+            }
+
             if (file && bucketName) {
                 // Ensure unique file name in bucket to prevent overwrites, e.g., using UUID
                 const uniqueFileName = `${uuidv4()}_${file.name.replace(/\s/g, '_')}`;
