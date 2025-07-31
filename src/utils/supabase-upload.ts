@@ -27,8 +27,6 @@ export async function uploadContent({
   const public_url = urlData?.publicUrl;
   if (!public_url) throw new Error('Failed to get public URL');
 
-  // Insert metadata into the correct table (not *_metadata)
-
   let insertData;
   if (type === 'gallery') {
     insertData = {
@@ -45,16 +43,16 @@ export async function uploadContent({
       description,
       image_url: public_url,
       created_at: new Date().toISOString(),
-      date: '',
-      time: '',
-      venue: '',
+      date: null,
+      time: null,
+      venue: null,
     };
   } else if (type === 'faculty') {
     insertData = {
       id,
       name: title,
       designation: description,
-      position: '',
+      position: null,
       image_url: public_url,
       created_at: new Date().toISOString(),
     };
@@ -63,13 +61,19 @@ export async function uploadContent({
       id,
       student_name: title,
       company: description,
-      ctc: '',
+      ctc: null,
       image_url: public_url,
       created_at: new Date().toISOString(),
     };
   } else {
     throw new Error('Invalid content type');
   }
+
+  // Ensure session is set for supabaseNew before insert
+  // If you have a session manager, call setSupabaseNewSession here
+  // Example:
+  // import { setSupabaseNewSession } from '@/integrations/supabase/supabaseNew';
+  // await setSupabaseNewSession(session.access_token);
 
   const { error: dbError } = await supabaseNew.from(type).insert([insertData]);
   if (dbError) throw new Error('Database error: ' + dbError.message);
