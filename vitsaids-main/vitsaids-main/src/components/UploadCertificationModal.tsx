@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabaseOld as supabase } from '@/integrations/supabase/supabaseOld';
 import { UploadCloud, Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
