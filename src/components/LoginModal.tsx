@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import {
   Dialog,
@@ -12,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Eye, EyeOff, User, Lock, UserPlus } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ const LoginModal = ({ isOpen, onClose, userType }: LoginModalProps) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
   const { login, signUp } = useAuth();
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,11 +49,10 @@ const LoginModal = ({ isOpen, onClose, userType }: LoginModalProps) => {
             return;
           }
           
-          // FIX: Correct argument order for signUp - email, password, studentName, htNo, year
           // Convert year string to just the number part (e.g., "3rd Year" -> "3")
           const yearString = year.charAt(0);
-          const result = await signUp(email, password, studentName, htNo, yearString); // ✅ CORRECTED
-          if (result.error) {
+          const result = await signUp(email, password, userType, studentName, htNo, yearString);
+          if (result?.error) {
             setError(result.error.message);
             setIsLoading(false);
             return;
@@ -63,7 +64,7 @@ const LoginModal = ({ isOpen, onClose, userType }: LoginModalProps) => {
             return;
           }
           const result = await signUp(email, password, userType);
-          if (result.error) {
+          if (result?.error) {
             setError(result.error.message);
             setIsLoading(false);
             return;
@@ -84,7 +85,7 @@ const LoginModal = ({ isOpen, onClose, userType }: LoginModalProps) => {
         // AuthContext handles redirection after successful login.
       }
     } catch (error: any) {
-      setError(error.message || 'Something went wrong. Please try again.');
+      setError(error?.message || 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
       // Reset form and close modal only if no error was set during the process.

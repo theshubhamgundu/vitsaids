@@ -1,32 +1,44 @@
-// src/components/SearchBar.tsx
+
 import React from 'react';
+import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, X } from 'lucide-react';
 
 interface SearchBarProps {
   searchTerm: string;
-  onSearchChange: (searchTerm: string) => void;
+  onSearchChange: (value: string) => void;
   onClear: () => void;
   placeholder?: string;
+  className?: string;
 }
 
-const SearchBar: React.FC<SearchBarProps> = ({ searchTerm, onSearchChange, onClear, placeholder = "Search..." }) => {
+const SearchBar = ({ 
+  searchTerm, 
+  onSearchChange, 
+  onClear, 
+  placeholder = "Search...",
+  className = ""
+}: SearchBarProps) => {
   return (
-    <div className="flex items-center space-x-2">
+    <div className={`relative flex-1 ${className}`}>
+      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
       <Input
+        type="text"
         placeholder={placeholder}
         value={searchTerm}
         onChange={(e) => onSearchChange(e.target.value)}
-        className="max-w-sm"
+        className="pl-10 pr-10"
       />
       {searchTerm && (
-        <Button variant="ghost" size="icon" onClick={onClear}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClear}
+          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+        >
           <X className="h-4 w-4" />
         </Button>
       )}
-      {/* The original AdminDashboard had an "Apply Filters" button; this searchbar handles dynamic search */}
-      {/* If you still need a distinct "Search" button that triggers a separate action, you'd add it here. */}
     </div>
   );
 };
