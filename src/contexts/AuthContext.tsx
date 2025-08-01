@@ -1,6 +1,6 @@
 'use client';
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { supabaseOld as supabase } from '@/integrations/supabase/supabaseOld'; // Correctly imports supabaseOld
+import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 // Removed unused dnd-kit imports: import { useSensors, useSensor, PointerSensor } from '@dnd-kit/core';
 import { useToast } from '@/hooks/use-toast';
@@ -619,7 +619,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     return { error: profileInsertError.message };
                 }
                 console.log('[Auth] Student profile inserted successfully:', insertedProfile);
-                createdOrFetchedProfile = insertedProfile;
+                createdOrFetchedProfile = insertedProfile as UserProfile;
             } else {
                 console.warn('[Auth] User profile unexpectedly exists for new signup. Fetching existing profile for ID:', supabaseUser.id);
                 // Attempt to load existing profile to update context

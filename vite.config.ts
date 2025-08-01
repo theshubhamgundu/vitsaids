@@ -11,11 +11,6 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
-  // THIS DEFINE BLOCK IS NOW FOR NEXT_PUBLIC_ VARIABLES (used by supabaseNew)
-  define: {
-    'process.env.NEXT_PUBLIC_SUPABASE_URL': JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL),
-    'process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY': JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-  },
   plugins: [
     react(),
     mode === "development" && componentTagger(),
@@ -48,16 +43,5 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: {
     include: ['uuid'],
     exclude: ["@octokit/rest"],
-    esbuildOptions: {
-      define: {
-        global: "globalThis",
-      },
-      plugins: [
-        NodeGlobalsPolyfillPlugin({
-          buffer: true,
-          process: true,
-        }),
-      ],
-    },
   },
 }));

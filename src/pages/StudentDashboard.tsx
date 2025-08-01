@@ -1,7 +1,7 @@
 // StudentDashboard.tsx
 import React, { useEffect, useState, useRef, useCallback } from 'react'; // Added useCallback
 import { useAuth } from '@/contexts/AuthContext';
-import { supabaseOld as supabase } from '@/integrations/supabase/supabaseOld'; // Fixed import
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter'; // Add this line
 import { Card, CardContent } from '@/components/ui/card';
@@ -64,15 +64,9 @@ const StudentDashboard = () => {
             setPhotoUrl(null);
             return;
         }
-        const { data, error } = await supabase.storage
+        const { data } = supabase.storage
             .from('profile_photos')
             .getPublicUrl(`profiles/${profileId}/photo.jpg`);
-
-        if (error) {
-            console.error('Error fetching photo:', error);
-            setPhotoUrl(null);
-            return;
-        }
         setPhotoUrl(data?.publicUrl || null);
     }, []);
 
@@ -341,7 +335,7 @@ const StudentDashboard = () => {
             console.log(`Deleting storage object: certifications/${storagePath}`);
             const { error: storageError } = await supabase.storage.from('certifications').remove([storagePath]);
 
-            if (storageError && storageError.statusCode !== '404') {
+            if (storageError && storageError.message !== 'Object not found') {
                 console.error('Error deleting file from storage:', storageError);
                 toast({ title: 'Error', description: 'Failed to delete file from storage.', variant: 'destructive' });
                 throw storageError;
