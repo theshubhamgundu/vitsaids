@@ -276,54 +276,105 @@ const AdminDashboard = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Students</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+              <Users className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.totalStudents}</div>
+              <div className="text-2xl font-bold text-blue-600">{stats.totalStudents}</div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Active Events</CardTitle>
+              <Calendar className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.pendingApprovals}</div>
+              <div className="text-2xl font-bold text-green-600">0</div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Certifications</CardTitle>
-              <Award className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Faculty Members</CardTitle>
+              <Users className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.totalCertifications}</div>
+              <div className="text-2xl font-bold text-purple-600">0</div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Certifications</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Placements</CardTitle>
+              <TrendingUp className="h-4 w-4 text-orange-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.pendingCertifications}</div>
+              <div className="text-2xl font-bold text-orange-600">0</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Achievements</CardTitle>
+              <Award className="h-4 w-4 text-yellow-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-yellow-600">0</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Main Content Tabs */}
+        {/* Navigation Tabs */}
         <Tabs defaultValue="students" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="students">Student Management</TabsTrigger>
-            <TabsTrigger value="certifications">Certification Management</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsList className="grid grid-cols-11 w-full">
+            <TabsTrigger value="students" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Students
+            </TabsTrigger>
+            <TabsTrigger value="certs" className="flex items-center gap-2">
+              <Award className="h-4 w-4" />
+              Certs
+            </TabsTrigger>
+            <TabsTrigger value="events" className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Events
+            </TabsTrigger>
+            <TabsTrigger value="faculty" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Faculty
+            </TabsTrigger>
+            <TabsTrigger value="placements" className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Placements
+            </TabsTrigger>
+            <TabsTrigger value="achievements" className="flex items-center gap-2">
+              <Award className="h-4 w-4" />
+              Achievements
+            </TabsTrigger>
+            <TabsTrigger value="attendance" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Attendance
+            </TabsTrigger>
+            <TabsTrigger value="results" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Results
+            </TabsTrigger>
+            <TabsTrigger value="timetable" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Timetable
+            </TabsTrigger>
+            <TabsTrigger value="gallery" className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4" />
+              Gallery
+            </TabsTrigger>
+            <TabsTrigger value="notify" className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              Notify
+            </TabsTrigger>
           </TabsList>
 
           {/* Students Tab */}
@@ -331,7 +382,10 @@ const AdminDashboard = () => {
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
-                  <CardTitle>Student Approvals</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Student Management ({filteredStudents.length} / {stats.totalStudents} Total)
+                  </CardTitle>
                   <div className="flex space-x-2">
                     <Button variant="outline" size="sm">
                       <Download className="h-4 w-4 mr-2" />
@@ -346,14 +400,14 @@ const AdminDashboard = () => {
                     searchTerm={searchTerm}
                     onSearchChange={setSearchTerm}
                     onClear={() => setSearchTerm('')}
-                    placeholder="Search students..."
+                    placeholder="Search by H.T No., Name, Year..."
                   />
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as any)}
                     className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="all">All Status</option>
+                    <option value="all">All Years</option>
                     <option value="pending">Pending</option>
                     <option value="approved">Approved</option>
                     <option value="rejected">Rejected</option>
@@ -369,8 +423,9 @@ const AdminDashboard = () => {
                     <table className="w-full border-collapse">
                       <thead>
                         <tr className="border-b border-gray-200">
-                          <th className="text-left p-4 font-medium text-gray-600">Student Details</th>
-                          <th className="text-left p-4 font-medium text-gray-600">Contact</th>
+                          <th className="text-left p-4 font-medium text-gray-600">H.T No.</th>
+                          <th className="text-left p-4 font-medium text-gray-600">Student Name</th>
+                          <th className="text-left p-4 font-medium text-gray-600">Year</th>
                           <th className="text-left p-4 font-medium text-gray-600">Status</th>
                           <th className="text-left p-4 font-medium text-gray-600">Registered</th>
                           <th className="text-left p-4 font-medium text-gray-600">Actions</th>
@@ -380,14 +435,13 @@ const AdminDashboard = () => {
                         {filteredStudents.map((student) => (
                           <tr key={student.id} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="p-4">
-                              <div>
-                                <div className="font-medium text-gray-900">{student.student_name}</div>
-                                <div className="text-sm text-gray-500">HT: {student.ht_no}</div>
-                                <div className="text-sm text-gray-500">Year: {student.year}</div>
-                              </div>
+                              <div className="text-sm text-gray-900">{student.ht_no}</div>
                             </td>
                             <td className="p-4">
-                              <div className="text-sm text-gray-900">{student.email}</div>
+                              <div className="font-medium text-gray-900">{student.student_name}</div>
+                            </td>
+                            <td className="p-4">
+                              <div className="text-sm text-gray-900">{student.year}</div>
                             </td>
                             <td className="p-4">
                               <Badge variant={
@@ -432,7 +486,7 @@ const AdminDashboard = () => {
           </TabsContent>
 
           {/* Certifications Tab */}
-          <TabsContent value="certifications" className="space-y-4">
+          <TabsContent value="certs" className="space-y-4">
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
@@ -535,31 +589,123 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          {/* Analytics Tab */}
-          <TabsContent value="analytics" className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Student Registration Trends</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    Analytics charts coming soon...
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Other Tabs - Placeholder Content */}
+          <TabsContent value="events" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Events Management</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500">Events management functionality will be available here.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Certification Distribution</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    Charts will be implemented here...
+          <TabsContent value="faculty" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Faculty Management</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500">Faculty management functionality will be available here.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="placements" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Placements Management</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500">Placements management functionality will be available here.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="achievements" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Achievements Management</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500">Achievements management functionality will be available here.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="attendance" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Attendance Upload</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Upload Attendance Sheet (CSV/Excel)
+                    </label>
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                  <Button variant="outline" className="w-full">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Process Attendance (Placeholder)
+                  </Button>
+                  <p className="text-sm text-gray-500">
+                    Upload a spreadsheet containing student attendance data. This will be reflected in student profiles. 
+                    **Note: Full processing of the file content requires backend implementation.**
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="results" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Results Management</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500">Results management functionality will be available here.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="timetable" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Timetable Management</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500">Timetable management functionality will be available here.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="gallery" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Gallery Management</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500">Gallery management functionality will be available here.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="notify" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Notification Management</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500">Notification management functionality will be available here.</p>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
