@@ -32,7 +32,7 @@ import SearchBar from '@/components/SearchBar';
 
 interface Student {
   id: string;
-  created_at: string | null;
+  created_at?: string | null;
   email: string | null;
   ht_no: string | null;
   student_name: string | null;
@@ -44,6 +44,8 @@ interface Student {
   cgpa: number | null;
   section: string | null;
   semester: string | null;
+  role?: string | null;
+  photo_url?: string | null;
 }
 
 interface Certification {

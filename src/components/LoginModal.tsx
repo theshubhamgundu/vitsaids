@@ -51,9 +51,9 @@ const LoginModal = ({ isOpen, onClose, userType }: LoginModalProps) => {
           
           // Convert year string to just the number part (e.g., "3rd Year" -> "3")
           const yearString = year.charAt(0);
-          const result = await signUp(email, password, userType, studentName, htNo, yearString);
+          const result = await signUp(email, password, studentName, htNo, yearString);
           if (result?.error) {
-            setError(result.error.message);
+            setError(result.error);
             setIsLoading(false);
             return;
           }
@@ -63,9 +63,9 @@ const LoginModal = ({ isOpen, onClose, userType }: LoginModalProps) => {
             setIsLoading(false);
             return;
           }
-          const result = await signUp(email, password, userType);
+          const result = await signUp(email, password, '', '', '');
           if (result?.error) {
-            setError(result.error.message);
+            setError(result.error);
             setIsLoading(false);
             return;
           }

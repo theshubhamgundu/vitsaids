@@ -26,7 +26,7 @@ const AppContent = () => {
   // If user is logged in but profile is not complete or not approved
   if (user && userProfile) {
     const isStudentWithIncompleteProfile = 
-      userProfile.user_type === 'student' && 
+      userProfile.role === 'student' && 
       (!userProfile.student_name || !userProfile.ht_no || !userProfile.year);
     
     const isNotApproved = userProfile.status === 'pending' || userProfile.status === 'rejected';
