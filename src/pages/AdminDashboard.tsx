@@ -29,6 +29,11 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import SearchBar from '@/components/SearchBar';
+import EventModal from '@/components/EventModal';
+import FacultyModal from '@/components/FacultyModal';
+import PlacementModal from '@/components/PlacementModal';
+import AchievementModal from '@/components/AchievementModal';
+import GalleryModal from '@/components/GalleryModal';
 
 interface Student {
   id: string;
@@ -64,6 +69,67 @@ interface Certification {
   status: string | null;
 }
 
+interface Event {
+  id: string;
+  title: string;
+  description?: string;
+  date: string;
+  time: string;
+  venue?: string;
+  speaker?: string;
+  image_url?: string;
+  created_at: string;
+}
+
+interface Faculty {
+  id: string;
+  name: string;
+  position: string;
+  expertise?: string;
+  email?: string;
+  phone?: string;
+  image_url?: string;
+  bio?: string;
+  education?: string;
+  research?: string;
+  linkedin?: string;
+  publications?: string;
+  created_at: string;
+}
+
+interface Placement {
+  id: string;
+  student_name?: string;
+  company: string;
+  position: string;
+  package: string;
+  ctc?: number;
+  year: string;
+  type: string;
+  branch?: string;
+  students_placed?: number;
+  created_at: string;
+}
+
+interface Achievement {
+  id: string;
+  title: string;
+  student_name: string;
+  description?: string;
+  image_url?: string;
+  created_at: string;
+}
+
+interface GalleryItem {
+  id: string;
+  title?: string;
+  description?: string;
+  url: string;
+  type: string;
+  uploaded_at: string;
+  created_at: string;
+}
+
 const AdminDashboard = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
@@ -78,13 +144,40 @@ const AdminDashboard = () => {
   const [certStatusFilter, setCertStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [selectedCertification, setSelectedCertification] = useState<Certification | null>(null);
   const [showCertModal, setShowCertModal] = useState(false);
+  
+  // New state for other entities
+  const [events, setEvents] = useState<Event[]>([]);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  
+  const [facultyMembers, setFacultyMembers] = useState<Faculty[]>([]);
+  const [showFacultyModal, setShowFacultyModal] = useState(false);
+  const [selectedFaculty, setSelectedFaculty] = useState<Faculty | null>(null);
+  
+  const [placementRecords, setPlacementRecords] = useState<Placement[]>([]);
+  const [showPlacementModal, setShowPlacementModal] = useState(false);
+  const [selectedPlacement, setSelectedPlacement] = useState<Placement | null>(null);
+  
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [showAchievementModal, setShowAchievementModal] = useState(false);
+  const [selectedAchievement, setSelectedAchievement] = useState<Achievement | null>(null);
+  
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
+  const [showGalleryModal, setShowGalleryModal] = useState(false);
+  const [selectedGalleryItem, setSelectedGalleryItem] = useState<GalleryItem | null>(null);
+  
   const [stats, setStats] = useState({
     totalStudents: 0,
     pendingApprovals: 0,
     approvedStudents: 0,
     totalCertifications: 0,
     pendingCertifications: 0,
-    approvedCertifications: 0
+    approvedCertifications: 0,
+    totalEvents: 0,
+    totalFaculty: 0,
+    totalPlacements: 0,
+    totalAchievements: 0,
+    totalGalleryItems: 0
   });
 
   const { user, logout } = useAuth();
@@ -93,6 +186,11 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchStudents();
     fetchCertifications();
+    fetchEvents();
+    fetchFaculty();
+    fetchPlacements();
+    fetchAchievements();
+    fetchGallery();
   }, []);
 
   useEffect(() => {
@@ -256,6 +354,192 @@ const AdminDashboard = () => {
     }
   };
 
+  // Fetch functions for new entities
+  const fetchEvents = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setEvents(data || []);
+      setStats(prev => ({ ...prev, totalEvents: (data || []).length }));
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    }
+  };
+
+  const fetchFaculty = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('faculty')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setFacultyMembers(data || []);
+      setStats(prev => ({ ...prev, totalFaculty: (data || []).length }));
+    } catch (error) {
+      console.error('Error fetching faculty:', error);
+    }
+  };
+
+  const fetchPlacements = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('placements')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPlacementRecords(data || []);
+      setStats(prev => ({ ...prev, totalPlacements: (data || []).length }));
+    } catch (error) {
+      console.error('Error fetching placements:', error);
+    }
+  };
+
+  const fetchAchievements = async () => {
+    try {
+      const { data, error } = await (supabase as any)
+        .from('achievements')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAchievements(data || []);
+      setStats(prev => ({ ...prev, totalAchievements: (data || []).length }));
+    } catch (error) {
+      console.error('Error fetching achievements:', error);
+    }
+  };
+
+  const fetchGallery = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('gallery')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setGalleryItems(data || []);
+      setStats(prev => ({ ...prev, totalGalleryItems: (data || []).length }));
+    } catch (error) {
+      console.error('Error fetching gallery:', error);
+    }
+  };
+
+  // CRUD functions for events
+  const editEvent = (event: Event) => {
+    setSelectedEvent(event);
+    setShowEventModal(true);
+  };
+
+  const deleteEvent = async (eventId: string) => {
+    try {
+      const { error } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', eventId);
+
+      if (error) throw error;
+      toast({ title: 'Event deleted successfully' });
+      fetchEvents();
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      toast({ title: 'Error deleting event', variant: 'destructive' });
+    }
+  };
+
+  // CRUD functions for faculty
+  const editFaculty = (faculty: Faculty) => {
+    setSelectedFaculty(faculty);
+    setShowFacultyModal(true);
+  };
+
+  const deleteFaculty = async (facultyId: string) => {
+    try {
+      const { error } = await supabase
+        .from('faculty')
+        .delete()
+        .eq('id', facultyId);
+
+      if (error) throw error;
+      toast({ title: 'Faculty member deleted successfully' });
+      fetchFaculty();
+    } catch (error) {
+      console.error('Error deleting faculty:', error);
+      toast({ title: 'Error deleting faculty member', variant: 'destructive' });
+    }
+  };
+
+  // CRUD functions for placements
+  const editPlacement = (placement: Placement) => {
+    setSelectedPlacement(placement);
+    setShowPlacementModal(true);
+  };
+
+  const deletePlacement = async (placementId: string) => {
+    try {
+      const { error } = await supabase
+        .from('placements')
+        .delete()
+        .eq('id', placementId);
+
+      if (error) throw error;
+      toast({ title: 'Placement record deleted successfully' });
+      fetchPlacements();
+    } catch (error) {
+      console.error('Error deleting placement:', error);
+      toast({ title: 'Error deleting placement record', variant: 'destructive' });
+    }
+  };
+
+  // CRUD functions for achievements
+  const editAchievement = (achievement: Achievement) => {
+    setSelectedAchievement(achievement);
+    setShowAchievementModal(true);
+  };
+
+  const deleteAchievement = async (achievementId: string) => {
+    try {
+      const { error } = await (supabase as any)
+        .from('achievements')
+        .delete()
+        .eq('id', achievementId);
+
+      if (error) throw error;
+      toast({ title: 'Achievement deleted successfully' });
+      fetchAchievements();
+    } catch (error) {
+      console.error('Error deleting achievement:', error);
+      toast({ title: 'Error deleting achievement', variant: 'destructive' });
+    }
+  };
+
+  // CRUD functions for gallery
+  const editGalleryItem = (item: GalleryItem) => {
+    setSelectedGalleryItem(item);
+    setShowGalleryModal(true);
+  };
+
+  const deleteGalleryItem = async (itemId: string) => {
+    try {
+      const { error } = await supabase
+        .from('gallery')
+        .delete()
+        .eq('id', itemId);
+
+      if (error) throw error;
+      toast({ title: 'Gallery item deleted successfully' });
+      fetchGallery();
+    } catch (error) {
+      console.error('Error deleting gallery item:', error);
+      toast({ title: 'Error deleting gallery item', variant: 'destructive' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white shadow-sm border-b">
@@ -293,7 +577,7 @@ const AdminDashboard = () => {
               <Calendar className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">0</div>
+              <div className="text-2xl font-bold text-green-600">{stats.totalEvents}</div>
             </CardContent>
           </Card>
 
@@ -303,7 +587,7 @@ const AdminDashboard = () => {
               <Users className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-purple-600">0</div>
+              <div className="text-2xl font-bold text-purple-600">{stats.totalFaculty}</div>
             </CardContent>
           </Card>
 
@@ -313,7 +597,7 @@ const AdminDashboard = () => {
               <TrendingUp className="h-4 w-4 text-orange-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-600">0</div>
+              <div className="text-2xl font-bold text-orange-600">{stats.totalPlacements}</div>
             </CardContent>
           </Card>
 
@@ -323,7 +607,7 @@ const AdminDashboard = () => {
               <Award className="h-4 w-4 text-yellow-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">0</div>
+              <div className="text-2xl font-bold text-yellow-600">{stats.totalAchievements}</div>
             </CardContent>
           </Card>
         </div>
@@ -589,47 +873,226 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          {/* Other Tabs - Placeholder Content */}
+          {/* Events Management Tab */}
           <TabsContent value="events" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Events Management</CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    Events Management
+                  </CardTitle>
+                  <Button onClick={() => setShowEventModal(true)}>
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Add Event
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-500">Events management functionality will be available here.</p>
+                <div className="space-y-4">
+                  {events.map((event) => (
+                    <Card key={event.id} className="border">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-lg">{event.title}</h3>
+                            <p className="text-gray-600 mb-2">{event.description}</p>
+                            <div className="flex gap-4 text-sm text-gray-500">
+                              <span>📅 {event.date}</span>
+                              <span>🕒 {event.time}</span>
+                              <span>📍 {event.venue}</span>
+                              {event.speaker && <span>🎤 {event.speaker}</span>}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => editEvent(event)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="destructive" size="sm" onClick={() => deleteEvent(event.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {events.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      No events found. Create your first event!
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Faculty Management Tab */}
           <TabsContent value="faculty" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Faculty Management</CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Faculty Management
+                  </CardTitle>
+                  <Button onClick={() => setShowFacultyModal(true)}>
+                    <Users className="h-4 w-4 mr-2" />
+                    Add Faculty
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-500">Faculty management functionality will be available here.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {facultyMembers.map((faculty) => (
+                    <Card key={faculty.id} className="border">
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          {faculty.image_url && (
+                            <img src={faculty.image_url} alt={faculty.name} className="w-20 h-20 rounded-full mx-auto mb-3 object-cover" />
+                          )}
+                          <h3 className="font-semibold text-lg">{faculty.name}</h3>
+                          <p className="text-blue-600 font-medium">{faculty.position}</p>
+                          {faculty.expertise && <p className="text-sm text-gray-600 mt-1">{faculty.expertise}</p>}
+                          {faculty.email && <p className="text-sm text-gray-500 mt-2">{faculty.email}</p>}
+                          <div className="flex gap-2 mt-3 justify-center">
+                            <Button variant="outline" size="sm" onClick={() => editFaculty(faculty)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="destructive" size="sm" onClick={() => deleteFaculty(faculty.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {facultyMembers.length === 0 && (
+                    <div className="col-span-3 text-center py-8 text-gray-500">
+                      No faculty members found. Add your first faculty member!
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Placements Management Tab */}
           <TabsContent value="placements" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Placements Management</CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Placements Management
+                  </CardTitle>
+                  <Button onClick={() => setShowPlacementModal(true)}>
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Add Placement
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-500">Placements management functionality will be available here.</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left p-4 font-medium text-gray-600">Student Name</th>
+                        <th className="text-left p-4 font-medium text-gray-600">Company</th>
+                        <th className="text-left p-4 font-medium text-gray-600">Position</th>
+                        <th className="text-left p-4 font-medium text-gray-600">Package</th>
+                        <th className="text-left p-4 font-medium text-gray-600">Year</th>
+                        <th className="text-left p-4 font-medium text-gray-600">Type</th>
+                        <th className="text-left p-4 font-medium text-gray-600">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {placementRecords.map((placement) => (
+                        <tr key={placement.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="p-4 font-medium text-gray-900">{placement.student_name}</td>
+                          <td className="p-4 text-gray-900">{placement.company}</td>
+                          <td className="p-4 text-gray-900">{placement.position}</td>
+                          <td className="p-4 font-semibold text-green-600">
+                            {placement.ctc ? `${placement.ctc} LPA` : placement.package}
+                          </td>
+                          <td className="p-4 text-gray-900">{placement.year}</td>
+                          <td className="p-4">
+                            <Badge variant={placement.type === 'full-time' ? 'default' : 'secondary'}>
+                              {placement.type}
+                            </Badge>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex gap-2">
+                              <Button variant="outline" size="sm" onClick={() => editPlacement(placement)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="destructive" size="sm" onClick={() => deletePlacement(placement.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {placementRecords.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      No placement records found. Add your first placement record!
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Achievements Management Tab */}
           <TabsContent value="achievements" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Achievements Management</CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center gap-2">
+                    <Award className="h-5 w-5" />
+                    Achievements Management
+                  </CardTitle>
+                  <Button onClick={() => setShowAchievementModal(true)}>
+                    <Award className="h-4 w-4 mr-2" />
+                    Add Achievement
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-500">Achievements management functionality will be available here.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {achievements.map((achievement) => (
+                    <Card key={achievement.id} className="border">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-lg">{achievement.title}</h3>
+                            <p className="text-blue-600 font-medium">{achievement.student_name}</p>
+                            {achievement.description && (
+                              <p className="text-gray-600 mt-2">{achievement.description}</p>
+                            )}
+                            {achievement.image_url && (
+                              <img src={achievement.image_url} alt={achievement.title} className="w-full h-32 object-cover rounded mt-3" />
+                            )}
+                          </div>
+                          <div className="flex gap-2 ml-4">
+                            <Button variant="outline" size="sm" onClick={() => editAchievement(achievement)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="destructive" size="sm" onClick={() => deleteAchievement(achievement.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {achievements.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      No achievements found. Add your first achievement!
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -686,13 +1149,59 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
+          {/* Gallery Management Tab */}
           <TabsContent value="gallery" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Gallery Management</CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center gap-2">
+                    <BookOpen className="h-5 w-5" />
+                    Gallery Management
+                  </CardTitle>
+                  <Button onClick={() => setShowGalleryModal(true)}>
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    Add Media
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-500">Gallery management functionality will be available here.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {galleryItems.map((item) => (
+                    <Card key={item.id} className="border">
+                      <CardContent className="p-4">
+                        <div className="space-y-3">
+                          {item.type === 'image' ? (
+                            <img src={item.url} alt={item.title} className="w-full h-32 object-cover rounded" />
+                          ) : (
+                            <video src={item.url} className="w-full h-32 object-cover rounded" controls />
+                          )}
+                          <div>
+                            <h3 className="font-semibold">{item.title}</h3>
+                            {item.description && (
+                              <p className="text-sm text-gray-600">{item.description}</p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-1">
+                              Type: {item.type} | Uploaded: {format(new Date(item.uploaded_at), 'MMM dd, yyyy')}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => editGalleryItem(item)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="destructive" size="sm" onClick={() => deleteGalleryItem(item.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {galleryItems.length === 0 && (
+                    <div className="col-span-3 text-center py-8 text-gray-500">
+                      No gallery items found. Add your first media item!
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -902,6 +1411,57 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Modals */}
+      <EventModal
+        isOpen={showEventModal}
+        onClose={() => {
+          setShowEventModal(false);
+          setSelectedEvent(null);
+        }}
+        onSave={fetchEvents}
+        event={selectedEvent}
+      />
+
+      <FacultyModal
+        isOpen={showFacultyModal}
+        onClose={() => {
+          setShowFacultyModal(false);
+          setSelectedFaculty(null);
+        }}
+        onSave={fetchFaculty}
+        faculty={selectedFaculty}
+      />
+
+      <PlacementModal
+        isOpen={showPlacementModal}
+        onClose={() => {
+          setShowPlacementModal(false);
+          setSelectedPlacement(null);
+        }}
+        onSave={fetchPlacements}
+        placement={selectedPlacement}
+      />
+
+      <AchievementModal
+        isOpen={showAchievementModal}
+        onClose={() => {
+          setShowAchievementModal(false);
+          setSelectedAchievement(null);
+        }}
+        onSave={fetchAchievements}
+        achievement={selectedAchievement}
+      />
+
+      <GalleryModal
+        isOpen={showGalleryModal}
+        onClose={() => {
+          setShowGalleryModal(false);
+          setSelectedGalleryItem(null);
+        }}
+        onSave={fetchGallery}
+        galleryItem={selectedGalleryItem}
+      />
     </div>
   );
 };
