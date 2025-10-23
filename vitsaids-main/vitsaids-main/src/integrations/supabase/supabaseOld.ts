@@ -16,4 +16,21 @@ if (!OLD_SUPABASE_URL || !OLD_SUPABASE_KEY) {
     throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY for supabaseOld.');
 }
 
-export const supabaseOld = createClient<OldDatabase>(OLD_SUPABASE_URL, OLD_SUPABASE_KEY);
+// Singleton pattern to prevent multiple GoTrueClient instances
+let supabaseOldInstance: ReturnType<typeof createClient<OldDatabase>> | null = null;
+
+export const supabaseOld = (() => {
+    if (!supabaseOldInstance) {
+        console.log('[supabaseOld] Creating new Supabase client instance');
+        supabaseOldInstance = createClient<OldDatabase>(OLD_SUPABASE_URL, OLD_SUPABASE_KEY, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true,
+            },
+        });
+    } else {
+        console.log('[supabaseOld] Reusing existing Supabase client instance');
+    }
+    return supabaseOldInstance;
+})();

@@ -14,15 +14,26 @@ if (!NEW_SUPABASE_URL || !NEW_SUPABASE_ANON_KEY) {
     throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY for supabaseNew.');
 }
 
-export const supabaseNew = createClient<Database>(NEW_SUPABASE_URL, NEW_SUPABASE_ANON_KEY, {
-    auth: {
-        // IMPORTANT: Disable session persistence for this client.
-        // The session is managed externally by supabaseOld (via AuthContext).
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-    },
-});
+// Singleton pattern to prevent multiple GoTrueClient instances
+let supabaseNewInstance: ReturnType<typeof createClient<Database>> | null = null;
+
+export const supabaseNew = (() => {
+    if (!supabaseNewInstance) {
+        console.log('[supabaseNew] Creating new Supabase client instance');
+        supabaseNewInstance = createClient<Database>(NEW_SUPABASE_URL, NEW_SUPABASE_ANON_KEY, {
+            auth: {
+                // IMPORTANT: Disable session persistence for this client.
+                // The session is managed externally by supabaseOld (via AuthContext).
+                persistSession: false,
+                autoRefreshToken: false,
+                detectSessionInUrl: false,
+            },
+        });
+    } else {
+        console.log('[supabaseNew] Reusing existing Supabase client instance');
+    }
+    return supabaseNewInstance;
+})();
 
 /**
  * Explicitly sets the session access token for the supabaseNew client.
