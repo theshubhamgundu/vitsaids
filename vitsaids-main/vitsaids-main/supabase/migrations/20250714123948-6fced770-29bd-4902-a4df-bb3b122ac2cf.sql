@@ -1,9 +1,0 @@
--- Add missing columns to user_profiles table
-ALTER TABLE public.user_profiles 
-ADD COLUMN IF NOT EXISTS address TEXT,
-ADD COLUMN IF NOT EXISTS emergency_no TEXT,
-ADD COLUMN IF NOT EXISTS phone TEXT,
-ADD COLUMN IF NOT EXISTS section TEXT,
-ADD COLUMN IF NOT EXISTS semester TEXT,
-ADD COLUMN IF NOT EXISTS cgpa NUMERIC,
-ADD COLUMN IF NOT EXISTS email TEXT;
